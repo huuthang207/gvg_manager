@@ -1,0 +1,301 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DivisionType {
+  Thu
+  Cong
+  Tro
+}
+
+enum SlotType {
+  main
+  reserve
+}
+
+model User {
+  id            String   @id @default(cuid())
+  discordUserId String   @unique
+  username      String
+  globalName    String?
+  avatar        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  guilds      Guild[]
+  memberships GuildMembership[]
+}
+
+model Guild {
+  id             String   @id @default(cuid())
+  discordGuildId String   @unique
+  name           String
+  icon           String?
+  ownerUserId    String
+  lastSyncedAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  owner                User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members              Member[]
+  teams                Team[]
+  squadGroups          SquadGroup[]
+  lineupSnapshots      LineupSnapshot[]
+  skills               Skill[]
+  classRoleMappings    GuildClassRoleMapping[]
+  requiredRoles        GuildRequiredRole[]
+  accessRoles          GuildAccessRole[]
+  memberships          GuildMembership[]
+}
+
+model GuildAccessRole {
+  id        String   @id @default(cuid())
+  guildId   String
+  roleName  String
+  appRole   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, roleName, appRole])
+  @@index([guildId, appRole])
+}
+
+model GuildMembership {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  role      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@index([userId, role])
+}
+
+model GuildClassRoleMapping {
+  id        String   @id @default(cuid())
+  guildId   String
+  classType String
+  roleName  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, classType])
+}
+
+model GuildRequiredRole {
+  id        String   @id @default(cuid())
+  guildId   String
+  roleName  String
+  createdAt DateTime @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, roleName])
+}
+
+model Member {
+  id            String    @id @default(cuid())
+  guildId       String
+  discordUserId String
+  username      String
+  displayName   String
+  ingameName    String?
+  avatar            String?
+  classType         String
+  previousClassType String?
+  classChangedAt    DateTime?
+  joinedAt          DateTime?
+  active            Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  guild                     Guild                 @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  roles                     MemberRole[]
+  slots                     TeamSlot[]
+  squadTeamSlots            SquadTeamSlot[]
+  ledSquadGroups            SquadGroup[]          @relation("SquadGroupLeader")
+  ledLineupSnapshotGroups   LineupSnapshotGroup[] @relation("LineupSnapshotGroupLeader")
+  lineupSnapshotSlots       LineupSnapshotSlot[]  @relation("LineupSnapshotSlotMember")
+  memberSkills              MemberSkill[]
+
+  @@unique([guildId, discordUserId])
+  @@index([guildId, active])
+}
+
+model MemberRole {
+  id       String @id @default(cuid())
+  memberId String
+  roleName String
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+}
+
+model Team {
+  id           String   @id @default(cuid())
+  guildId      String
+  divisionType String
+  name         String
+  orderIndex   Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  guild Guild      @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  slots TeamSlot[]
+
+  @@unique([guildId, divisionType, orderIndex])
+}
+
+model TeamSlot {
+  id        String   @id @default(cuid())
+  teamId    String
+  slotType  String
+  slotIndex Int
+  memberId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team   Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  member Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@unique([teamId, slotType, slotIndex])
+}
+
+model SquadGroup {
+  id             String   @id @default(cuid())
+  guildId        String
+  name           String
+  orderIndex     Int
+  leaderMemberId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  guild        Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  leaderMember Member? @relation("SquadGroupLeader", fields: [leaderMemberId], references: [id], onDelete: SetNull)
+  teams        SquadTeam[]
+
+  @@unique([guildId, orderIndex])
+}
+
+model SquadTeam {
+  id         String   @id @default(cuid())
+  groupId    String
+  name       String
+  orderIndex Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group SquadGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  slots SquadTeamSlot[]
+
+  @@unique([groupId, orderIndex])
+}
+
+model SquadTeamSlot {
+  id        String   @id @default(cuid())
+  teamId    String
+  slotType  String
+  slotIndex Int
+  memberId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team   SquadTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  member Member?   @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@unique([teamId, slotType, slotIndex])
+}
+
+model LineupSnapshot {
+  id        String   @id @default(cuid())
+  guildId    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guild  Guild                 @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  groups LineupSnapshotGroup[]
+}
+
+model LineupSnapshotGroup {
+  id             String   @id @default(cuid())
+  snapshotId     String
+  name           String
+  orderIndex     Int
+  leaderMemberId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  snapshot     LineupSnapshot       @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  leaderMember Member?              @relation("LineupSnapshotGroupLeader", fields: [leaderMemberId], references: [id], onDelete: SetNull)
+  teams        LineupSnapshotTeam[]
+
+  @@unique([snapshotId, orderIndex])
+}
+
+model LineupSnapshotTeam {
+  id         String   @id @default(cuid())
+  groupId     String
+  name       String
+  orderIndex Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  group LineupSnapshotGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  slots LineupSnapshotSlot[]
+
+  @@unique([groupId, orderIndex])
+}
+
+model LineupSnapshotSlot {
+  id        String   @id @default(cuid())
+  teamId     String
+  slotType  String
+  slotIndex Int
+  memberId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team   LineupSnapshotTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  member Member?            @relation("LineupSnapshotSlotMember", fields: [memberId], references: [id], onDelete: SetNull)
+
+  @@unique([teamId, slotType, slotIndex])
+}
+
+model Skill {
+  id          String   @id @default(cuid())
+  guildId     String
+  name        String
+  logo        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild        Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  memberSkills MemberSkill[]
+}
+
+model MemberSkill {
+  id       String @id @default(cuid())
+  memberId String
+  skillId  String
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  skill  Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, skillId])
+}

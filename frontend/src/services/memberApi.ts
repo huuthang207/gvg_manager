@@ -1,0 +1,58 @@
+import { API_BASE, requestJson } from './apiBase.ts';
+import { AppStateResponse, ImportResponse } from './apiTypes.ts';
+
+export async function importDiscordMembers(
+  guildId: string,
+  options?: { persist?: boolean; classRoleMap?: Record<string, string>; requiredRoles?: string[]; selectedMemberIds?: string[] }
+): Promise<ImportResponse> {
+  return requestJson(`${API_BASE}/api/discord/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ guildId, ...options }),
+  });
+}
+
+export async function acknowledgeClassChange(memberId: string): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/${memberId}/class-change/ack`, { method: 'POST', credentials: 'include' });
+}
+
+export async function updateMemberIngameName(memberId: string, ingameName: string): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/${memberId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ ingameName }),
+  });
+}
+
+export async function updateMyIngameName(ingameName: string): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/me/ingame-name`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ ingameName }),
+  });
+}
+
+export async function deleteMember(memberId: string): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/${memberId}`, { method: 'DELETE', credentials: 'include' });
+}
+
+export async function deleteInactiveMember(memberId: string): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/${memberId}/database`, { method: 'DELETE', credentials: 'include' });
+}
+
+export async function syncDiscordMembers(): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/discord/sync`, { method: 'POST', credentials: 'include' });
+}
+
+export async function fetchDiscordRoles(guildId: string): Promise<ImportResponse['roles']> {
+  const data = await requestJson<{ roles: ImportResponse['roles'] }>(`${API_BASE}/api/discord/roles/${guildId}`);
+  return data.roles;
+}
+
+export async function fetchCurrentDiscordRoles(): Promise<ImportResponse['roles']> {
+  const data = await requestJson<{ roles: ImportResponse['roles'] }>(`${API_BASE}/api/discord/roles/current`, { credentials: 'include' });
+  return data.roles;
+}

@@ -1,0 +1,109 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useMemo } from 'react';
+import { Skill } from '../../types.ts';
+import { Search, Zap } from 'lucide-react';
+import { cn } from '../../lib/utils.ts';
+import { useDraggable } from '@dnd-kit/core';
+
+interface SkillPoolProps {
+  skills: Skill[];
+  onAddSkills: (skills: Omit<Skill, 'id'>[]) => void;
+  onDeleteSkill: (id: string) => void;
+  onClearAllSkills: () => void;
+}
+
+export const SkillPool: React.FC<SkillPoolProps> = ({
+  skills
+}) => {
+  const [search, setSearch] = useState('');
+
+  const filteredSkills = useMemo(() => {
+    return skills.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+  }, [skills, search]);
+
+  return (
+    <div className="flex flex-col h-full min-h-0 bg-[#0F172A] overflow-hidden transition-all">
+      <div className="p-4 flex flex-col gap-4 border-b border-slate-800 bg-[#0F172A]/50 backdrop-blur-md">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-100 flex items-center gap-2">
+            <Zap size={16} className="text-amber-400" />
+            Kỹ Năng
+            <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full ml-1">
+              {skills.length}
+            </span>
+          </h2>
+        </div>
+        
+        <div className="relative px-0.5">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+          <input 
+            type="text" 
+            placeholder="Tìm kỹ năng..." 
+            className="w-full pl-10 pr-4 py-2 text-[13px] rounded-lg border border-slate-700/50 bg-slate-800/30 text-slate-200 focus:outline-none focus:border-amber-500/50 transition-colors"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-2 custom-scrollbar bg-[#0F172A]/30 content-start">
+        {filteredSkills.length === 0 ? (
+          <div className="col-span-3 flex flex-col items-center justify-center p-8 opacity-40 text-center">
+            <Zap size={32} className="mb-2" />
+            <p className="text-[10px] uppercase tracking-wider font-medium">Chưa có kỹ năng</p>
+          </div>
+        ) : (
+          filteredSkills.map(skill => (
+            <DraggableSkill
+              key={skill.id}
+              skill={skill}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+interface DraggableSkillProps {
+  skill: Skill;
+}
+
+const DraggableSkill: React.FC<DraggableSkillProps> = ({ skill }) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `skill-${skill.id}`,
+    data: {
+      type: 'skill',
+      skill,
+    },
+  });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    zIndex: isDragging ? 100 : undefined,
+  } : undefined;
+
+  return (
+    <div 
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group relative aspect-square rounded-xl border border-slate-700/50 bg-slate-900/70 p-2.5 flex items-center justify-center cursor-grab active:cursor-grabbing hover:border-amber-500/50 hover:bg-slate-800/80 hover:shadow-[0_0_14px_rgba(245,158,11,0.18)] transition-colors",
+        isDragging && "opacity-50 ring-2 ring-amber-500"
+      )}
+      {...listeners}
+      {...attributes}
+      title={skill.name}
+    >
+      <img src={skill.logo} alt={skill.name} className="w-full h-full object-contain drop-shadow-[0_6px_10px_rgba(0,0,0,0.35)]" />
+
+      <div className="absolute inset-x-1 bottom-1 rounded-md bg-black/75 py-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+        <p className="text-[7px] font-bold text-white uppercase truncate text-center">{skill.name}</p>
+      </div>
+    </div>
+  );
+};

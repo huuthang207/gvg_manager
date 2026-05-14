@@ -1,0 +1,35 @@
+export type ClassType =
+  | 'Toái Mộng'
+  | 'Cửu Linh'
+  | 'Long Ngâm'
+  | 'Thiết Y'
+  | 'Tố Vấn'
+  | 'Thần Tương'
+  | 'Huyết Hà';
+
+export interface Skill {
+  id: string;
+  name: string;
+  logo: string;
+  description?: string;
+}
+
+export interface Member {
+  id: string;
+  name: string;
+  ingameName?: string | null;
+  discordDisplayName?: string | null;
+  classType: ClassType;
+  previousClassType?: ClassType | null;
+  classChangedAt?: string | null;
+  joinedAt?: string | null;
+  active?: boolean;
+  level?: number;
+  power?: number;
+  assignedSkills?: string[];
+  assignedTeamId?: string;
+  discordId?: string;
+  discordUsername?: string;
+  discordRoles?: string[];
+  avatar?: string | null;
+}

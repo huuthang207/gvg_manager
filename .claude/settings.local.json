@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 15124)",
+      "Bash(taskkill //F //PID 11732)",
+      "Bash(npm run *)",
+      "Bash(python *)",
+      "Bash(npm --prefix \"D:/Project/GvG Manager/backend\" run prisma:migrate -- --name add-member-ingame-name)",
+      "Bash(npm --prefix \"D:/Project/GvG Manager/backend\" run prisma:generate)",
+      "Bash(tasklist *)",
+      "Bash(npm *)",
+      "Bash(curl *)",
+      "Bash(taskkill /PID 26824 /F)",
+      "Bash(taskkill /PID 23104 /F)",
+      "Bash(cmd *)",
+      "Bash(powershell *)",
+      "Bash(npx *)"
+    ]
+  }
+}
