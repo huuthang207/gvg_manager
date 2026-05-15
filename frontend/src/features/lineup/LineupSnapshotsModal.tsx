@@ -33,15 +33,18 @@ export const LineupSnapshotsModal: React.FC<LineupSnapshotsModalProps> = ({
   ...viewProps
 }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-      <div className="relative h-[88vh] w-full max-w-7xl">
-        <button
-          onClick={onClose}
-          className="absolute right-3 top-3 z-10 rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
-          title="Đóng"
-        >
-          <X size={18} />
-        </button>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute right-4 top-4 z-10 rounded-lg border border-slate-700 bg-slate-900/90 p-2 text-slate-400 shadow-lg transition-colors hover:bg-slate-800 hover:text-white"
+        title="Đóng"
+      >
+        <X size={18} />
+      </button>
+      <div className="h-[88vh] w-full max-w-7xl" onClick={event => event.stopPropagation()}>
         <SavedLineupsView {...viewProps} />
       </div>
     </div>

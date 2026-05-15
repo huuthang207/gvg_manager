@@ -1,5 +1,6 @@
 import { API_BASE, requestJson } from './apiBase.ts';
 import { AppStateResponse, ImportResponse } from './apiTypes.ts';
+import { Skill } from '../types.ts';
 
 export async function importDiscordMembers(
   guildId: string,
@@ -41,6 +42,19 @@ export async function deleteMember(memberId: string): Promise<AppStateResponse> 
 
 export async function deleteInactiveMember(memberId: string): Promise<AppStateResponse> {
   return requestJson(`${API_BASE}/api/members/${memberId}/database`, { method: 'DELETE', credentials: 'include' });
+}
+
+export async function assignMemberSkill(memberId: string, skill: Skill): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/${memberId}/skills/${skill.id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ skill }),
+  });
+}
+
+export async function removeMemberSkill(memberId: string, skillId: string): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/${memberId}/skills/${skillId}`, { method: 'DELETE', credentials: 'include' });
 }
 
 export async function syncDiscordMembers(): Promise<AppStateResponse> {

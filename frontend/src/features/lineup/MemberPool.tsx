@@ -59,14 +59,14 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
   }, [unassignedMembers, search, selectedClass]);
 
   return (
-    <div 
-      ref={setNodeRef}
+    <div
       className={cn(
-        "flex flex-col h-full min-h-0 bg-[#0F172A] overflow-hidden transition-colors",
+        "relative flex flex-col h-full min-h-0 bg-slate-950/20 overflow-hidden transition-colors",
         isOver && "bg-sky-500/5 shadow-[inset_0_0_20px_rgba(14,165,233,0.1)]"
       )}
     >
-      <div className="p-4 flex flex-col gap-4 border-b border-slate-800 bg-[#0F172A]/50 backdrop-blur-md">
+      <div ref={setNodeRef} className="pointer-events-none absolute inset-0" />
+      <div className="flex flex-col gap-4 border-b border-slate-800/80 bg-slate-950/35 p-4 backdrop-blur-md">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-100 flex items-center gap-2">
             <Users size={16} className="text-sky-400" />
@@ -89,7 +89,7 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
           <input 
             type="text" 
             placeholder="Tìm kiếm thành viên..." 
-            className="w-full pl-10 pr-4 py-2 text-[13px] rounded-lg border border-slate-700/50 bg-slate-800/30 text-slate-200 focus:outline-none focus:border-sky-500/50 transition-colors"
+            className="w-full rounded-lg border border-slate-700/70 bg-slate-800/60 py-2 pl-10 pr-4 text-[13px] text-slate-100 placeholder:text-slate-500 transition-colors focus:outline-none focus:border-sky-400/70"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -101,8 +101,8 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
             className={cn(
               "px-2 py-1 text-[10px] font-bold uppercase rounded-md border transition-all flex items-center gap-1.5",
               selectedClass === 'All' 
-                ? "bg-slate-200 text-slate-900 border-slate-200 shadow-md" 
-                : "bg-slate-800/30 border-slate-700/50 text-slate-500 hover:border-slate-600 hover:text-slate-400"
+                ? "bg-slate-200 text-slate-950 border-slate-200 shadow-md"
+                : "bg-slate-800/60 border-slate-700/60 text-slate-400 hover:border-slate-600 hover:text-slate-200"
             )}
           >
             Tất cả 
@@ -119,7 +119,7 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
               onClick={() => setSelectedClass(cls)}
               className={cn(
                 "px-2 py-1 text-[10px] font-bold uppercase rounded-md border transition-all flex items-center gap-1.5",
-                selectedClass === cls ? "text-slate-900 shadow-md" : "bg-slate-800/30 border-slate-700/50 text-slate-500 hover:border-slate-600 hover:text-slate-400"
+                selectedClass === cls ? "text-slate-950 shadow-md" : "bg-slate-800/60 border-slate-700/60 text-slate-400 hover:border-slate-600 hover:text-slate-200"
               )}
               style={selectedClass === cls ? { backgroundColor: CLASS_COLORS[cls], border: 'none' } : {}}
             >
@@ -135,7 +135,7 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1 custom-scrollbar bg-[#0F172A]/30">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 flex flex-col gap-1 custom-scrollbar bg-slate-950/10">
         {filteredMembers.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 opacity-40 text-center">
             <Filter size={40} className="mb-2" />

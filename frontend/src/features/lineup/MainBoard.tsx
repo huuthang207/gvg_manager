@@ -10,7 +10,8 @@ import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { TeamCard } from './TeamCard.tsx';
 import { BarChart3, RotateCcw, Save, Archive } from 'lucide-react';
 import { SnapshotSaveModal } from './SnapshotSaveModal.tsx';
-import { LineupSnapshotsModal } from './LineupSnapshotsModal.tsx';
+import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
+import { getErrorMessage } from '../../lib/error.ts';
 
 const GROUP_ACCENTS = [
   '#38BDF8', '#F59E0B', '#34D399', '#FB7185', '#A78BFA',
@@ -28,7 +29,7 @@ interface MainBoardProps {
   canManageSnapshots: boolean;
   canRestoreSnapshots: boolean;
   snapshotState: LineupSnapshotState;
-  snapshotActions: Pick<LineupSnapshotActions, 'openSnapshots' | 'closeSnapshots' | 'selectSnapshot' | 'saveSnapshot' | 'restoreSnapshot' | 'removeSnapshot'>;
+  snapshotActions: Pick<LineupSnapshotActions, 'openSnapshots' | 'closeSnapshots' | 'selectSnapshot' | 'saveSnapshot' | 'restoreSnapshot' | 'removeSnapshot' | 'refreshSnapshots'>;
 }
 
 export const MainBoard: React.FC<MainBoardProps> = ({
@@ -46,23 +47,14 @@ export const MainBoard: React.FC<MainBoardProps> = ({
 }) => {
   const {
     snapshots,
-    snapshotsOpen,
-    snapshotsLoading,
-    snapshotDetailLoading,
-    snapshotActionLoading,
-    selectedSnapshotId,
-    selectedSnapshot,
-    recentSnapshotAction,
   } = snapshotState;
   const {
     openSnapshots,
-    closeSnapshots,
-    selectSnapshot,
     saveSnapshot,
-    restoreSnapshot,
-    removeSnapshot,
+    refreshSnapshots,
   } = snapshotActions;
 
+  const { alert } = useSystemDialog();
   const [snapshotName, setSnapshotName] = React.useState('');
   const [saveMode, setSaveMode] = React.useState<'create' | 'overwrite'>('create');
   const [overwriteSnapshotId, setOverwriteSnapshotId] = React.useState<string>('');
@@ -91,21 +83,27 @@ export const MainBoard: React.FC<MainBoardProps> = ({
   const totalAssigned = (Object.values(classStats) as number[]).reduce((a, b) => a + b, 0);
   const totalTeams = squadGroups.reduce((sum, group) => sum + group.teams.length, 0);
 
-  const handleOpenSaveModal = () => {
+  const handleOpenSaveModal = async () => {
     setSaveMode('create');
     setOverwriteSnapshotId('');
     setSnapshotName('');
-    setIsSaveModalOpen(true);
+    try {
+      await refreshSnapshots();
+    } catch (err) {
+      void alert({ message: getErrorMessage(err, 'Không thể tải đội hình đã lưu'), variant: 'error' });
+    } finally {
+      setIsSaveModalOpen(true);
+    }
   };
 
   const handleSaveSnapshot = async () => {
     const name = snapshotName.trim();
     if (!name) {
-      alert('Vui lòng nhập tên đội hình.');
+      void alert({ message: 'Vui lòng nhập tên đội hình.', variant: 'warning' });
       return;
     }
     if (saveMode === 'overwrite' && !overwriteSnapshotId) {
-      alert('Vui lòng chọn đội hình cũ để ghi đè.');
+      void alert({ message: 'Vui lòng chọn đội hình cũ để ghi đè.', variant: 'warning' });
       return;
     }
 
@@ -140,8 +138,8 @@ export const MainBoard: React.FC<MainBoardProps> = ({
 
   return (
     <>
-      <div className="flex-1 min-h-0 p-4 overflow-y-auto space-y-6 bg-[#0F172A] border-l border-slate-800 custom-scrollbar">
-        <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-3 mb-4 backdrop-blur-sm">
+      <div className="flex-1 min-h-0 p-4 overflow-y-auto space-y-6 bg-slate-950/15 border-l border-slate-800/80 custom-scrollbar">
+        <div className="app-surface-soft rounded-xl p-3 mb-4">
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <BarChart3 size={14} className="text-blue-400" />
             <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
@@ -156,7 +154,7 @@ export const MainBoard: React.FC<MainBoardProps> = ({
             {canManageSnapshots && (
               <button
                 onClick={handleOpenSaveModal}
-                className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-emerald-300 bg-slate-800/50 hover:bg-emerald-500/10 border border-slate-700 hover:border-emerald-500/30 px-2 py-1 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-500/8 px-2 py-1 text-[10px] font-bold text-emerald-200 transition-colors hover:border-emerald-300/45 hover:bg-emerald-500/14"
                 title="Lưu đội hình"
               >
                 <Save size={12} />
@@ -165,7 +163,7 @@ export const MainBoard: React.FC<MainBoardProps> = ({
             )}
             <button
               onClick={() => void openSnapshots()}
-              className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-sky-300 bg-slate-800/50 hover:bg-sky-500/10 border border-slate-700 hover:border-sky-500/30 px-2 py-1 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 rounded-lg border border-sky-400/25 bg-sky-500/8 px-2 py-1 text-[10px] font-bold text-sky-200 transition-colors hover:border-sky-300/45 hover:bg-sky-500/14"
               title="Đội hình đã lưu"
             >
               <Archive size={12} />
@@ -174,7 +172,7 @@ export const MainBoard: React.FC<MainBoardProps> = ({
             {!readOnly && (
               <button
                 onClick={onResetSquadSetup}
-                className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-amber-300 bg-slate-800/50 hover:bg-amber-500/10 border border-slate-700 hover:border-amber-500/30 px-2 py-1 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-500/8 px-2 py-1 text-[10px] font-bold text-amber-200 transition-colors hover:border-amber-300/45 hover:bg-amber-500/14"
                 title="Tạo lại đội hình"
               >
                 <RotateCcw size={12} />
@@ -190,10 +188,10 @@ export const MainBoard: React.FC<MainBoardProps> = ({
             {CLASSES.map(cls => (
               <div
                 key={cls}
-                className="flex items-center gap-2 rounded-lg border bg-slate-950/35 px-2 py-1.5 min-w-0"
+                className="flex items-center gap-2 rounded-lg border bg-slate-900/50 px-2 py-1.5 min-w-0 shadow-sm shadow-slate-950/10"
                 style={{
                   borderColor: `${CLASS_COLORS[cls]}35`,
-                  background: `linear-gradient(90deg, ${CLASS_COLORS[cls]}16 0%, rgba(15, 23, 42, 0.25) 72%)`,
+                  background: `linear-gradient(90deg, ${CLASS_COLORS[cls]}12 0%, rgba(15, 23, 42, 0.36) 72%)`,
                 }}
               >
                 <img src={CLASS_ICONS[cls]} alt="" className="w-8 h-8 object-contain shrink-0" />
@@ -225,25 +223,32 @@ export const MainBoard: React.FC<MainBoardProps> = ({
 
             return (
               <section key={group.id} className="space-y-3">
-                <div className="rounded-xl border border-slate-800/70 bg-slate-900/35 px-3 py-2.5">
+                <div className="rounded-xl border border-slate-700/60 bg-slate-900/55 px-3 py-2.5 shadow-sm shadow-slate-950/10">
                   <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider"
-                        style={{ borderColor: `${accent}55`, color: accent, backgroundColor: `${accent}14` }}
-                      >
-                        Leader đoàn
-                      </span>
-                      <span className="truncate text-xs font-semibold text-slate-200">
-                        {leader ? leader.name : 'Chưa chọn leader'}
-                      </span>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h2 className="truncate text-lg font-extrabold uppercase tracking-widest text-slate-100">
+                          {group.name}
+                        </h2>
+                        <span className="rounded-full border border-slate-700/70 bg-slate-800/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {group.teams.length} đội
+                        </span>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-200">
+                          Leader đoàn
+                        </span>
+                        <span className="truncate text-sm font-black text-amber-100 drop-shadow-[0_0_8px_rgba(245,158,11,0.18)]">
+                          {leader ? leader.name : 'Chưa chọn leader'}
+                        </span>
+                      </div>
                     </div>
 
                     {!readOnly && (
                       <select
                         value={group.leaderMemberId ?? ''}
                         onChange={event => onSquadGroupLeaderChange(group.id, event.target.value || null)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500 xl:w-60"
+                        className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-400/70 xl:w-60"
                       >
                         <option value="">Chưa chọn leader</option>
                         {availableLeaders.map(member => (
@@ -254,15 +259,6 @@ export const MainBoard: React.FC<MainBoardProps> = ({
                       </select>
                     )}
                   </div>
-                </div>
-
-                <div className="flex items-center justify-between px-1">
-                  <h2 className="text-lg font-extrabold uppercase tracking-widest text-[#E2E8F0]">
-                    {group.name}
-                  </h2>
-                  <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-                    {group.teams.length} đội
-                  </span>
                 </div>
                 <div className="grid grid-cols-1 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
                   {group.teams.map((team, teamIndex) => (
@@ -303,25 +299,6 @@ export const MainBoard: React.FC<MainBoardProps> = ({
         onSave={handleSaveSnapshot}
       />
 
-      {snapshotsOpen && (
-        <LineupSnapshotsModal
-          snapshots={snapshots}
-          selectedSnapshotId={selectedSnapshotId}
-          selectedSnapshot={selectedSnapshot}
-          loading={snapshotsLoading}
-          detailLoading={snapshotDetailLoading}
-          actionLoading={snapshotActionLoading}
-          canRestoreSnapshot={canRestoreSnapshots}
-          canDeleteSnapshot={canManageSnapshots}
-          recentSnapshotAction={recentSnapshotAction}
-          skills={skills}
-          getMemberById={getMemberById}
-          onClose={closeSnapshots}
-          onSelectSnapshot={snapshotId => { void selectSnapshot(snapshotId); }}
-          onRestoreSnapshot={snapshotId => { void restoreSnapshot(snapshotId); }}
-          onDeleteSnapshot={snapshotId => { void removeSnapshot(snapshotId); }}
-        />
-      )}
     </>
   );
 };

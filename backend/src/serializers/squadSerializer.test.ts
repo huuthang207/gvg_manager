@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toTeamSlotArrays, serializeSquadGroups, serializeDivisions } from './squadSerializer';
+import { toSnapshotTeamSlotArrays, toTeamSlotArrays, serializeSquadGroups, serializeDivisions } from './squadSerializer';
 
 test('toTeamSlotArrays maps main/reserve slots to fixed arrays', () => {
   const output = toTeamSlotArrays({
@@ -16,6 +16,22 @@ test('toTeamSlotArrays maps main/reserve slots to fixed arrays', () => {
 
   assert.deepEqual(output.memberIds, ['m1', '', '', '', '', 'm6']);
   assert.deepEqual(output.reserveMemberIds, ['', 'r2', '']);
+});
+
+test('toSnapshotTeamSlotArrays maps snapshot slot skills', () => {
+  const output = toSnapshotTeamSlotArrays({
+    id: 't1',
+    name: 'Team 1',
+    slots: [
+      { slotType: 'main', slotIndex: 0, memberId: 'm1', skillIds: ['s1', 's2'] },
+      { slotType: 'reserve', slotIndex: 1, memberId: 'r2', skillIds: ['s3'] },
+    ],
+  });
+
+  assert.deepEqual(output.slotSkills, {
+    'main-0': ['s1', 's2'],
+    'reserve-1': ['s3'],
+  });
 });
 
 test('serializeSquadGroups maps groups and teams', () => {

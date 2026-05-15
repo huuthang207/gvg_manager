@@ -48,15 +48,33 @@ export function useAppStateLoader(params: UseAppStateLoaderParams) {
   }, []);
 
   const resolveSkills = useCallback(async (persistedSkills: Skill[]) => {
-    return persistedSkills.length > 0 ? persistedSkills : await loadDefaultSkills();
+    const defaultSkills = await loadDefaultSkills();
+    const skillsById = new Map(defaultSkills.map(skill => [skill.id, skill]));
+
+    persistedSkills.forEach(skill => {
+      skillsById.set(skill.id, skill);
+    });
+
+    return Array.from(skillsById.values());
   }, [loadDefaultSkills]);
 
   const applyAppState = useCallback(async (state: Awaited<ReturnType<typeof getAppState>>) => {
-    setMemberPool(state.members.map(member => ({
-      ...member,
-      classType: member.classType as Member['classType'],
-      previousClassType: member.previousClassType as Member['classType'] | null | undefined,
-    })));
+    setMemberPool(prev => {
+      const previousSkillsByMemberId = new Map(prev.map(member => [member.id, member.assignedSkills || []]));
+
+      return state.members.map(member => {
+        const assignedSkills = member.assignedSkills?.length
+          ? member.assignedSkills
+          : previousSkillsByMemberId.get(member.id) || [];
+
+        return {
+          ...member,
+          assignedSkills,
+          classType: member.classType as Member['classType'],
+          previousClassType: member.previousClassType as Member['classType'] | null | undefined,
+        };
+      });
+    });
     setSkills(await resolveSkills(state.skills));
     setLastSyncedAt(state.lastSyncedAt);
     setRoleConfig(state.roleConfig);

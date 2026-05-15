@@ -10,6 +10,7 @@ import { AppStateResponse, DiscordUser, fetchCurrentDiscordRoles } from '../../s
 import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
 import { getErrorMessage } from '../../lib/error.ts';
+import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 
 interface MemberDashboardProps {
   members: Member[];
@@ -51,6 +52,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   syncing = false,
   lastSyncedAt,
 }) => {
+  const { confirm } = useSystemDialog();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('active');
   const [filterClass, setFilterClass] = useState<ClassType | 'all'>('all');
@@ -147,14 +149,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     return null;
   };
 
-  const confirmDeleteMember = (member: Member) => {
+  const confirmDeleteMember = async (member: Member) => {
     const message = member.active === false
       ? `Xóa vĩnh viễn thành viên "${member.name}" khỏi hệ thống?`
       : `Xóa thành viên "${member.name}"?`;
 
-    if (confirm(message)) {
-      onDelete(member.id);
-    }
+    const confirmed = await confirm({
+      message,
+      variant: 'danger',
+      confirmLabel: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    void onDelete(member.id);
   };
 
   const getRoleLabel = () => {
@@ -176,12 +183,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       <div className="flex h-full overflow-hidden">
-        <aside className="w-80 shrink-0 border-r border-slate-800 bg-slate-900/50 overflow-y-auto custom-scrollbar">
+        <aside className="w-80 shrink-0 border-r border-slate-800/80 bg-slate-950/35 overflow-y-auto custom-scrollbar backdrop-blur-sm">
           <div className="p-5 space-y-5">
-            <section className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+            <section className="rounded-xl border border-sky-400/20 bg-sky-500/8 p-4 shadow-lg shadow-slate-950/15 space-y-3">
               <div>
                 <h2 className="text-sm font-bold text-slate-100">Thông tin của tôi</h2>
-                <p className="text-[10px] text-slate-500 mt-0.5">Thông tin thành viên trong server</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Thông tin thành viên trong server</p>
               </div>
               {selfMember ? (
                 <div className="space-y-2">
@@ -207,7 +214,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 <Filter size={12} />
                 Phái
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/35 overflow-hidden">
+              <div className="app-surface-soft rounded-xl overflow-hidden">
                 {CLASSES.map((cls, index) => (
                   <ClassStatRow
                     key={cls}
@@ -227,7 +234,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   <button
                     onClick={onRefresh}
                     disabled={syncing}
-                    className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                    className="app-button-secondary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
                   >
                     <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
                     {syncing ? 'Đang...' : 'Đồng bộ'}
@@ -236,7 +243,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 {canManageSettings && (
                   <button
                     onClick={() => setIsRoleConfigOpen(true)}
-                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/25 rounded-lg text-xs font-bold transition-colors"
+                    className="app-button-primary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
                     title="Cấu hình role"
                   >
                     <Settings size={14} />
@@ -249,8 +256,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         </aside>
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/30 shrink-0 space-y-4">
-            <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3 space-y-3">
+          <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-950/25 shrink-0 space-y-4">
+            <div className="app-surface-soft rounded-xl p-3 space-y-3">
               <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 <Filter size={12} />
                 Bộ lọc
@@ -268,7 +275,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       placeholder="Tìm tên thành viên..."
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-400/70"
                     />
                   </div>
                 </div>
@@ -285,8 +292,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         className={cn(
                           "px-3 py-2 rounded-lg text-[11px] font-bold transition-colors whitespace-nowrap",
                           filterStatus === status
-                            ? status === 'active' ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
-                            : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                            ? status === 'active' ? "bg-emerald-500/85 text-white shadow-sm shadow-emerald-950/20" : "bg-red-500/85 text-white shadow-sm shadow-red-950/20"
+                            : "bg-slate-800/70 text-slate-300 hover:bg-slate-700/80 hover:text-white"
                         )}
                       >
                         {status === 'active' ? 'Hoạt động' : 'Không HĐ'}
@@ -307,8 +314,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         className={cn(
                           "px-3 py-2 rounded-lg text-[11px] font-bold transition-colors whitespace-nowrap",
                           sortField === field
-                            ? "bg-blue-500 text-white"
-                            : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                            ? "bg-sky-500/90 text-white shadow-sm shadow-sky-950/20"
+                            : "bg-slate-800/70 text-slate-300 hover:bg-slate-700/80 hover:text-white"
                         )}
                       >
                         {field === 'name' ? 'Tên' : 'Phái'}
@@ -341,8 +348,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       className={cn(
                         "px-3 py-1.5 rounded text-[11px] font-bold transition-colors",
                         filterClass === cls
-                          ? "text-white"
-                          : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                          ? "text-slate-950 shadow-sm"
+                          : "bg-slate-800/70 text-slate-300 hover:bg-slate-700/80 hover:text-white"
                       )}
                       style={{
                         backgroundColor: filterClass === cls ? CLASS_COLORS[cls] : undefined,
@@ -379,7 +386,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               </div>
             ) : (
               <table className="w-full">
-                <thead className="sticky top-0 bg-slate-900 border-b border-slate-800">
+                <thead className="sticky top-0 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-sm">
                   <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     <th className="text-center py-3 px-4 w-14">STT</th>
                     <th className="text-left py-3 px-4">Thành viên</th>
@@ -395,7 +402,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       onClick={() => {
                         if (allowMemberManagement) setSelectedMemberId(member.id);
                       }}
-                      className="border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer transition-colors"
+                      className="border-b border-slate-800/55 hover:bg-slate-800/45 cursor-pointer transition-colors"
                     >
                       <td className="py-3 px-4 text-center text-xs font-bold text-slate-500">
                         {index + 1}

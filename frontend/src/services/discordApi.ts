@@ -27,6 +27,8 @@ export {
   updateMyIngameName,
   deleteMember,
   deleteInactiveMember,
+  assignMemberSkill,
+  removeMemberSkill,
   syncDiscordMembers,
   fetchDiscordRoles,
   fetchCurrentDiscordRoles,

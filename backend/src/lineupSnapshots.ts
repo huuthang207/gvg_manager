@@ -1,5 +1,5 @@
 import { prisma } from './db.js';
-import { serializeSquadGroups } from './serializers/squadSerializer.js';
+import { serializeSnapshotSquadGroups, serializeSquadGroups } from './serializers/squadSerializer.js';
 
 export type PersistedSquadGroupInput = Array<{
   id?: string;
@@ -35,7 +35,50 @@ async function runExclusiveSquadLayoutSave<T>(guildId: string, operation: () => 
   }
 }
 
-export const serializeSnapshotGroups = serializeSquadGroups;
+export const serializeSnapshotGroups = serializeSnapshotSquadGroups;
+
+function removeDuplicateSnapshotMembers(groups: ReturnType<typeof serializeSnapshotGroups>): ReturnType<typeof serializeSnapshotGroups> {
+  const seenMemberIds = new Set<string>();
+
+  return groups.map(group => ({
+    ...group,
+    leaderMemberId: group.leaderMemberId && seenMemberIds.has(group.leaderMemberId) ? null : group.leaderMemberId,
+    teams: group.teams.map(team => ({
+      ...team,
+      memberIds: team.memberIds.map(memberId => {
+        if (!memberId) return '';
+        if (seenMemberIds.has(memberId)) return '';
+        seenMemberIds.add(memberId);
+        return memberId;
+      }),
+      reserveMemberIds: team.reserveMemberIds.map(memberId => {
+        if (!memberId) return '';
+        if (seenMemberIds.has(memberId)) return '';
+        seenMemberIds.add(memberId);
+        return memberId;
+      }),
+    })),
+  }));
+}
+
+function collectSnapshotMemberSkills(groups: ReturnType<typeof serializeSnapshotGroups>) {
+  const skillsByMemberId = new Map<string, Set<string>>();
+
+  groups.forEach(group => {
+    group.teams.forEach(team => {
+      team.memberIds.forEach((memberId, slotIndex) => {
+        if (!memberId) return;
+        skillsByMemberId.set(memberId, new Set(team.slotSkills?.[`main-${slotIndex}`] ?? []));
+      });
+      team.reserveMemberIds.forEach((memberId, slotIndex) => {
+        if (!memberId) return;
+        skillsByMemberId.set(memberId, new Set(team.slotSkills?.[`reserve-${slotIndex}`] ?? []));
+      });
+    });
+  });
+
+  return skillsByMemberId;
+}
 
 export async function persistSquadGroupsForGuild(guildId: string, groups: PersistedSquadGroupInput) {
   const memberIds = [...new Set(groups.flatMap(group => [
@@ -198,7 +241,20 @@ async function writeCurrentGuildLayoutToSnapshot(
     where: { guildId },
     include: {
       teams: {
-        include: { slots: true },
+        include: {
+          slots: {
+            include: {
+              member: {
+                include: {
+                  memberSkills: {
+                    select: { skillId: true },
+                    orderBy: { skillId: 'asc' },
+                  },
+                },
+              },
+            },
+          },
+        },
         orderBy: { orderIndex: 'asc' },
       },
     },
@@ -232,6 +288,7 @@ async function writeCurrentGuildLayoutToSnapshot(
           slotType: slot.slotType,
           slotIndex: slot.slotIndex,
           memberId: slot.memberId,
+          skillIds: slot.member?.memberSkills.map(memberSkill => memberSkill.skillId) ?? [],
         })),
       });
     }
@@ -318,7 +375,33 @@ export async function restoreLineupSnapshotToCurrentGuild(guildId: string, snaps
     throw new Error('Không tìm thấy đội hình đã lưu.');
   }
 
-  await persistSquadGroupsForGuild(guildId, serializeSnapshotGroups(snapshot.groups));
+  const groups = removeDuplicateSnapshotMembers(serializeSnapshotGroups(snapshot.groups));
+  const skillsByMemberId = collectSnapshotMemberSkills(groups);
+
+  await persistSquadGroupsForGuild(guildId, groups);
+
+  const memberIds = [...skillsByMemberId.keys()];
+  if (memberIds.length === 0) return;
+
+  const skillIds = [...new Set([...skillsByMemberId.values()].flatMap(skillSet => [...skillSet]))];
+  const validSkills = skillIds.length > 0
+    ? await prisma.skill.findMany({ where: { guildId, id: { in: skillIds } }, select: { id: true } })
+    : [];
+  const validSkillIds = new Set(validSkills.map(skill => skill.id));
+
+  await prisma.$transaction(async tx => {
+    await tx.memberSkill.deleteMany({ where: { memberId: { in: memberIds } } });
+
+    const data = memberIds.flatMap(memberId => (
+      [...(skillsByMemberId.get(memberId) ?? [])]
+        .filter(skillId => validSkillIds.has(skillId))
+        .map(skillId => ({ memberId, skillId }))
+    ));
+
+    if (data.length > 0) {
+      await tx.memberSkill.createMany({ data, skipDuplicates: true });
+    }
+  });
 }
 
 export async function getLineupSnapshotDetailForGuild(guildId: string, snapshotId: string) {

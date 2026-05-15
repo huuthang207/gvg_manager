@@ -18,7 +18,8 @@
       "Bash(taskkill /PID 23104 /F)",
       "Bash(cmd *)",
       "Bash(powershell *)",
-      "Bash(npx *)"
+      "Bash(npx *)",
+      "PowerShell(npm run *)"
     ]
   }
 }

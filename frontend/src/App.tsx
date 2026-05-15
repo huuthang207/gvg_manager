@@ -8,7 +8,7 @@ import { Member, Skill, SquadGroup } from './types.ts';
 import { Sidebar } from './features/app/Sidebar.tsx';
 import { MemberDashboard } from './features/members/MemberDashboard.tsx';
 import { TeamLayout } from './features/lineup/TeamLayout.tsx';
-import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMyIngameName, deleteMember, deleteInactiveMember, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState } from './services/discordApi.ts';
+import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMyIngameName, deleteMember, deleteInactiveMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState } from './services/discordApi.ts';
 import { useLineupSnapshots } from './hooks/useLineupSnapshots.ts';
 import { cn } from './lib/utils.ts';
 import { getErrorMessage } from './lib/error.ts';
@@ -16,13 +16,21 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 import { useAppStateLoader } from './features/app/useAppStateLoader.ts';
 import { useGuildContext } from './features/guild/useGuildContext.ts';
 import { useAuthBootstrap } from './features/auth/useAuthBootstrap.ts';
+import { useSystemDialog } from './features/app/SystemDialogProvider.tsx';
 import { API_BASE } from './services/apiBase.ts';
 
 type Tab = 'dashboard' | 'teams';
+type LineupEntryMode = 'menu' | 'create' | 'current';
+
+const getLineupEntryStorageKey = (userId: string, guildId: string) => `gvg_lineup_entry_${userId}_${guildId}`;
+const getActiveTabStorageKey = (userId: string, guildId: string) => `gvg_active_tab_${userId}_${guildId}`;
+const isLineupEntryMode = (value: string | null): value is LineupEntryMode => value === 'menu' || value === 'create' || value === 'current';
+const isTab = (value: string | null): value is Tab => value === 'dashboard' || value === 'teams';
 
 export default function App() {
   // Active tab state
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [lineupEntryMode, setLineupEntryMode] = useState<LineupEntryMode>('menu');
 
   // Zoom state for team layout
   const [isZoomed, setIsZoomed] = useState(false);
@@ -50,11 +58,48 @@ export default function App() {
   const appStateRefreshRef = useRef(false);
   const refreshSnapshotsRef = useRef<(() => Promise<void>) | null>(null);
   const realtimeDebugEnabled = import.meta.env.DEV || import.meta.env.VITE_REALTIME_DEBUG === 'true';
+  const { alert, confirm } = useSystemDialog();
 
   const logRealtime = useCallback((...args: unknown[]) => {
     if (!realtimeDebugEnabled) return;
     console.log(...args);
   }, [realtimeDebugEnabled]);
+
+  React.useEffect(() => {
+    if (!currentUser || !currentGuild) {
+      setLineupEntryMode('menu');
+      setActiveTab('dashboard');
+      return;
+    }
+
+    const storedMode = localStorage.getItem(getLineupEntryStorageKey(currentUser.id, currentGuild.id));
+    const storedTab = localStorage.getItem(getActiveTabStorageKey(currentUser.id, currentGuild.id));
+    setLineupEntryMode(isLineupEntryMode(storedMode) ? storedMode : 'menu');
+    setActiveTab(isTab(storedTab) ? storedTab : 'dashboard');
+  }, [currentGuild, currentUser]);
+
+  const updateActiveTab = useCallback((tab: Tab) => {
+    setActiveTab(tab);
+    if (currentUser && currentGuild) {
+      localStorage.setItem(getActiveTabStorageKey(currentUser.id, currentGuild.id), tab);
+    }
+  }, [currentGuild, currentUser]);
+
+  const updateLineupEntryMode = useCallback((mode: LineupEntryMode) => {
+    setLineupEntryMode(mode);
+    if (currentUser && currentGuild) {
+      localStorage.setItem(getLineupEntryStorageKey(currentUser.id, currentGuild.id), mode);
+    }
+  }, [currentGuild, currentUser]);
+
+  const clearCurrentUiState = useCallback(() => {
+    if (currentUser && currentGuild) {
+      localStorage.removeItem(getLineupEntryStorageKey(currentUser.id, currentGuild.id));
+      localStorage.removeItem(getActiveTabStorageKey(currentUser.id, currentGuild.id));
+    }
+    setLineupEntryMode('menu');
+    setActiveTab('dashboard');
+  }, [currentGuild, currentUser]);
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -79,9 +124,13 @@ export default function App() {
 
   const mergeMemberDelta = useCallback((upsertMembers: Member[], removedMemberIds: string[]) => {
     setMemberPool(prev => {
-      const map = new Map(prev.map(member => [member.id, member]));
+      const map = new Map<string, Member>(prev.map(member => [member.id, member]));
       upsertMembers.forEach(member => {
-        map.set(member.id, normalizeMember(member));
+        const previous = map.get(member.id);
+        map.set(member.id, {
+          ...normalizeMember(member),
+          assignedSkills: member.assignedSkills?.length ? member.assignedSkills : previous?.assignedSkills || [],
+        });
       });
       removedMemberIds.forEach(id => {
         map.delete(id);
@@ -91,7 +140,14 @@ export default function App() {
   }, [normalizeMember, sortMembers]);
 
   const replaceMemberPool = useCallback((members: Member[]) => {
-    setMemberPool(sortMembers(members.map(normalizeMember)));
+    setMemberPool(prev => {
+      const previousSkillsByMemberId = new Map(prev.map(member => [member.id, member.assignedSkills || []]));
+
+      return sortMembers(members.map(member => ({
+        ...normalizeMember(member),
+        assignedSkills: member.assignedSkills?.length ? member.assignedSkills : previousSkillsByMemberId.get(member.id) || [],
+      })));
+    });
   }, [normalizeMember, sortMembers]);
 
   const {
@@ -248,6 +304,24 @@ export default function App() {
   }, [memberPool]);
 
   // Handlers
+  const handleAssignSkillToMember = useCallback((memberId: string, skill: Skill) => {
+    setMemberPool(prev => prev.map(m => {
+      if (m.id === memberId) {
+        const assignedSkills = m.assignedSkills || [];
+        if (assignedSkills.includes(skill.id)) return m;
+        return {
+          ...m,
+          assignedSkills: [...assignedSkills, skill.id],
+        };
+      }
+      return m;
+    }));
+    void assignMemberSkill(memberId, skill).then(applyAppState).catch(err => {
+      void alert({ message: getErrorMessage(err, 'Không thể lưu kỹ năng cho thành viên'), variant: 'error' });
+      void loadAppState();
+    });
+  }, [applyAppState, loadAppState]);
+
   const handleRemoveSkillFromMember = useCallback((memberId: string, skillId: string) => {
     setMemberPool(prev => prev.map(m => {
       if (m.id === memberId) {
@@ -258,7 +332,11 @@ export default function App() {
       }
       return m;
     }));
-  }, []);
+    void removeMemberSkill(memberId, skillId).then(applyAppState).catch(err => {
+      void alert({ message: getErrorMessage(err, 'Không thể gỡ kỹ năng khỏi thành viên'), variant: 'error' });
+      void loadAppState();
+    });
+  }, [applyAppState, loadAppState]);
 
   const handleAddSkills = (skillsData: Omit<Skill, 'id'>[]) => {
     const newSkills = skillsData.map(data => ({
@@ -268,21 +346,31 @@ export default function App() {
     setSkills(prev => [...prev, ...newSkills]);
   };
 
-  const handleDeleteSkill = (id: string) => {
-    if (window.confirm('Bạn có chắc muốn xóa kỹ năng này?')) {
-      setSkills(prev => prev.filter(s => s.id !== id));
-      setMemberPool(prev => prev.map(m => ({
-        ...m,
-        assignedSkills: (m.assignedSkills || []).filter(sid => sid !== id)
-      })));
-    }
+  const handleDeleteSkill = async (id: string) => {
+    const confirmed = await confirm({
+      message: 'Bạn có chắc muốn xóa kỹ năng này?',
+      variant: 'danger',
+      confirmLabel: 'Xóa',
+    });
+    if (!confirmed) return;
+
+    setSkills(prev => prev.filter(s => s.id !== id));
+    setMemberPool(prev => prev.map(m => ({
+      ...m,
+      assignedSkills: (m.assignedSkills || []).filter(sid => sid !== id)
+    })));
   };
 
-  const handleClearAllSkills = () => {
-    if (window.confirm('Bạn có chắc muốn xóa TẤT CẢ kỹ năng?')) {
-      setSkills([]);
-      setMemberPool(prev => prev.map(m => ({ ...m, assignedSkills: [] })));
-    }
+  const handleClearAllSkills = async () => {
+    const confirmed = await confirm({
+      message: 'Bạn có chắc muốn xóa TẤT CẢ kỹ năng?',
+      variant: 'danger',
+      confirmLabel: 'Xóa tất cả',
+    });
+    if (!confirmed) return;
+
+    setSkills([]);
+    setMemberPool(prev => prev.map(m => ({ ...m, assignedSkills: [] })));
   };
 
   const persistSquadGroups = async (groups: SquadGroup[], applySavedState = false) => {
@@ -292,7 +380,7 @@ export default function App() {
         setSquadGroups(state.squadGroups || []);
       }
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể lưu đội hình'));
+      void alert({ message: getErrorMessage(err, 'Không thể lưu đội hình'), variant: 'error' });
     }
   };
 
@@ -312,7 +400,7 @@ export default function App() {
       const state = isInactive ? await deleteInactiveMember(memberId) : await deleteMember(memberId);
       await applyAppState(state);
     } catch (err) {
-      alert(getErrorMessage(err, isInactive ? 'Không thể xóa vĩnh viễn thành viên' : 'Không thể gỡ role Bang Viên khỏi thành viên'));
+      void alert({ message: getErrorMessage(err, isInactive ? 'Không thể xóa vĩnh viễn thành viên' : 'Không thể gỡ role Bang Viên khỏi thành viên'), variant: 'error' });
       throw err;
     }
   };
@@ -333,7 +421,7 @@ export default function App() {
       const state = await syncDiscordMembers();
       await applyAppState(state);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể đồng bộ Discord'));
+      void alert({ message: getErrorMessage(err, 'Không thể đồng bộ Discord'), variant: 'error' });
     } finally {
       setSyncing(false);
     }
@@ -344,7 +432,7 @@ export default function App() {
       const state = await acknowledgeClassChange(memberId);
       await applyAppState(state);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể cập nhật trạng thái đổi phái'));
+      void alert({ message: getErrorMessage(err, 'Không thể cập nhật trạng thái đổi phái'), variant: 'error' });
     }
   };
 
@@ -353,7 +441,7 @@ export default function App() {
       const state = await updateMemberIngameName(memberId, ingameName);
       await applyAppState(state);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể cập nhật tên ingame'));
+      void alert({ message: getErrorMessage(err, 'Không thể cập nhật tên ingame'), variant: 'error' });
       throw err;
     }
   };
@@ -363,7 +451,7 @@ export default function App() {
       const state = await updateMyIngameName(ingameName);
       await applyAppState(state);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể cập nhật tên ingame'));
+      void alert({ message: getErrorMessage(err, 'Không thể cập nhật tên ingame'), variant: 'error' });
       throw err;
     }
   };
@@ -376,7 +464,7 @@ export default function App() {
       }
       await applyAppState(state);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể cập nhật cấu hình role'));
+      void alert({ message: getErrorMessage(err, 'Không thể cập nhật cấu hình role'), variant: 'error' });
       throw err;
     }
   };
@@ -388,6 +476,7 @@ export default function App() {
     snapshotDetailLoading,
     snapshotActionLoading,
     selectedSnapshotId,
+    pendingSnapshotId,
     selectedSnapshot,
     recentSnapshotAction,
     openSnapshots,
@@ -467,6 +556,7 @@ export default function App() {
 
   const handleLogout = async () => {
     closeWebSocket();
+    clearCurrentUiState();
     try {
       await logoutDiscord();
     } catch (err) {
@@ -483,7 +573,7 @@ export default function App() {
       setSquadGroups([]);
       setAccessibleGuilds([]);
       resetSnapshots();
-      setActiveTab('dashboard');
+      setLineupEntryMode('menu');
       setIsZoomed(false);
     }
   };
@@ -501,11 +591,17 @@ export default function App() {
     } catch (err) {
       console.error('Failed to reload app state:', err);
     }
-    setActiveTab('dashboard');
+    updateActiveTab('dashboard');
   };
 
-  const clearAll = useCallback(() => {
-    if (!confirm('Bạn có chắc chắn muốn xóa toàn bộ đội hình?')) return;
+  const clearAll = useCallback(async () => {
+    const confirmed = await confirm({
+      message: 'Bạn có chắc chắn muốn xóa toàn bộ đội hình?',
+      variant: 'danger',
+      confirmLabel: 'Xóa toàn bộ',
+    });
+    if (!confirmed) return;
+
     handleSquadGroupsChange(prev => prev.map(group => ({
       ...group,
       teams: group.teams.map(team => ({
@@ -515,11 +611,11 @@ export default function App() {
       })),
     })));
     setMemberPool(prev => prev.map(m => ({ ...m, assignedSkills: [] })));
-  }, []);
+  }, [confirm]);
 
   if (authLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0F172A] text-slate-400 font-sans">
+      <div className="app-shell flex h-screen items-center justify-center text-slate-300 font-sans">
         Đang tải dữ liệu...
       </div>
     );
@@ -527,8 +623,8 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#0F172A] text-slate-100 flex items-center justify-center p-6 font-sans">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-8 text-center space-y-4">
+      <div className="app-shell min-h-screen text-slate-100 flex items-center justify-center p-6 font-sans">
+        <div className="app-surface w-full max-w-md rounded-2xl p-8 text-center space-y-4">
           <h1 className="text-xl font-black uppercase tracking-widest text-white">GvG Manager</h1>
           <p className="text-sm text-slate-400">Đăng nhập Discord để vào hệ thống.</p>
           <button
@@ -544,8 +640,8 @@ export default function App() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[#0F172A] text-slate-100 flex items-center justify-center p-6 font-sans">
-        <div className="w-full max-w-lg bg-slate-900 border border-red-500/30 rounded-2xl p-8 text-center space-y-4">
+      <div className="app-shell min-h-screen text-slate-100 flex items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-slate-900/75 p-8 text-center shadow-2xl shadow-red-950/20 space-y-4">
           <h1 className="text-xl font-black uppercase tracking-widest text-white">Không có quyền truy cập</h1>
           <p className="text-sm text-slate-300">{blockedReason || 'Tài khoản của bạn chưa đủ điều kiện vào hệ thống.'}</p>
           <p className="text-xs text-slate-500">Vui lòng liên hệ quản trị bang để được cấp đúng role yêu cầu.</p>
@@ -562,11 +658,11 @@ export default function App() {
 
 
   return (
-    <div className="flex h-screen bg-[#0F172A] text-[#E2E8F0] overflow-hidden font-sans">
+    <div className="app-shell flex h-screen overflow-hidden text-slate-100 font-sans">
       {/* Sidebar */}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={updateActiveTab}
         currentUser={currentUser}
         onLogout={handleLogout}
         currentGuild={currentGuild}
@@ -578,7 +674,7 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="h-14 flex items-center justify-between px-6 border-b border-slate-800 bg-[#0F172A]/80 backdrop-blur-md z-10 shrink-0">
+        <header className="h-14 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/45 px-6 backdrop-blur-md z-10 shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-bold text-white">
               {activeTab === 'dashboard' ? 'Quản Lý Thành Viên' : 'Sắp Xếp Đội Hình'}
@@ -647,8 +743,11 @@ export default function App() {
               skills={skills}
               assignedMemberIds={assignedMemberIds}
               onSquadGroupsChange={handleSquadGroupsChange}
+              lineupEntryMode={lineupEntryMode}
+              onLineupEntryModeChange={updateLineupEntryMode}
               onSquadGroupLeaderChange={handleSquadGroupLeaderChange}
               onMemberPoolChange={setMemberPool}
+              onAssignSkillToMember={handleAssignSkillToMember}
               onSkillsChange={setSkills}
               onAddSkills={handleAddSkills}
               onDeleteSkill={handleDeleteSkill}
@@ -659,7 +758,7 @@ export default function App() {
               isZoomed={isZoomed}
               onZoomToggle={() => setIsZoomed(!isZoomed)}
               readOnly={!canManageLineup}
-              snapshotsOnly={currentRole === 'member'}
+              snapshotsOnly={false}
               canManageSnapshots={canManageSnapshots}
               canRestoreSnapshots={canRestoreSnapshots}
               snapshotState={{
@@ -669,6 +768,7 @@ export default function App() {
                 snapshotDetailLoading,
                 snapshotActionLoading,
                 selectedSnapshotId,
+                pendingSnapshotId,
                 selectedSnapshot,
                 recentSnapshotAction,
               }}
@@ -679,6 +779,7 @@ export default function App() {
                 saveSnapshot,
                 restoreSnapshot,
                 removeSnapshot,
+                refreshSnapshots,
               }}
             />
           )}

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { checkAuthStatus, DiscordUser } from '../../services/discordApi.ts';
+import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 
 interface AppStateAccess {
   guild: unknown | null;
@@ -23,6 +24,7 @@ function hasGuildAccess(state: AppStateAccess) {
 }
 
 export function useAuthBootstrap(params: UseAuthBootstrapParams) {
+  const { alert } = useSystemDialog();
   const { loadAppState, setAuthLoading, setIsAuthenticated, setIsAuthorized, setBlockedReason, setCurrentUser } = params;
 
   useEffect(() => {
@@ -67,7 +69,7 @@ export function useAuthBootstrap(params: UseAuthBootstrapParams) {
     if (params.get('oauth_error')) {
       const error = params.get('oauth_error');
       window.history.replaceState({}, '', window.location.pathname);
-      alert(`Discord OAuth lỗi: ${error}`);
+      void alert({ message: `Discord OAuth lỗi: ${error}`, variant: 'error' });
     }
-  }, [loadAppState, setBlockedReason, setCurrentUser, setIsAuthenticated, setIsAuthorized]);
+  }, [alert, loadAppState, setBlockedReason, setCurrentUser, setIsAuthenticated, setIsAuthorized]);
 }

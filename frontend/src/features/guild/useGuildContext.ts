@@ -1,8 +1,10 @@
 import { useCallback, useState } from 'react';
 import { AccessibleGuild, getAccessibleGuilds, setActiveGuild } from '../../services/discordApi.ts';
 import { getErrorMessage } from '../../lib/error.ts';
+import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 
 export function useGuildContext(applyAppState: (state: Awaited<ReturnType<typeof setActiveGuild>>) => Promise<void>, resetSnapshots: () => void) {
+  const { alert } = useSystemDialog();
   const [accessibleGuilds, setAccessibleGuilds] = useState<AccessibleGuild[]>([]);
   const [switchingGuild, setSwitchingGuild] = useState(false);
 
@@ -23,11 +25,11 @@ export function useGuildContext(applyAppState: (state: Awaited<ReturnType<typeof
       resetSnapshots();
       await loadAccessibleGuilds();
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể chuyển server'));
+      void alert({ message: getErrorMessage(err, 'Không thể chuyển server'), variant: 'error' });
     } finally {
       setSwitchingGuild(false);
     }
-  }, [applyAppState, loadAccessibleGuilds, resetSnapshots]);
+  }, [alert, applyAppState, loadAccessibleGuilds, resetSnapshots]);
 
   return {
     accessibleGuilds,

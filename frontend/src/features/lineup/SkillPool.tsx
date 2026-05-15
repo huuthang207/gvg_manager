@@ -26,8 +26,8 @@ export const SkillPool: React.FC<SkillPoolProps> = ({
   }, [skills, search]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-[#0F172A] overflow-hidden transition-all">
-      <div className="p-4 flex flex-col gap-4 border-b border-slate-800 bg-[#0F172A]/50 backdrop-blur-md">
+    <div className="flex flex-col h-full min-h-0 bg-slate-950/20 overflow-hidden transition-all">
+      <div className="flex flex-col gap-4 border-b border-slate-800/80 bg-slate-950/35 p-4 backdrop-blur-md">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-100 flex items-center gap-2">
             <Zap size={16} className="text-amber-400" />
@@ -43,14 +43,14 @@ export const SkillPool: React.FC<SkillPoolProps> = ({
           <input 
             type="text" 
             placeholder="Tìm kỹ năng..." 
-            className="w-full pl-10 pr-4 py-2 text-[13px] rounded-lg border border-slate-700/50 bg-slate-800/30 text-slate-200 focus:outline-none focus:border-amber-500/50 transition-colors"
+            className="w-full rounded-lg border border-slate-700/70 bg-slate-800/60 py-2 pl-10 pr-4 text-[13px] text-slate-100 placeholder:text-slate-500 transition-colors focus:outline-none focus:border-amber-400/70"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-2 custom-scrollbar bg-[#0F172A]/30 content-start">
+      <div className="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-2 custom-scrollbar bg-slate-950/10 content-start">
         {filteredSkills.length === 0 ? (
           <div className="col-span-3 flex flex-col items-center justify-center p-8 opacity-40 text-center">
             <Zap size={32} className="mb-2" />
@@ -92,7 +92,7 @@ const DraggableSkill: React.FC<DraggableSkillProps> = ({ skill }) => {
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative aspect-square rounded-xl border border-slate-700/50 bg-slate-900/70 p-2.5 flex items-center justify-center cursor-grab active:cursor-grabbing hover:border-amber-500/50 hover:bg-slate-800/80 hover:shadow-[0_0_14px_rgba(245,158,11,0.18)] transition-colors",
+        "group relative aspect-square rounded-xl border border-slate-700/60 bg-slate-900/75 p-2.5 flex items-center justify-center cursor-grab active:cursor-grabbing hover:border-amber-400/50 hover:bg-slate-800/85 hover:shadow-[0_0_12px_rgba(245,158,11,0.14)] transition-colors",
         isDragging && "opacity-50 ring-2 ring-amber-500"
       )}
       {...listeners}

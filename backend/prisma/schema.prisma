@@ -267,6 +267,7 @@ model LineupSnapshotSlot {
   slotType  String
   slotIndex Int
   memberId  String?
+  skillIds  String[] @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

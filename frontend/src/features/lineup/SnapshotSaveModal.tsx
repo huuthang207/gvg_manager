@@ -39,8 +39,8 @@ export const SnapshotSaveModal: React.FC<SnapshotSaveModalProps> = ({
   const isSaveDisabled = saving || !snapshotName.trim() || (saveMode === 'overwrite' && !overwriteSnapshotId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-[#0F172A] p-5 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <div className="app-surface w-full max-w-md rounded-2xl p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">Lưu đội hình</h2>
@@ -126,14 +126,14 @@ export const SnapshotSaveModal: React.FC<SnapshotSaveModalProps> = ({
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800"
+            className="app-button-secondary rounded-lg px-4 py-2 text-sm font-semibold"
           >
             Hủy
           </button>
           <button
             onClick={() => void onSave()}
             disabled={isSaveDisabled}
-            className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-emerald-400/35 bg-emerald-500/14 px-4 py-2 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/22 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? 'Đang lưu...' : saveMode === 'overwrite' ? 'Ghi đè' : 'Lưu mới'}
           </button>

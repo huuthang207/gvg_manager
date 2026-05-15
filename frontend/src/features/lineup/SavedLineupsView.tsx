@@ -18,6 +18,7 @@ const GROUP_ACCENTS = [
 interface SavedLineupsViewProps {
   snapshots: LineupSnapshotSummary[];
   selectedSnapshotId: string | null;
+  pendingSnapshotId?: string | null;
   selectedSnapshot: LineupSnapshotDetail | null;
   loading: boolean;
   detailLoading: boolean;
@@ -41,6 +42,7 @@ function formatDate(value: string) {
 export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
   snapshots,
   selectedSnapshotId,
+  pendingSnapshotId,
   selectedSnapshot,
   loading,
   detailLoading,
@@ -88,6 +90,7 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
             <div className="space-y-2">
               {snapshots.map(snapshot => {
                 const selected = snapshot.id === selectedSnapshotId;
+                const pending = snapshot.id === pendingSnapshotId;
                 const badge = getSnapshotBadge(recentSnapshotAction, snapshot.id, snapshot.id === newestSnapshotId);
                 return (
                   <button
@@ -95,7 +98,9 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
                     onClick={() => onSelectSnapshot(snapshot.id)}
                     className={`w-full rounded-xl border p-3 text-left transition-colors ${selected
                       ? 'border-sky-500/50 bg-sky-500/10'
-                      : 'border-slate-800 bg-slate-900/35 hover:border-slate-700 hover:bg-slate-800/60'
+                      : pending
+                        ? 'border-amber-500/40 bg-amber-500/10'
+                        : 'border-slate-800 bg-slate-900/35 hover:border-slate-700 hover:bg-slate-800/60'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -110,8 +115,8 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
                         </div>
                         <p className="mt-1 text-[11px] text-slate-400">Cập nhật: {formatDate(snapshot.updatedAt)}</p>
                       </div>
-                      <span className="rounded-full border border-slate-700 bg-slate-800/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                        {snapshot.teamCount} đội
+                      <span className={`rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${pending ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-slate-700 bg-slate-800/80 text-slate-300'}`}>
+                        {pending ? 'Đang tải' : `${snapshot.teamCount} đội`}
                       </span>
                     </div>
                     <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
@@ -191,17 +196,13 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-          {detailLoading ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/35 px-4 py-8 text-center text-sm text-slate-400">
-              Đang tải chi tiết đội hình...
-            </div>
-          ) : !selectedSnapshot ? (
+        <div className="relative flex-1 overflow-y-auto p-5 custom-scrollbar">
+          {!selectedSnapshot ? (
             <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/25 px-4 py-8 text-center text-sm text-slate-500">
               Chọn một đội hình đã lưu ở bên trái để xem trước.
             </div>
           ) : (
-            <div className="space-y-6 pb-4">
+            <div key={selectedSnapshot.id} className="space-y-6 pb-4 animate-in fade-in duration-200">
               {(() => {
                 const recentAction = getSnapshotActionContent(recentSnapshotAction, selectedSnapshotId);
                 return recentAction ? (
@@ -258,6 +259,7 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
                           getMemberById={getMemberById}
                           onRemoveSkillFromMember={() => {}}
                           readOnly
+                          hideSkills
                         />
                       ))}
                     </div>

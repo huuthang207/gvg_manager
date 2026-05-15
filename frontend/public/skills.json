@@ -16,5 +16,6 @@
   { "id": "skill-quanglangtan", "name": "Quảng Lăng Tán", "logo": "/skills_icon/quanglangtan.png" },
   { "id": "skill-nhuphongtube", "name": "Như Phong Tự Bế", "logo": "/skills_icon/nhuphongtube.png" },
   { "id": "skill-camlong", "name": "Cầm Long", "logo": "/skills_icon/camlong.png" },
-  { "id": "skill-lysusu", "name": "Lý Sư Sư", "logo": "/skills_icon/lysusu.png" }
+  { "id": "skill-lysusu", "name": "Lý Sư Sư", "logo": "/skills_icon/lysusu.png" },
+   { "id": "skill-kiempha", "name": "Kiếm Phá", "logo": "/skills_icon/kiempha.png" }
 ]

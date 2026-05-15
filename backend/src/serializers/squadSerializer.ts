@@ -1,4 +1,5 @@
 type Slot = { slotType: string; slotIndex: number; memberId: string | null };
+type SnapshotSlot = Slot & { skillIds?: string[] };
 
 type TeamWithSlots = {
   id: string;
@@ -36,12 +37,40 @@ export function toTeamSlotArrays(team: TeamWithSlots) {
   };
 }
 
+export function toSnapshotTeamSlotArrays(team: Omit<TeamWithSlots, 'slots'> & { slots: SnapshotSlot[] }) {
+  const slotArrays = toTeamSlotArrays(team);
+  const slotSkills: Record<string, string[]> = {};
+
+  for (const slot of team.slots) {
+    if (slot.slotType === 'main' && slot.slotIndex < slotArrays.memberIds.length) {
+      slotSkills[`main-${slot.slotIndex}`] = slot.skillIds ?? [];
+    }
+    if (slot.slotType === 'reserve' && slot.slotIndex < slotArrays.reserveMemberIds.length) {
+      slotSkills[`reserve-${slot.slotIndex}`] = slot.skillIds ?? [];
+    }
+  }
+
+  return {
+    ...slotArrays,
+    slotSkills,
+  };
+}
+
 export function serializeSquadGroups(groups: GroupWithTeams[]) {
   return groups.map(group => ({
     id: group.id,
     name: group.name,
     leaderMemberId: group.leaderMemberId,
     teams: group.teams.map(toTeamSlotArrays),
+  }));
+}
+
+export function serializeSnapshotSquadGroups(groups: Array<Omit<GroupWithTeams, 'teams'> & { teams: Array<Omit<TeamWithSlots, 'slots'> & { slots: SnapshotSlot[] }> }>) {
+  return groups.map(group => ({
+    id: group.id,
+    name: group.name,
+    leaderMemberId: group.leaderMemberId,
+    teams: group.teams.map(toSnapshotTeamSlotArrays),
   }));
 }
 

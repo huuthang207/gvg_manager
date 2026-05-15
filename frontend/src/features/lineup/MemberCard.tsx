@@ -32,28 +32,25 @@ export const MemberCard = React.forwardRef<HTMLDivElement, MemberCardProps>(
         className={cn(
           "flex items-center gap-1.5 rounded-md text-[12px] transition-all select-none w-full min-w-0 transition-colors",
           isOverlay 
-            ? "opacity-90 scale-105 shadow-2xl rotate-1 bg-[#1E293B] p-2 border border-slate-600" 
+            ? "opacity-90 scale-105 shadow-2xl rotate-1 bg-slate-800 p-2 border border-slate-600/80"
             : inSlot
-              ? "border border-transparent hover:bg-slate-700/30 px-1 py-0.5"
-              : "bg-slate-800/40 border border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 p-1.5",
-          isLeader && "ring-1 ring-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.15)] bg-gradient-to-r from-indigo-500/10 via-transparent to-transparent",
+              ? "border border-transparent hover:bg-slate-700/25 px-1 py-0.5"
+              : "bg-slate-800/55 border border-slate-700/60 hover:bg-slate-800/90 hover:border-slate-600/90 p-1.5",
           className
         )}
         style={inSlot ? { 
-          backgroundColor: `${color}20`, 
-          borderTopColor: `${color}50`,
-          borderRightColor: `${color}50`,
-          borderBottomColor: `${color}50`,
-          borderLeftWidth: isLeader ? '6px' : '4px',
-          borderLeftColor: isLeader ? '#818cf8' : color, 
-          boxShadow: isLeader ? 'inset 2px 0 10px rgba(99, 102, 241, 0.1)' : 'none'
+          backgroundColor: `${color}24`,
+          borderTopColor: `${color}55`,
+          borderRightColor: `${color}55`,
+          borderBottomColor: `${color}55`,
+          borderLeftWidth: '4px',
+          borderLeftColor: color,
         } : {}}
       >
         <img src={CLASS_ICONS[member.classType]} alt="" className="w-7 h-7 object-contain shrink-0" />
         
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
           <p className="font-bold truncate text-slate-100">{member.name}</p>
-          {isLeader && <LucideIcons.Crown size={11} className="text-indigo-400 shrink-0 drop-shadow-[0_0_3px_rgba(129,140,248,0.5)]" />}
           {member.previousClassType && member.previousClassType !== member.classType && (
             <LucideIcons.AlertTriangle
               size={11}
@@ -64,7 +61,7 @@ export const MemberCard = React.forwardRef<HTMLDivElement, MemberCardProps>(
 
           {/* Assigned Skills integrated here */}
           {skills.length > 0 && (
-            <div className="flex items-center gap-1 ml-auto shrink-0 bg-black/30 p-0.5 rounded-md border border-white/5">
+            <div className="flex items-center gap-1 ml-auto shrink-0 rounded-md border border-slate-600/35 bg-slate-950/45 p-0.5">
               {skills.map(skill => (
                 <div 
                   key={skill.id} 
@@ -137,8 +134,10 @@ interface DraggableMemberProps {
 }
 
 export const DraggableMember: React.FC<DraggableMemberProps> = ({ member, skills = [], origin, isLeader, onEdit, onDelete, onRemoveSkill, readOnly = false }) => {
+  const dndInstanceId = `${origin || 'readonly'}-${member.id}`;
+
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
-    id: `draggable-${member.id}`,
+    id: `draggable-${dndInstanceId}`,
     data: {
       type: 'member',
       member,
@@ -148,7 +147,7 @@ export const DraggableMember: React.FC<DraggableMemberProps> = ({ member, skills
   });
 
   const { isOver, setNodeRef: setDropRef } = useDroppable({
-    id: `droppable-member-${member.id}`,
+    id: `droppable-member-${dndInstanceId}`,
     data: {
       type: 'member-target',
       member,

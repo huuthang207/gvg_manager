@@ -16,13 +16,13 @@ export const CLASSES: ClassType[] = [
 ];
 
 export const CLASS_COLORS: Record<ClassType, string> = {
-  'Toái Mộng': '#22D3EE', // Cyan
-  'Cửu Linh': '#A78BFA', // Purple
-  'Long Ngâm': '#4ADE80', // Green
-  'Thiết Y': '#FBBF24', // Amber
-  'Tố Vấn': '#F472B6', // Pink (Hồng nhạt)
-  'Thần Tương': '#3B82F6', // Blue (Xanh nước)
-  'Huyết Hà': '#EF4444', // Red
+  'Toái Mộng': '#06B6D4',
+  'Cửu Linh': '#8B5CF6',
+  'Long Ngâm': '#22C55E',
+  'Thiết Y': '#F59E0B',
+  'Tố Vấn': '#EC4899',
+  'Thần Tương': '#3B82F6',
+  'Huyết Hà': '#EF4444',
 };
 
 export const CLASS_ICONS: Record<ClassType, string> = {

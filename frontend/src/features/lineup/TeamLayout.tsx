@@ -29,7 +29,12 @@ import { MainBoard } from './MainBoard.tsx';
 import { MemberCard } from './MemberCard.tsx';
 import { SquadSetupScreen } from './SquadSetupScreen.tsx';
 import { SavedLineupsView } from './SavedLineupsView.tsx';
+import { LineupEntryMenu } from './LineupEntryMenu.tsx';
+import { LineupSnapshotsModal } from './LineupSnapshotsModal.tsx';
 import { Users, Zap } from 'lucide-react';
+import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
+
+type LineupEntryMode = 'menu' | 'create' | 'current';
 
 interface TeamLayoutProps {
   squadGroups: SquadGroup[];
@@ -37,8 +42,11 @@ interface TeamLayoutProps {
   skills: Skill[];
   assignedMemberIds: Set<string>;
   onSquadGroupsChange: React.Dispatch<React.SetStateAction<SquadGroup[]>>;
+  lineupEntryMode: LineupEntryMode;
+  onLineupEntryModeChange: (mode: LineupEntryMode) => void;
   onSquadGroupLeaderChange: (groupId: string, leaderMemberId: string | null) => void;
   onMemberPoolChange: (members: Member[]) => void;
+  onAssignSkillToMember: (memberId: string, skill: Skill) => void;
   onSkillsChange: (skills: Skill[]) => void;
   onAddSkills: (skillsData: Omit<Skill, 'id'>[]) => void;
   onDeleteSkill: (id: string) => void;
@@ -53,7 +61,7 @@ interface TeamLayoutProps {
   canManageSnapshots: boolean;
   canRestoreSnapshots: boolean;
   snapshotState: LineupSnapshotState;
-  snapshotActions: Pick<LineupSnapshotActions, 'openSnapshots' | 'closeSnapshots' | 'selectSnapshot' | 'saveSnapshot' | 'restoreSnapshot' | 'removeSnapshot'>;
+  snapshotActions: Pick<LineupSnapshotActions, 'openSnapshots' | 'closeSnapshots' | 'selectSnapshot' | 'saveSnapshot' | 'restoreSnapshot' | 'removeSnapshot' | 'refreshSnapshots'>;
 }
 
 export const TeamLayout: React.FC<TeamLayoutProps> = ({
@@ -62,8 +70,11 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   skills,
   assignedMemberIds,
   onSquadGroupsChange,
+  lineupEntryMode,
+  onLineupEntryModeChange,
   onSquadGroupLeaderChange,
   onMemberPoolChange,
+  onAssignSkillToMember,
   onSkillsChange,
   onAddSkills,
   onDeleteSkill,
@@ -80,9 +91,11 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   snapshotState,
   snapshotActions,
 }) => {
+  const { confirm } = useSystemDialog();
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [activeData, setActiveData] = React.useState<any>(null);
   const [sidePanelTab, setSidePanelTab] = React.useState<'members' | 'skills'>('members');
+  const restoreRequestedRef = React.useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -116,33 +129,66 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
 
     if (!sourceData) return;
 
-    // Helper to find member currently in a slot
-    const getMemberIdInSlot = (slotId: string) => {
+    const parseSlotId = (slotId: string) => {
       const isReserve = slotId.includes('-reserve-');
       const parts = slotId.split(isReserve ? '-reserve-' : '-slot-');
       if (parts.length !== 2) return null;
-      const teamId = parts[0];
-      const slotIndex = parseInt(parts[1]);
 
-      let foundId: string | null = null;
-      const team = squadGroups.flatMap(group => group.teams).find(item => item.id === teamId);
-      if (team) {
-        foundId = isReserve ? team.reserveMemberIds[slotIndex] : team.memberIds[slotIndex];
-      }
-      return foundId;
+      return {
+        isReserve,
+        teamId: parts[0],
+        slotIndex: parseInt(parts[1]),
+      };
+    };
+
+    const getTeamForSlot = (groups: SquadGroup[], slotId: string) => {
+      const slot = parseSlotId(slotId);
+      if (!slot) return null;
+
+      const team = groups.flatMap(group => group.teams).find(item => item.id === slot.teamId);
+      if (!team) return null;
+
+      return { slot, team };
+    };
+
+    const isValidSlotId = (groups: SquadGroup[], slotId: string) => Boolean(getTeamForSlot(groups, slotId));
+
+    const getMemberIdInSlotFromGroups = (groups: SquadGroup[], slotId: string) => {
+      const slotData = getTeamForSlot(groups, slotId);
+      if (!slotData) return null;
+
+      const { slot, team } = slotData;
+      return slot.isReserve ? team.reserveMemberIds[slot.slotIndex] : team.memberIds[slot.slotIndex];
+    };
+
+    const getSlotIdForMember = (memberId: string) => {
+      let slotId: string | null = null;
+      squadGroups.forEach(group => {
+        group.teams.forEach(team => {
+          const sIdx = team.memberIds.indexOf(memberId);
+          if (sIdx !== -1) slotId = `${team.id}-slot-${sIdx}`;
+
+          const rIdx = team.reserveMemberIds.indexOf(memberId);
+          if (rIdx !== -1) slotId = `${team.id}-reserve-${rIdx}`;
+        });
+      });
+      return slotId;
     };
 
     // Handle Skill dropping
     if (sourceData.type === 'skill') {
       const skill = sourceData.skill as Skill;
 
-      if (dropId.includes('-slot-') || dropId.includes('-reserve-')) {
-        const memberIdInSlot = getMemberIdInSlot(dropId);
+      if (overData?.type === 'member-target') {
+        onAssignSkillToMember(overData.member.id, skill);
+        return;
+      }
+
+      if (isValidSlotId(squadGroups, dropId)) {
+        const memberIdInSlot = getMemberIdInSlotFromGroups(squadGroups, dropId);
         if (memberIdInSlot) {
-          assignSkillToMember(memberIdInSlot, skill.id);
+          onAssignSkillToMember(memberIdInSlot, skill);
         }
-      } else if (overData?.type === 'member-target') {
-        assignSkillToMember(overData.member.id, skill.id);
       }
       return;
     }
@@ -151,12 +197,10 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
 
     // Helper to update state
     const updateMemberInSlot = (groups: SquadGroup[], slotId: string, memberId: string | null) => {
-      const isReserve = slotId.includes('-reserve-');
-      const parts = slotId.split(isReserve ? '-reserve-' : '-slot-');
-      if (parts.length !== 2) return groups;
+      const slot = parseSlotId(slotId);
+      if (!slot) return groups;
 
-      const teamId = parts[0];
-      const slotIndex = parseInt(parts[1]);
+      const { isReserve, teamId, slotIndex } = slot;
 
       return groups.map(group => ({
         ...group,
@@ -178,59 +222,82 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
 
     // Cases
     if (origin === 'pool') {
-      if (dropId.includes('-slot-') || dropId.includes('-reserve-')) {
+      if (isValidSlotId(squadGroups, dropId)) {
         onSquadGroupsChange(prev => updateMemberInSlot(prev, dropId, member.id));
       }
-    } else if (typeof origin === 'string' && (origin.includes('-slot-') || origin.includes('-reserve-'))) {
+    } else if (typeof origin === 'string' && isValidSlotId(squadGroups, origin)) {
       const isOverPool = dropId === 'pool' || (overData?.type === 'member-target' && !assignedMemberIds.has(overData.member.id));
-
       if (isOverPool) {
+        (member.assignedSkills || []).forEach((skillId: string) => onRemoveSkillFromMember(member.id, skillId));
         onSquadGroupsChange(prev => updateMemberInSlot(prev, origin, null));
-        onMemberPoolChange(prev => prev.map(m =>
-          m.id === member.id ? { ...m, assignedSkills: [] } : m
-        ));
-      } else {
-        let targetSlotId: string | null = null;
-
-        if (dropId.includes('-slot-') || dropId.includes('-reserve-')) {
-          targetSlotId = dropId;
-        } else if (overData?.type === 'member-target') {
-          const targetId = overData.member.id;
-          squadGroups.forEach(group => {
-            group.teams.forEach(team => {
-              const sIdx = team.memberIds.indexOf(targetId);
-              if (sIdx !== -1) targetSlotId = `${team.id}-slot-${sIdx}`;
-
-              const rIdx = team.reserveMemberIds.indexOf(targetId);
-              if (rIdx !== -1) targetSlotId = `${team.id}-reserve-${rIdx}`;
-            });
-          });
-        }
-
-        if (targetSlotId) {
-          if (targetSlotId === origin) return;
-          const targetMemberId = getMemberIdInSlot(targetSlotId);
-          onSquadGroupsChange(prev => updateMemberInSlot(updateMemberInSlot(prev, origin, targetMemberId), targetSlotId, member.id));
-        }
+        return;
       }
+
+      let targetSlotId: string | null = null;
+
+      if (isValidSlotId(squadGroups, dropId)) {
+        targetSlotId = dropId;
+      } else if (overData?.type === 'member-target' && assignedMemberIds.has(overData.member.id)) {
+        targetSlotId = getSlotIdForMember(overData.member.id);
+      }
+
+      if (!targetSlotId || targetSlotId === origin) return;
+
+      onSquadGroupsChange(prev => {
+        const targetMemberId = getMemberIdInSlotFromGroups(prev, targetSlotId);
+        return updateMemberInSlot(updateMemberInSlot(prev, origin, targetMemberId), targetSlotId, member.id);
+      });
     }
   };
 
-  const resetSquadSetup = useCallback(() => {
-    if (!confirm('Tạo lại đội hình sẽ xóa toàn bộ vị trí đã xếp hiện tại. Bạn có chắc không?')) return;
-    onSquadGroupsChange([]);
-  }, [onSquadGroupsChange]);
+  const resetSquadSetup = useCallback(async () => {
+    const confirmed = await confirm({
+      message: 'Tạo lại đội hình sẽ xóa toàn bộ vị trí đã xếp hiện tại. Bạn có chắc không?',
+      variant: 'warning',
+      confirmLabel: 'Tạo lại',
+    });
+    if (!confirmed) return;
 
-  const assignSkillToMember = useCallback((memberId: string, skillId: string) => {
-    onMemberPoolChange(prev => prev.map(m => {
-      if (m.id === memberId) {
-        const assignedSkills = m.assignedSkills || [];
-        if (assignedSkills.includes(skillId)) return m;
-        return { ...m, assignedSkills: [...assignedSkills, skillId] };
-      }
-      return m;
-    }));
-  }, [onMemberPoolChange]);
+    onLineupEntryModeChange('menu');
+    onSquadGroupsChange([]);
+  }, [confirm, onLineupEntryModeChange, onSquadGroupsChange]);
+
+  const handleCreateNewLineup = useCallback(async () => {
+    if (squadGroups.length > 0) {
+      const confirmed = await confirm({
+        message: 'Tạo đội hình mới sẽ xóa toàn bộ vị trí đã xếp hiện tại. Bạn có chắc không?',
+        variant: 'warning',
+        confirmLabel: 'Tạo mới',
+      });
+      if (!confirmed) return;
+    }
+
+    onSquadGroupsChange([]);
+    onLineupEntryModeChange('create');
+  }, [confirm, onLineupEntryModeChange, onSquadGroupsChange, squadGroups.length]);
+
+  const handleUseSavedLineup = useCallback(() => {
+    restoreRequestedRef.current = true;
+    void snapshotActions.openSnapshots();
+  }, [snapshotActions.openSnapshots]);
+
+  const handleCreateSquadGroups = useCallback((groups: SquadGroup[]) => {
+    onSquadGroupsChange(groups);
+    onLineupEntryModeChange('current');
+  }, [onLineupEntryModeChange, onSquadGroupsChange]);
+
+  React.useEffect(() => {
+    if (restoreRequestedRef.current && squadGroups.length > 0 && !snapshotState.snapshotActionLoading) {
+      restoreRequestedRef.current = false;
+      onLineupEntryModeChange('current');
+    }
+  }, [onLineupEntryModeChange, snapshotState.snapshotActionLoading, squadGroups.length]);
+
+  React.useEffect(() => {
+    if (lineupEntryMode === 'menu' && !snapshotsOnly && !snapshotState.snapshotsLoading && snapshotState.snapshots.length === 0) {
+      void snapshotActions.refreshSnapshots();
+    }
+  }, [lineupEntryMode, snapshotsOnly, snapshotActions.refreshSnapshots, snapshotState.snapshots.length, snapshotState.snapshotsLoading]);
 
   React.useEffect(() => {
     if (snapshotsOnly && !snapshotState.snapshotsOpen && !snapshotState.snapshotsLoading) {
@@ -240,7 +307,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
 
   if (snapshotsOnly) {
     return (
-      <main className="h-full min-h-0 flex-1 overflow-hidden bg-[#0F172A] p-4">
+      <main className="h-full min-h-0 flex-1 overflow-hidden bg-slate-950/20 p-4">
         <SavedLineupsView
           snapshots={snapshotState.snapshots}
           selectedSnapshotId={snapshotState.selectedSnapshotId}
@@ -271,23 +338,47 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       onDragEnd={handleDragEnd}
     >
       <main className="flex h-full min-h-0 flex-1 overflow-hidden">
-        {squadGroups.length === 0 ? (
-          <SquadSetupScreen onCreate={onSquadGroupsChange} />
+        {lineupEntryMode === 'menu' && !readOnly ? (
+          <LineupEntryMenu
+            hasCurrentLineup={squadGroups.length > 0}
+            canCreateLineup={!readOnly}
+            canRestoreSnapshots={canRestoreSnapshots}
+            snapshotCount={snapshotState.snapshots.length}
+            snapshotsLoading={snapshotState.snapshotsLoading}
+            onCreateNew={handleCreateNewLineup}
+            onUseSaved={handleUseSavedLineup}
+          />
+        ) : squadGroups.length === 0 && !readOnly ? (
+          <SquadSetupScreen onCreate={handleCreateSquadGroups} />
+        ) : squadGroups.length === 0 ? (
+          <main className="flex h-full min-h-0 flex-1 items-center justify-center bg-slate-950/15 p-6">
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/45 px-6 py-8 text-center shadow-xl shadow-slate-950/20">
+              <p className="text-sm font-bold text-slate-200">Chưa có đội hình hiện tại</p>
+              <p className="mt-2 text-xs text-slate-400">Bạn có thể xem lại các đội hình đã lưu trước đó.</p>
+              <button
+                onClick={() => { void snapshotActions.openSnapshots(); }}
+                disabled={!canRestoreSnapshots || snapshotState.snapshotsLoading}
+                className="mt-5 rounded-lg border border-emerald-400/30 bg-emerald-500/12 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-200 transition-colors hover:border-emerald-300/50 hover:bg-emerald-500/18 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {snapshotState.snapshotsLoading ? 'Đang tải...' : 'Xem đội hình đã lưu'}
+              </button>
+            </div>
+          </main>
         ) : (
           <>
         {!isZoomed && !readOnly && (
-          <aside className="w-80 h-full min-h-0 shrink-0 border-r border-slate-800 bg-[#0F172A] flex flex-col overflow-hidden">
-            <div className="grid grid-cols-2 gap-1 p-2 border-b border-slate-800 bg-[#0F172A]/80 backdrop-blur-md">
+          <aside className="w-80 h-full min-h-0 shrink-0 border-r border-slate-800/80 bg-slate-950/35 flex flex-col overflow-hidden backdrop-blur-sm">
+            <div className="grid grid-cols-2 gap-1 border-b border-slate-800/80 bg-slate-950/35 p-2 backdrop-blur-md">
               <button
                 onClick={() => setSidePanelTab('members')}
-                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${sidePanelTab === 'members' ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${sidePanelTab === 'members' ? 'bg-sky-500/85 text-white shadow-lg shadow-sky-950/25' : 'text-slate-400 hover:bg-slate-800/75 hover:text-slate-100'}`}
               >
                 <Users size={14} />
                 Thành viên
               </button>
               <button
                 onClick={() => setSidePanelTab('skills')}
-                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${sidePanelTab === 'skills' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${sidePanelTab === 'skills' ? 'bg-amber-500/85 text-white shadow-lg shadow-amber-950/25' : 'text-slate-400 hover:bg-slate-800/75 hover:text-slate-100'}`}
               >
                 <Zap size={14} />
                 Kỹ năng
@@ -300,10 +391,14 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
                   members={memberPool}
                   skills={skills}
                   assignedMemberIds={assignedMemberIds}
-                  onDeleteMember={(id) => {
-                    if (confirm('Xóa thành viên này?')) {
-                      onMemberPoolChange(prev => prev.filter(m => m.id !== id));
-                    }
+                  onDeleteMember={async (id) => {
+                    const confirmed = await confirm({
+                      message: 'Xóa thành viên này?',
+                      variant: 'danger',
+                      confirmLabel: 'Xóa',
+                    });
+                    if (!confirmed) return;
+                    onMemberPoolChange(prev => prev.filter(m => m.id !== id));
                   }}
                   onRemoveSkillFromMember={onRemoveSkillFromMember}
                 />
@@ -334,6 +429,26 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
           </>
         )}
       </main>
+
+      {snapshotState.snapshotsOpen && (
+        <LineupSnapshotsModal
+          snapshots={snapshotState.snapshots}
+          selectedSnapshotId={snapshotState.selectedSnapshotId}
+          selectedSnapshot={snapshotState.selectedSnapshot}
+          loading={snapshotState.snapshotsLoading}
+          detailLoading={snapshotState.snapshotDetailLoading}
+          actionLoading={snapshotState.snapshotActionLoading}
+          canRestoreSnapshot={canRestoreSnapshots}
+          canDeleteSnapshot={canManageSnapshots}
+          recentSnapshotAction={snapshotState.recentSnapshotAction}
+          skills={skills}
+          getMemberById={getMemberById}
+          onClose={snapshotActions.closeSnapshots}
+          onSelectSnapshot={snapshotId => { void snapshotActions.selectSnapshot(snapshotId); }}
+          onRestoreSnapshot={snapshotId => { void snapshotActions.restoreSnapshot(snapshotId); }}
+          onDeleteSnapshot={snapshotId => { void snapshotActions.removeSnapshot(snapshotId); }}
+        />
+      )}
 
       <DragOverlay dropAnimation={{
         sideEffects: defaultDropAnimationSideEffects({

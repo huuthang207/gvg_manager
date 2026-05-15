@@ -1,0 +1,1 @@
+ALTER TABLE "LineupSnapshotSlot" ADD COLUMN "skillIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

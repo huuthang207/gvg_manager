@@ -11,6 +11,7 @@ import {
   getAppState,
 } from '../services/discordApi.ts';
 import { getErrorMessage } from '../lib/error.ts';
+import { useSystemDialog } from '../features/app/SystemDialogProvider.tsx';
 
 interface UseLineupSnapshotsOptions {
   applyAppState: (state: Awaited<ReturnType<typeof getAppState>>) => Promise<void>;
@@ -23,6 +24,7 @@ export interface LineupSnapshotState {
   snapshotDetailLoading: boolean;
   snapshotActionLoading: boolean;
   selectedSnapshotId: string | null;
+  pendingSnapshotId: string | null;
   selectedSnapshot: LineupSnapshotDetail | null;
   recentSnapshotAction: { snapshotId: string; type: 'created' | 'overwritten' } | null;
 }
@@ -39,12 +41,14 @@ export interface LineupSnapshotActions {
 }
 
 export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions) {
+  const { alert, confirm } = useSystemDialog();
   const [snapshots, setSnapshots] = React.useState<LineupSnapshotSummary[]>([]);
   const [snapshotsOpen, setSnapshotsOpen] = React.useState(false);
   const [snapshotsLoading, setSnapshotsLoading] = React.useState(false);
   const [snapshotDetailLoading, setSnapshotDetailLoading] = React.useState(false);
   const [snapshotActionLoading, setSnapshotActionLoading] = React.useState(false);
   const [selectedSnapshotId, setSelectedSnapshotId] = React.useState<string | null>(null);
+  const [pendingSnapshotId, setPendingSnapshotId] = React.useState<string | null>(null);
   const [selectedSnapshot, setSelectedSnapshot] = React.useState<LineupSnapshotDetail | null>(null);
   const [recentSnapshotAction, setRecentSnapshotAction] = React.useState<{ snapshotId: string; type: 'created' | 'overwritten' } | null>(null);
 
@@ -58,6 +62,7 @@ export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions)
         ? preferredSnapshotId
         : items[0]?.id ?? null;
       setSelectedSnapshotId(nextSelectedId);
+      setPendingSnapshotId(null);
 
       if (!nextSelectedId) {
         setSelectedSnapshot(null);
@@ -81,26 +86,29 @@ export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions)
     try {
       await loadSnapshots(selectedSnapshotId);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể tải đội hình đã lưu'));
+      void alert({ message: getErrorMessage(err, 'Không thể tải đội hình đã lưu'), variant: 'error' });
     }
-  }, [loadSnapshots, selectedSnapshotId]);
+  }, [alert, loadSnapshots, selectedSnapshotId]);
 
   const closeSnapshots = React.useCallback(() => {
     setSnapshotsOpen(false);
   }, []);
 
   const selectSnapshot = React.useCallback(async (snapshotId: string) => {
-    setSelectedSnapshotId(snapshotId);
+    if (snapshotId === selectedSnapshotId && selectedSnapshot?.id === snapshotId) return;
+    setPendingSnapshotId(snapshotId);
     setSnapshotDetailLoading(true);
     try {
       const detail = await getLineupSnapshot(snapshotId);
       setSelectedSnapshot(detail);
+      setSelectedSnapshotId(snapshotId);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể tải chi tiết đội hình'));
+      void alert({ message: getErrorMessage(err, 'Không thể tải chi tiết đội hình'), variant: 'error' });
     } finally {
+      setPendingSnapshotId(null);
       setSnapshotDetailLoading(false);
     }
-  }, []);
+  }, [alert, selectedSnapshotId, selectedSnapshot?.id]);
 
   const saveSnapshot = React.useCallback(async (
     mode: 'create' | 'overwrite',
@@ -115,47 +123,59 @@ export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions)
         snapshotId: detail.id,
         type: mode === 'overwrite' ? 'overwritten' : 'created',
       });
-      setSnapshotsOpen(true);
       await loadSnapshots(detail.id);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể lưu đội hình'));
+      void alert({ message: getErrorMessage(err, 'Không thể lưu đội hình'), variant: 'error' });
       throw err;
     }
-  }, [loadSnapshots]);
+  }, [alert, loadSnapshots]);
 
   const restoreSnapshot = React.useCallback(async (snapshotId: string) => {
-    if (!window.confirm('Khôi phục đội hình này sẽ ghi đè đội hình hiện tại. Bạn có chắc không?')) return;
+    const confirmed = await confirm({
+      message: 'Khôi phục đội hình này sẽ ghi đè đội hình hiện tại. Bạn có chắc không?',
+      variant: 'warning',
+      confirmLabel: 'Khôi phục',
+    });
+    if (!confirmed) return;
+
     setSnapshotActionLoading(true);
     try {
       const state = await restoreLineupSnapshot(snapshotId);
       await applyAppState(state);
-      await loadSnapshots(snapshotId);
-      alert('Đã khôi phục đội hình đã lưu.');
+      setSnapshotsOpen(false);
+      void alert({ message: 'Đã khôi phục đội hình thành công.', variant: 'success' });
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể khôi phục đội hình'));
+      void alert({ message: getErrorMessage(err, 'Không thể khôi phục đội hình'), variant: 'error' });
     } finally {
       setSnapshotActionLoading(false);
     }
-  }, [applyAppState, loadSnapshots]);
+  }, [alert, applyAppState, confirm]);
 
   const removeSnapshot = React.useCallback(async (snapshotId: string) => {
-    if (!window.confirm('Bạn có chắc muốn xóa đội hình đã lưu này?')) return;
+    const confirmed = await confirm({
+      message: 'Bạn có chắc muốn xóa đội hình đã lưu này?',
+      variant: 'danger',
+      confirmLabel: 'Xóa',
+    });
+    if (!confirmed) return;
+
     setSnapshotActionLoading(true);
     try {
       await deleteLineupSnapshot(snapshotId);
       const nextSelectedId = selectedSnapshotId === snapshotId ? null : selectedSnapshotId;
       await loadSnapshots(nextSelectedId);
     } catch (err) {
-      alert(getErrorMessage(err, 'Không thể xóa đội hình đã lưu'));
+      void alert({ message: getErrorMessage(err, 'Không thể xóa đội hình đã lưu'), variant: 'error' });
     } finally {
       setSnapshotActionLoading(false);
     }
-  }, [loadSnapshots, selectedSnapshotId]);
+  }, [alert, confirm, loadSnapshots, selectedSnapshotId]);
 
   const resetSnapshots = React.useCallback(() => {
     setSnapshots([]);
     setSelectedSnapshot(null);
     setSelectedSnapshotId(null);
+    setPendingSnapshotId(null);
     setRecentSnapshotAction(null);
     setSnapshotsOpen(false);
     setSnapshotsLoading(false);
@@ -174,6 +194,7 @@ export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions)
     snapshotDetailLoading,
     snapshotActionLoading,
     selectedSnapshotId,
+    pendingSnapshotId,
     selectedSnapshot,
     recentSnapshotAction,
   };

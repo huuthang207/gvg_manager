@@ -18,9 +18,10 @@ interface MemberSlotProps {
   isLeader?: boolean;
   onRemoveSkillFromMember: (memberId: string, skillId: string) => void;
   readOnly?: boolean;
+  snapshotSkillIds?: string[];
 }
 
-export const MemberSlot: React.FC<MemberSlotProps> = ({ id, member, skills, isReserve, isLeader, onRemoveSkillFromMember, readOnly = false }) => {
+export const MemberSlot: React.FC<MemberSlotProps> = ({ id, member, skills, isReserve, isLeader, onRemoveSkillFromMember, readOnly = false, snapshotSkillIds }) => {
   const { isOver, setNodeRef } = useDroppable({
     id,
     disabled: readOnly,
@@ -32,13 +33,13 @@ export const MemberSlot: React.FC<MemberSlotProps> = ({ id, member, skills, isRe
       className={cn(
         "relative w-full rounded-md border transition-all flex items-center text-[12px] overflow-hidden group/slot",
         isReserve ? "min-h-[30px] py-1" : "min-h-[36px]",
-        isOver 
-          ? "border-sky-500 bg-sky-500/10" 
+        isOver
+          ? "border-sky-400 bg-sky-500/12 ring-1 ring-sky-400/30"
           : member
             ? "border-transparent bg-transparent"
-            : isReserve 
-              ? "border-slate-800 bg-slate-900/20 border-dashed hover:border-slate-700"
-              : "border-slate-700/50 bg-[#0F172A]/50 border-dashed hover:border-sky-500/50",
+            : isReserve
+              ? "border-slate-700/60 bg-slate-900/24 border-dashed hover:border-slate-600"
+              : "border-slate-700/60 bg-slate-950/35 border-dashed hover:border-sky-400/55",
         !member && "px-1.5 text-slate-500 italic justify-center text-[12px]"
       )}
     >
@@ -46,7 +47,7 @@ export const MemberSlot: React.FC<MemberSlotProps> = ({ id, member, skills, isRe
         <div className="w-full relative">
           <DraggableMember
             member={member}
-            skills={(member.assignedSkills || []).map(sid => skills.find(s => s.id === sid)).filter(Boolean) as Skill[]}
+            skills={(snapshotSkillIds ?? member.assignedSkills ?? []).map(sid => skills.find(s => s.id === sid)).filter(Boolean) as Skill[]}
             origin={readOnly ? undefined : id}
             isLeader={isLeader}
             onRemoveSkill={readOnly ? undefined : (skillId) => onRemoveSkillFromMember(member.id, skillId)}
