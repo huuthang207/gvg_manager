@@ -828,9 +828,6 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         currentGuild={currentGuild}
-        accessibleGuilds={accessibleGuilds}
-        onGuildSwitch={handleGuildSwitch}
-        switchingGuild={switchingGuild}
         canManageAttendance={canManageLineup}
       />
 

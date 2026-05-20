@@ -174,23 +174,23 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         <aside className="w-80 shrink-0 border-r border-slate-800/80 bg-slate-950/35 overflow-y-auto custom-scrollbar backdrop-blur-sm">
           <div className="p-5 space-y-5">
             <section className="overflow-hidden rounded-2xl border border-sky-400/25 bg-gradient-to-br from-sky-500/14 via-slate-900/70 to-indigo-500/10 shadow-xl shadow-sky-950/15">
-              <div className="border-b border-sky-400/15 px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-sky-300">Hồ sơ</p>
-                <h2 className="mt-1 text-base font-black text-white">Thông tin của tôi</h2>
+              <div className="border-b border-sky-400/15 px-4 py-3 text-center">
+                <h2 className="text-base font-black text-white">Thông tin của tôi</h2>
+                <p className="mt-1 text-[11px] text-slate-400">Thông tin cá nhân trong server</p>
               </div>
               {selfMember ? (
                 <div className="space-y-3 p-4">
-                  <div className="flex items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-950/35 p-3">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-600/70 bg-slate-900/80 overflow-hidden">
+                  <div className="flex flex-col items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-950/35 p-4 text-center">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-600/70 bg-slate-900/80">
                       {getMemberAvatar(selfMember) ? (
                         <img src={getMemberAvatar(selfMember)!} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                       ) : (
                         <span className="text-lg font-black text-sky-200">{(selfMember.ingameName || selfMember.name)[0]?.toUpperCase()}</span>
                       )}
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 w-full">
                       <p className="truncate text-sm font-black text-slate-100">{selfMember.ingameName || 'Chưa cập nhật tên ingame'}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
                         <span className="rounded-full border border-sky-400/25 bg-sky-500/12 px-2 py-0.5 text-[10px] font-bold text-sky-200">{getRoleLabel()}</span>
                         <span
                           className="rounded-full border px-2 py-0.5 text-[10px] font-bold"
