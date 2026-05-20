@@ -1,8 +1,9 @@
-import { Router } from 'express';
+import { Response, Router } from 'express';
 import { requireAuth } from '../auth.js';
 import { getUserAppState } from '../appState.js';
 import { requireAccessibleGuild } from '../permissions.js';
 import { publishGuildAppStateChanged } from '../services/realtimeGateway.js';
+import { assertLineupEditLock, LineupEditLockError, acquireLineupEditLock, getLineupEditLock, overrideLineupEditLock, releaseLineupEditLock, renewLineupEditLock } from '../services/lineupEditLockService.js';
 import {
   createLineupSnapshotFromCurrentGuild,
   deleteLineupSnapshotForGuild,
@@ -16,6 +17,160 @@ import {
 
 export function createLineupRoutes() {
   const router = Router();
+
+  function sendLineupLockError(res: Response, err: LineupEditLockError) {
+    res.status(err.status).json({ error: err.message, lock: err.lock });
+  }
+
+  router.get('/api/lineup-lock', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const access = await requireAccessibleGuild(auth.user.id, 'view:guild', auth.session.activeGuildId);
+
+      if (!access) {
+        res.status(404).json({ error: 'Chưa có server nào được import.' });
+        return;
+      }
+
+      res.json({ lock: getLineupEditLock(access, auth.user.id) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/api/lineup-lock/acquire', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
+
+      if (!access) {
+        res.status(404).json({ error: 'Chưa có server nào được import.' });
+        return;
+      }
+
+      if (access.forbidden) {
+        res.status(403).json({ error: 'Bạn không có quyền chỉnh sửa đội hình.' });
+        return;
+      }
+
+      try {
+        const lock = acquireLineupEditLock(access, auth.user);
+        publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'lineup_lock_changed' });
+        res.json({ lock });
+      } catch (err) {
+        if (err instanceof LineupEditLockError) {
+          sendLineupLockError(res, err);
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/api/lineup-lock/heartbeat', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
+
+      if (!access) {
+        res.status(404).json({ error: 'Chưa có server nào được import.' });
+        return;
+      }
+
+      if (access.forbidden) {
+        res.status(403).json({ error: 'Bạn không có quyền chỉnh sửa đội hình.' });
+        return;
+      }
+
+      try {
+        const lock = renewLineupEditLock(access, auth.user);
+        publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'lineup_lock_changed' });
+        res.json({ lock });
+      } catch (err) {
+        if (err instanceof LineupEditLockError) {
+          sendLineupLockError(res, err);
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/api/lineup-lock/release', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
+
+      if (!access) {
+        res.status(404).json({ error: 'Chưa có server nào được import.' });
+        return;
+      }
+
+      if (access.forbidden) {
+        res.status(403).json({ error: 'Bạn không có quyền chỉnh sửa đội hình.' });
+        return;
+      }
+
+      try {
+        releaseLineupEditLock(access, auth.user);
+        publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'lineup_lock_changed' });
+        res.json({ lock: null });
+      } catch (err) {
+        if (err instanceof LineupEditLockError) {
+          sendLineupLockError(res, err);
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/api/lineup-lock/override', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
+
+      if (!access) {
+        res.status(404).json({ error: 'Chưa có server nào được import.' });
+        return;
+      }
+
+      if (access.forbidden) {
+        res.status(403).json({ error: 'Bạn không có quyền chỉnh sửa đội hình.' });
+        return;
+      }
+
+      try {
+        const lock = overrideLineupEditLock(access, auth.user);
+        publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'lineup_lock_changed' });
+        res.json({ lock });
+      } catch (err) {
+        if (err instanceof LineupEditLockError) {
+          sendLineupLockError(res, err);
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      next(err);
+    }
+  });
 
   router.put('/api/squad-layout', async (req, res, next) => {
     try {
@@ -66,6 +221,16 @@ export function createLineupRoutes() {
       if (access.forbidden) {
         res.status(403).json({ error: 'Bạn không có quyền chỉnh sửa đội hình.' });
         return;
+      }
+
+      try {
+        assertLineupEditLock(access, auth.user);
+      } catch (err) {
+        if (err instanceof LineupEditLockError) {
+          sendLineupLockError(res, err);
+          return;
+        }
+        throw err;
       }
 
       await persistSquadGroupsForGuild(access.guild.id, groups);
@@ -212,6 +377,16 @@ export function createLineupRoutes() {
       if (access.forbidden) {
         res.status(403).json({ error: 'Bạn không có quyền khôi phục đội hình đã lưu.' });
         return;
+      }
+
+      try {
+        assertLineupEditLock(access, auth.user);
+      } catch (err) {
+        if (err instanceof LineupEditLockError) {
+          sendLineupLockError(res, err);
+          return;
+        }
+        throw err;
       }
 
       await restoreLineupSnapshotToCurrentGuild(access.guild.id, req.params.snapshotId);

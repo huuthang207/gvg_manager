@@ -31,8 +31,9 @@ import { SquadSetupScreen } from './SquadSetupScreen.tsx';
 import { SavedLineupsView } from './SavedLineupsView.tsx';
 import { LineupEntryMenu } from './LineupEntryMenu.tsx';
 import { LineupSnapshotsModal } from './LineupSnapshotsModal.tsx';
-import { Users, Zap } from 'lucide-react';
+import { Lock, LockOpen, ShieldAlert, Users, Zap } from 'lucide-react';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
+import type { LineupEditLock } from '../../services/discordApi.ts';
 
 type LineupEntryMode = 'menu' | 'create' | 'current';
 
@@ -57,6 +58,12 @@ interface TeamLayoutProps {
   isZoomed: boolean;
   onZoomToggle: () => void;
   readOnly: boolean;
+  canManageLineup: boolean;
+  lineupLock: LineupEditLock | null;
+  lineupLockActionLoading: boolean;
+  onAcquireLineupLock: () => void;
+  onReleaseLineupLock: () => void;
+  onOverrideLineupLock: () => void;
   snapshotsOnly: boolean;
   canManageSnapshots: boolean;
   canRestoreSnapshots: boolean;
@@ -85,6 +92,12 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   isZoomed,
   onZoomToggle,
   readOnly,
+  canManageLineup,
+  lineupLock,
+  lineupLockActionLoading,
+  onAcquireLineupLock,
+  onReleaseLineupLock,
+  onOverrideLineupLock,
   snapshotsOnly,
   canManageSnapshots,
   canRestoreSnapshots,
@@ -250,6 +263,21 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     }
   };
 
+  const clearAssignedLineupSkills = useCallback(() => {
+    const assignedIds = new Set<string>();
+    squadGroups.forEach(group => {
+      group.teams.forEach(team => {
+        team.memberIds.forEach(id => id && assignedIds.add(id));
+        team.reserveMemberIds.forEach(id => id && assignedIds.add(id));
+      });
+    });
+
+    memberPool.forEach(member => {
+      if (!assignedIds.has(member.id)) return;
+      (member.assignedSkills || []).forEach(skillId => onRemoveSkillFromMember(member.id, skillId));
+    });
+  }, [memberPool, onRemoveSkillFromMember, squadGroups]);
+
   const resetSquadSetup = useCallback(async () => {
     const confirmed = await confirm({
       message: 'Tạo lại đội hình sẽ xóa toàn bộ vị trí đã xếp hiện tại. Bạn có chắc không?',
@@ -258,9 +286,10 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     });
     if (!confirmed) return;
 
+    clearAssignedLineupSkills();
     onLineupEntryModeChange('menu');
     onSquadGroupsChange([]);
-  }, [confirm, onLineupEntryModeChange, onSquadGroupsChange]);
+  }, [clearAssignedLineupSkills, confirm, onLineupEntryModeChange, onSquadGroupsChange]);
 
   const handleCreateNewLineup = useCallback(async () => {
     if (squadGroups.length > 0) {
@@ -272,9 +301,10 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       if (!confirmed) return;
     }
 
+    clearAssignedLineupSkills();
     onSquadGroupsChange([]);
     onLineupEntryModeChange('create');
-  }, [confirm, onLineupEntryModeChange, onSquadGroupsChange, squadGroups.length]);
+  }, [clearAssignedLineupSkills, confirm, onLineupEntryModeChange, onSquadGroupsChange, squadGroups.length]);
 
   const handleUseSavedLineup = useCallback(() => {
     restoreRequestedRef.current = true;
@@ -285,6 +315,56 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     onSquadGroupsChange(groups);
     onLineupEntryModeChange('current');
   }, [onLineupEntryModeChange, onSquadGroupsChange]);
+
+  const lockBanner = canManageLineup ? (
+    <div className="shrink-0 border-b border-slate-800/80 bg-slate-950/55 px-4 py-3 backdrop-blur-md">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 shadow-lg shadow-slate-950/20">
+        <div className="flex items-center gap-3">
+          <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${lineupLock?.isHeldByMe ? 'bg-emerald-500/15 text-emerald-300' : lineupLock ? 'bg-amber-500/15 text-amber-300' : 'bg-sky-500/15 text-sky-300'}`}>
+            {lineupLock?.isHeldByMe ? <LockOpen size={18} /> : lineupLock ? <Lock size={18} /> : <ShieldAlert size={18} />}
+          </div>
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider text-slate-100">
+              {lineupLock?.isHeldByMe ? 'Bạn đang chỉnh sửa đội hình' : lineupLock ? `Đang được chỉnh bởi ${lineupLock.holderName}` : 'Đội hình đang ở chế độ xem'}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              {lineupLock?.isHeldByMe ? 'Người khác vẫn có thể xem cập nhật realtime nhưng không thể thay đổi.' : 'Bấm bắt đầu chỉnh sửa để khóa quyền thay đổi đội hình cho phiên của bạn.'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {lineupLock?.isHeldByMe ? (
+            <button
+              onClick={onReleaseLineupLock}
+              disabled={lineupLockActionLoading}
+              className="rounded-lg border border-emerald-400/30 bg-emerald-500/12 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-200 transition-colors hover:border-emerald-300/50 hover:bg-emerald-500/18 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Kết thúc chỉnh sửa
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={onAcquireLineupLock}
+                disabled={lineupLockActionLoading || !!lineupLock}
+                className="rounded-lg border border-sky-400/30 bg-sky-500/12 px-4 py-2 text-xs font-bold uppercase tracking-wider text-sky-200 transition-colors hover:border-sky-300/50 hover:bg-sky-500/18 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Bắt đầu chỉnh sửa
+              </button>
+              {lineupLock?.canOverride && (
+                <button
+                  onClick={onOverrideLineupLock}
+                  disabled={lineupLockActionLoading}
+                  className="rounded-lg border border-amber-400/30 bg-amber-500/12 px-4 py-2 text-xs font-bold uppercase tracking-wider text-amber-200 transition-colors hover:border-amber-300/50 hover:bg-amber-500/18 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Chiếm quyền
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   React.useEffect(() => {
     if (restoreRequestedRef.current && squadGroups.length > 0 && !snapshotState.snapshotActionLoading) {
@@ -337,7 +417,8 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <main className="flex h-full min-h-0 flex-1 overflow-hidden">
+      <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        {lockBanner}
         {lineupEntryMode === 'menu' && !readOnly ? (
           <LineupEntryMenu
             hasCurrentLineup={squadGroups.length > 0}
@@ -365,7 +446,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
             </div>
           </main>
         ) : (
-          <>
+          <div className="flex min-h-0 flex-1 overflow-hidden">
         {!isZoomed && !readOnly && (
           <aside className="w-80 h-full min-h-0 shrink-0 border-r border-slate-800/80 bg-slate-950/35 flex flex-col overflow-hidden backdrop-blur-sm">
             <div className="grid grid-cols-2 gap-1 border-b border-slate-800/80 bg-slate-950/35 p-2 backdrop-blur-md">
@@ -426,7 +507,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
           snapshotState={snapshotState}
           snapshotActions={snapshotActions}
         />
-          </>
+          </div>
         )}
       </main>
 

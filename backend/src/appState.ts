@@ -3,6 +3,7 @@ import { getAccessibleGuildForUser } from './permissions.js';
 import { serializeMembers } from './serializers/memberSerializer.js';
 import { serializeDivisions, serializeSquadGroups } from './serializers/squadSerializer.js';
 import { getAttendanceStateForGuild } from './services/attendanceService.js';
+import { getLineupEditLock } from './services/lineupEditLockService.js';
 
 export interface AppStateGuildContext {
   guildId: string;
@@ -20,6 +21,7 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
     where: { id: access.guild.id },
     include: {
       members: {
+        where: { active: true },
         orderBy: { displayName: 'asc' },
         include: {
           roles: true,
@@ -66,6 +68,7 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
       roleConfig: null,
       currentRole: null,
       permissions: [],
+      lineupLock: null,
     };
   }
 
@@ -100,6 +103,7 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
     },
     currentRole: access?.role ?? null,
     permissions: access?.permissions ?? [],
+    lineupLock: getLineupEditLock(access, user.id),
   };
 }
 

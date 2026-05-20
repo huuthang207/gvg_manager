@@ -6,6 +6,7 @@ import {
   acknowledgeMemberClassChange,
   assignSkillToMember,
   deleteInactiveMemberFromDatabase,
+  deleteInactiveMembersFromDatabase,
   removeBangVienRoleFromMember,
   removeSkillFromMember,
   updateBotMemberIngameName,
@@ -80,6 +81,18 @@ export function createMemberRoutes() {
         res.status(404).json({ error: 'Không tìm thấy thành viên hoặc role môn phái trên Discord.' });
         return;
       }
+      next(err);
+    }
+  });
+
+  router.delete('/api/members/inactive/database', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const result = await deleteInactiveMembersFromDatabase(auth.user.id, auth.session.activeGuildId);
+      res.status(result.status).json(result.body);
+    } catch (err) {
       next(err);
     }
   });

@@ -69,16 +69,11 @@ async function deriveMembershipRoleForGuild(userId: string, guildId: string): Pr
     return 'owner';
   }
 
-  const accessRoles = await prisma.guildAccessRole.findMany({ where: { guildId } });
+  const accessRoles = await prisma.guildAccessRole.findMany({ where: { guildId, appRole: 'manager' } });
   const memberRoleNames = new Set(importedMember.roles.map(role => role.roleName));
-  const managerRoles = accessRoles.filter(role => role.appRole === 'manager').map(role => role.roleName);
-  const memberRoles = accessRoles.filter(role => role.appRole === 'member').map(role => role.roleName);
+  const managerRoles = accessRoles.map(role => role.roleName);
 
-  const role: GuildRole = managerRoles.some(roleName => memberRoleNames.has(roleName))
-    ? 'manager'
-    : memberRoles.length === 0 || memberRoles.some(roleName => memberRoleNames.has(roleName))
-      ? 'member'
-      : 'member';
+  const role: GuildRole = managerRoles.some(roleName => memberRoleNames.has(roleName)) ? 'manager' : 'member';
 
   await prisma.guildMembership.upsert({
     where: { guildId_userId: { guildId, userId } },
@@ -121,7 +116,7 @@ export async function listAccessibleGuildsForUser(userId: string): Promise<Acces
     const importedMember = await getActiveImportedMemberForUser(userId, membership.guildId);
     if (!importedMember) continue;
 
-    const membershipRole = normalizeRole(membership.role) ?? await deriveMembershipRoleForGuild(userId, membership.guildId);
+    const membershipRole = await deriveMembershipRoleForGuild(userId, membership.guildId) ?? normalizeRole(membership.role);
     if (!membershipRole) continue;
 
     byGuildId.set(membership.guildId, {

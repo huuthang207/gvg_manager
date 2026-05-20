@@ -53,6 +53,10 @@ export async function deleteInactiveMember(memberId: string): Promise<AppStateRe
   return requestJson(`${API_BASE}/api/members/${memberId}/database`, { method: 'DELETE', credentials: 'include' });
 }
 
+export async function deleteInactiveMembers(): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/inactive/database`, { method: 'DELETE', credentials: 'include' });
+}
+
 export async function assignMemberSkill(memberId: string, skill: Skill): Promise<AppStateResponse> {
   return requestJson(`${API_BASE}/api/members/${memberId}/skills/${skill.id}`, {
     method: 'POST',

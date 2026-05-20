@@ -4,6 +4,7 @@ export type {
   ImportResponse,
   AppStateResponse,
   DiscordUser,
+  LineupEditLock,
 } from '../shared/types/auth.ts';
 
 export type {

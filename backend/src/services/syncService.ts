@@ -16,6 +16,7 @@ async function syncPersistedGuildByDiscordGuildId(discordGuildId: string) {
       classRoleMappings: true,
       requiredRoles: true,
       members: {
+        where: { active: true },
         orderBy: { displayName: 'asc' },
         include: {
           roles: true,
@@ -40,6 +41,7 @@ async function syncPersistedGuildByDiscordGuildId(discordGuildId: string) {
     where: { id: guild.id },
     include: {
       members: {
+        where: { active: true },
         orderBy: { displayName: 'asc' },
         include: {
           roles: true,
@@ -127,7 +129,7 @@ export async function syncAllPersistedGuilds() {
 }
 
 export async function syncActiveGuildMembers(userId: string, activeGuildId: string | null | undefined) {
-  const access = await requireAccessibleGuild(userId, 'manage:members', activeGuildId);
+  const access = await requireAccessibleGuild(userId, 'manage:settings', activeGuildId);
 
   if (!access) {
     return { status: 404 as const, body: { error: 'Chưa có server nào được import.' } };

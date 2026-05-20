@@ -18,6 +18,7 @@ export type GuildAppStateChangeReason =
   | 'access_updated'
   | 'settings_updated'
   | 'lineup_updated'
+  | 'lineup_lock_changed'
   | 'attendance_updated'
   | 'snapshot_saved'
   | 'snapshot_restored'

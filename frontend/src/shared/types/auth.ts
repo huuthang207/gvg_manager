@@ -55,6 +55,18 @@ export interface AttendanceState {
   recentSessions: AttendanceSession[];
 }
 
+export interface LineupEditLock {
+  guildId: string;
+  holderUserId: string;
+  holderDiscordUserId: string;
+  holderName: string;
+  holderRole: 'owner' | 'manager' | 'member';
+  acquiredAt: string;
+  expiresAt: string;
+  isHeldByMe: boolean;
+  canOverride: boolean;
+}
+
 export interface AppStateResponse {
   user: DiscordUser | null;
   guild: { id: string; discordGuildId: string; name: string; icon: string | null } | null;
@@ -67,6 +79,7 @@ export interface AppStateResponse {
   roleConfig: { classRoleMap: Record<string, string>; requiredRoles: string[]; accessRoles?: { managerRoles: string[]; memberRoles: string[] } } | null;
   currentRole?: 'owner' | 'manager' | 'member' | null;
   permissions?: string[];
+  lineupLock?: LineupEditLock | null;
 }
 
 export interface DiscordRoleMapping {

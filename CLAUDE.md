@@ -61,6 +61,7 @@ Backend `.env` is based on `backend/.env.example` and expects:
 - `DATABASE_URL` for PostgreSQL.
 - `PORT` defaults to `3001` if unset.
 - `CORS_ORIGINS` can override allowed frontend origins; otherwise `FRONTEND_URL` or the local Vite origins are used.
+- `SESSION_COOKIE_SECURE` and `SESSION_COOKIE_SAME_SITE` control the httpOnly session cookie; use secure `SameSite=None` cookies for cross-site HTTPS deployments.
 - `DISCORD_SYNC_FALLBACK_INTERVAL_MS` controls the periodic fallback guild sync interval, with a minimum of 60 seconds.
 
 Frontend `.env` is based on `frontend/.env.example`; `VITE_DISCORD_API_URL` points to the backend. Set `VITE_REALTIME_DEBUG=true` to log WebSocket activity outside dev mode.

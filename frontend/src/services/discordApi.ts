@@ -11,6 +11,7 @@ export type {
   LineupSnapshotSummary,
   LineupSnapshotDetail,
   AppStateResponse,
+  LineupEditLock,
   DiscordGuild,
   GuildsResponse,
   AccessibleGuild,
@@ -27,13 +28,12 @@ export {
   updateMemberClassRole,
   updateMyIngameName,
   deleteMember,
-  deleteInactiveMember,
   assignMemberSkill,
   removeMemberSkill,
   syncDiscordMembers,
   fetchDiscordRoles,
   fetchCurrentDiscordRoles,
 } from './memberApi.ts';
-export { saveSquadLayout, getLineupSnapshots, createLineupSnapshot, updateLineupSnapshot, getLineupSnapshot, restoreLineupSnapshot, deleteLineupSnapshot } from './lineupApi.ts';
+export { saveSquadLayout, getLineupEditLock, acquireLineupEditLock, heartbeatLineupEditLock, releaseLineupEditLock, overrideLineupEditLock, getLineupSnapshots, createLineupSnapshot, updateLineupSnapshot, getLineupSnapshot, restoreLineupSnapshot, deleteLineupSnapshot } from './lineupApi.ts';
 export { updateAccessRoles, updateRoleConfig } from './settingsApi.ts';
 export { updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, getAttendanceHistory, getAttendanceSession, deleteAttendanceHistorySession } from './attendanceApi.ts';

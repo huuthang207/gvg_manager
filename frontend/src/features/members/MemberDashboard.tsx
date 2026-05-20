@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Trash2, RefreshCw, Filter, X, CheckCircle, UserCircle, XCircle, AlertTriangle, Settings } from 'lucide-react';
+import { Search, Trash2, RefreshCw, Filter, X, CheckCircle, UserCircle, AlertTriangle, Settings } from 'lucide-react';
 import { Member, ClassType } from '../../types.ts';
 import { AppStateResponse, DiscordUser, fetchCurrentDiscordRoles } from '../../services/discordApi.ts';
 import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
@@ -32,7 +32,6 @@ interface MemberDashboardProps {
   lastSyncedAt?: string | null;
 }
 
-type FilterStatus = 'active' | 'inactive';
 type SortField = 'name' | 'classType';
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({
@@ -56,7 +55,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 }) => {
   const { confirm } = useSystemDialog();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('active');
   const [filterClass, setFilterClass] = useState<ClassType | 'all'>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -102,10 +100,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       acc[cls] = members.filter(m => m.classType === cls).length;
       return acc;
     }, {} as Record<ClassType, number>);
-    const active = members.filter(m => m.active !== false).length;
-    const inactive = total - active;
-
-    return { total, byClass, active, inactive };
+    return { total, byClass };
   }, [members]);
 
   // Filter and sort
@@ -119,13 +114,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         .filter(Boolean)
         .some(value => value!.toLowerCase().includes(query))
       );
-    }
-
-    // Filter by active status
-    if (filterStatus === 'inactive') {
-      result = result.filter(m => m.active === false);
-    } else {
-      result = result.filter(m => m.active !== false);
     }
 
     // Filter by class
@@ -142,7 +130,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     });
 
     return result;
-  }, [members, searchQuery, filterStatus, filterClass, sortField]);
+  }, [members, searchQuery, filterClass, sortField]);
 
   const getMemberAvatar = (member: Member) => {
     if (member.avatar) {
@@ -152,14 +140,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   };
 
   const confirmDeleteMember = async (member: Member) => {
-    const message = member.active === false
-      ? `Xóa vĩnh viễn thành viên "${member.name}" khỏi hệ thống?`
-      : `Xóa thành viên "${member.name}"?`;
-
     const confirmed = await confirm({
-      message,
+      message: `Gỡ role Bang Viên của "${member.name}" trên Discord và xóa khỏi danh sách webapp?`,
       variant: 'danger',
-      confirmLabel: 'Xóa',
+      confirmLabel: 'Gỡ role',
     });
     if (!confirmed) return;
 
@@ -205,10 +189,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               )}
             </section>
 
-            <div className="grid grid-cols-3 gap-2">
-              <StatCard label="Tổng số" value={stats.total} color="blue" compact />
-              <StatCard label="Hoạt động" value={stats.active} color="emerald" compact />
-              <StatCard label="Không HĐ" value={stats.inactive} color="red" compact />
+            <div className="grid grid-cols-1 gap-2">
+              <StatCard label="Thành viên" value={stats.total} color="emerald" compact />
             </div>
 
             <section className="space-y-2">
@@ -230,28 +212,24 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               </div>
             </section>
 
-            {(allowMemberManagement || canManageSettings) && (
+            {canManageSettings && (
               <div className="grid grid-cols-2 gap-2">
-                {allowMemberManagement && (
-                  <button
-                    onClick={onRefresh}
-                    disabled={syncing}
-                    className="app-button-secondary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
-                  >
-                    <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-                    {syncing ? 'Đang...' : 'Đồng bộ'}
-                  </button>
-                )}
-                {canManageSettings && (
-                  <button
-                    onClick={() => setIsRoleConfigOpen(true)}
-                    className="app-button-primary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
-                    title="Cấu hình role"
-                  >
-                    <Settings size={14} />
-                    Cài đặt
-                  </button>
-                )}
+                <button
+                  onClick={onRefresh}
+                  disabled={syncing}
+                  className="app-button-secondary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
+                >
+                  <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                  {syncing ? 'Đang...' : 'Đồng bộ'}
+                </button>
+                <button
+                  onClick={() => setIsRoleConfigOpen(true)}
+                  className="app-button-primary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
+                  title="Cấu hình role"
+                >
+                  <Settings size={14} />
+                  Cài đặt
+                </button>
               </div>
             )}
           </div>
@@ -265,7 +243,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 Bộ lọc
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(220px,1fr)_auto_auto] gap-3 items-end">
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(220px,1fr)_auto] gap-3 items-end">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
                     Tìm kiếm
@@ -279,28 +257,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       onChange={e => setSearchQuery(e.target.value)}
                       className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-400/70"
                     />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-                    Trạng thái
-                  </label>
-                  <div className="flex gap-2">
-                    {(['active', 'inactive'] as FilterStatus[]).map(status => (
-                      <button
-                        key={status}
-                        onClick={() => setFilterStatus(status)}
-                        className={cn(
-                          "px-3 py-2 rounded-lg text-[11px] font-bold transition-colors whitespace-nowrap",
-                          filterStatus === status
-                            ? status === 'active' ? "bg-emerald-500/85 text-white shadow-sm shadow-emerald-950/20" : "bg-red-500/85 text-white shadow-sm shadow-red-950/20"
-                            : "bg-slate-800/70 text-slate-300 hover:bg-slate-700/80 hover:text-white"
-                        )}
-                      >
-                        {status === 'active' ? 'Hoạt động' : 'Không HĐ'}
-                      </button>
-                    ))}
                   </div>
                 </div>
 
@@ -361,11 +317,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     </button>
                   ))}
 
-                  {(filterStatus !== 'active' || filterClass !== 'all' || searchQuery) && (
+                  {(filterClass !== 'all' || searchQuery) && (
                     <button
                       onClick={() => {
                         setSearchQuery('');
-                        setFilterStatus('active');
                         setFilterClass('all');
                       }}
                       className="flex items-center gap-1 px-2 text-[11px] text-slate-400 hover:text-red-400 transition-colors"
@@ -459,17 +414,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        {member.active === false ? (
-                          <span className="flex items-center gap-1.5 text-[11px] text-red-400">
-                            <XCircle size={12} />
-                            Không hoạt động
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1.5 text-[11px] text-emerald-400">
-                            <CheckCircle size={12} />
-                            Đang hoạt động
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                          <CheckCircle size={12} />
+                          Đang trong bang
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-right">
                         {allowMemberManagement && (
@@ -614,10 +562,8 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
   );
   const [requiredRoles, setRequiredRoles] = useState<string[]>(roleConfig?.requiredRoles || []);
   const [managerRoles, setManagerRoles] = useState<string[]>(roleConfig?.accessRoles?.managerRoles || []);
-  const [memberRoles, setMemberRoles] = useState<string[]>(roleConfig?.accessRoles?.memberRoles || []);
   const [newRequiredRole, setNewRequiredRole] = useState('');
   const [newManagerRole, setNewManagerRole] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -635,17 +581,10 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
     setNewRequiredRole('');
   };
 
-  const addAccessRole = (role: string, appRole: 'manager' | 'member') => {
-    if (!role) return;
-    if (appRole === 'manager') {
-      if (managerRoles.includes(role)) return;
-      setManagerRoles(prev => [...prev, role]);
-      setNewManagerRole('');
-      return;
-    }
-    if (memberRoles.includes(role)) return;
-    setMemberRoles(prev => [...prev, role]);
-    setNewMemberRole('');
+  const addManagerRole = (role: string) => {
+    if (!role || managerRoles.includes(role)) return;
+    setManagerRoles(prev => [...prev, role]);
+    setNewManagerRole('');
   };
 
   const handleSave = async () => {
@@ -663,7 +602,7 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
     setSaving(true);
     setError('');
     try {
-      await onSave(classRoleMap, requiredRoles, { managerRoles, memberRoles });
+      await onSave(classRoleMap, requiredRoles, { managerRoles, memberRoles: requiredRoles });
     } catch (err) {
       setError(getErrorMessage(err, 'Không thể lưu cấu hình role'));
     } finally {
@@ -677,7 +616,7 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
           <div>
             <h3 className="font-bold text-slate-100">Cấu hình Discord Role</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">Lưu cấu hình sẽ đồng bộ lại thành viên, phái và trạng thái hoạt động.</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Role bắt buộc là điều kiện vào webapp; role quản lý sẽ được nâng quyền.</p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
             <X size={18} />
@@ -696,7 +635,10 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
           ) : (
             <>
               <section className="space-y-3">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Role bắt buộc</label>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Role bắt buộc / thành viên</label>
+                  <p className="mt-1 text-[11px] text-slate-500">Người dùng phải có các role này để vào webapp; nếu không có role quản lý thì sẽ là thành viên.</p>
+                </div>
                 <div className="flex gap-2">
                   <select
                     value={newRequiredRole}
@@ -717,7 +659,7 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {requiredRoles.length === 0 ? (
-                    <span className="text-xs text-slate-500">Không có role bắt buộc</span>
+                    <span className="text-xs text-amber-300">Chưa có role bắt buộc; nên chọn role Bang Viên để giới hạn truy cập webapp.</span>
                   ) : requiredRoles.map(role => (
                     <button
                       key={role}
@@ -731,29 +673,20 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
               </section>
 
               <section className="space-y-3">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Phân quyền truy cập</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <AccessRolePicker
-                    title="Role quản lý"
-                    roles={managerRoles}
-                    selectedRole={newManagerRole}
-                    availableRoles={allRoles.filter(role => !managerRoles.includes(role))}
-                    onSelectedRoleChange={setNewManagerRole}
-                    onAddRole={() => addAccessRole(newManagerRole, 'manager')}
-                    onRemoveRole={role => setManagerRoles(prev => prev.filter(item => item !== role))}
-                    emptyText="Chưa có role quản lý"
-                  />
-                  <AccessRolePicker
-                    title="Role thành viên"
-                    roles={memberRoles}
-                    selectedRole={newMemberRole}
-                    availableRoles={allRoles.filter(role => !memberRoles.includes(role))}
-                    onSelectedRoleChange={setNewMemberRole}
-                    onAddRole={() => addAccessRole(newMemberRole, 'member')}
-                    onRemoveRole={role => setMemberRoles(prev => prev.filter(item => item !== role))}
-                    emptyText="Mặc định cho thành viên đã import"
-                  />
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Role quản lý</label>
+                  <p className="mt-1 text-[11px] text-slate-500">Người có role bắt buộc và một trong các role này sẽ được quyền quản lý.</p>
                 </div>
+                <AccessRolePicker
+                  title="Role quản lý"
+                  roles={managerRoles}
+                  selectedRole={newManagerRole}
+                  availableRoles={allRoles.filter(role => !managerRoles.includes(role))}
+                  onSelectedRoleChange={setNewManagerRole}
+                  onAddRole={() => addManagerRole(newManagerRole)}
+                  onRemoveRole={role => setManagerRoles(prev => prev.filter(item => item !== role))}
+                  emptyText="Chưa có role quản lý"
+                />
               </section>
 
               <section className="space-y-3">
@@ -1029,17 +962,10 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
           {/* Status */}
           <div className="flex items-center justify-between py-3 border-t border-slate-800">
             <span className="text-xs text-slate-400">Trạng thái</span>
-            {member.active === false ? (
-              <span className="flex items-center gap-1.5 text-xs text-red-400">
-                <XCircle size={12} />
-                Không hoạt động (mất role Bang Viên)
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-                <CheckCircle size={12} />
-                Đang hoạt động (còn role Bang Viên)
-              </span>
-            )}
+            <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+              <CheckCircle size={12} />
+              Đang trong bang
+            </span>
           </div>
         </div>
 
@@ -1049,7 +975,7 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
             className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-xs font-bold transition-colors"
           >
             <Trash2 size={14} />
-            {member.active === false ? 'Xóa vĩnh viễn' : 'Xóa thành viên'}
+            Gỡ role Bang Viên
           </button>
         </div>
       </div>

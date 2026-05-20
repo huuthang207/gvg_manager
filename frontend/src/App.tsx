@@ -9,7 +9,7 @@ import { Sidebar } from './features/app/Sidebar.tsx';
 import { MemberDashboard } from './features/members/MemberDashboard.tsx';
 import { TeamLayout } from './features/lineup/TeamLayout.tsx';
 import { AttendanceView } from './features/attendance/AttendanceView.tsx';
-import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMemberClassRole, updateMyIngameName, deleteMember, deleteInactiveMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState, updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession } from './services/discordApi.ts';
+import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMemberClassRole, updateMyIngameName, deleteMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState, updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, acquireLineupEditLock, getLineupEditLock, heartbeatLineupEditLock, overrideLineupEditLock, releaseLineupEditLock } from './services/discordApi.ts';
 import { useLineupSnapshots } from './hooks/useLineupSnapshots.ts';
 import { cn } from './lib/utils.ts';
 import { getErrorMessage } from './lib/error.ts';
@@ -53,6 +53,8 @@ export default function App() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [currentGuild, setCurrentGuild] = useState<AppStateResponse['guild']>(null);
   const [attendance, setAttendance] = useState<AppStateResponse['attendance']>({ config: null, activeSession: null, recentSessions: [] });
+  const [lineupLock, setLineupLock] = useState<AppStateResponse['lineupLock']>(null);
+  const [lineupLockActionLoading, setLineupLockActionLoading] = useState(false);
   const [attendanceActionLoading, setAttendanceActionLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -78,9 +80,9 @@ export default function App() {
     const canManageAttendance = permissions.includes('manage:lineup');
     const storedMode = localStorage.getItem(getLineupEntryStorageKey(currentUser.id, currentGuild.id));
     const storedTab = localStorage.getItem(getActiveTabStorageKey(currentUser.id, currentGuild.id));
-    setLineupEntryMode(isLineupEntryMode(storedMode) ? storedMode : 'menu');
+    setLineupEntryMode(squadGroups.length > 0 ? 'current' : isLineupEntryMode(storedMode) ? storedMode : 'menu');
     setActiveTab(isTab(storedTab) && (storedTab !== 'attendance' || canManageAttendance) ? storedTab : 'dashboard');
-  }, [currentGuild, currentUser, permissions]);
+  }, [currentGuild, currentUser, permissions, squadGroups.length]);
 
   const updateActiveTab = useCallback((tab: Tab) => {
     if (tab === 'attendance' && !permissions.includes('manage:lineup')) return;
@@ -170,7 +172,20 @@ export default function App() {
     setSquadGroups,
     setCurrentUser,
     setAttendance,
+    setLineupLock,
   });
+
+  const refreshLineupLock = useCallback(async () => {
+    if (!currentGuild || !permissions.includes('view:guild')) {
+      setLineupLock(null);
+      return;
+    }
+
+    try {
+      setLineupLock(await getLineupEditLock());
+    } catch {
+    }
+  }, [currentGuild, permissions]);
 
   const refreshAppStateFromRealtime = useCallback(async () => {
     if (appStateRefreshRef.current) return;
@@ -243,6 +258,9 @@ export default function App() {
           if (payload.reason === 'snapshot_saved' || payload.reason === 'snapshot_deleted' || payload.reason === 'snapshot_restored') {
             void refreshSnapshotsRef.current?.();
           }
+          if (payload.reason === 'lineup_lock_changed') {
+            void refreshLineupLock();
+          }
           return;
         }
 
@@ -268,7 +286,7 @@ export default function App() {
         connectWebSocket();
       }, delay);
     };
-  }, [isAuthenticated, isAuthorized, currentGuild, logRealtime, subscribeCurrentGuild, mergeMemberDelta, replaceMemberPool, refreshAppStateFromRealtime, clearReconnectTimer]);
+  }, [isAuthenticated, isAuthorized, currentGuild, logRealtime, subscribeCurrentGuild, mergeMemberDelta, replaceMemberPool, refreshAppStateFromRealtime, refreshLineupLock, clearReconnectTimer]);
 
   const closeWebSocket = useCallback(() => {
     clearReconnectTimer();
@@ -294,6 +312,7 @@ export default function App() {
   const canManageMembers = permissions.includes('manage:members');
   const canManageSettings = permissions.includes('manage:settings');
   const canSelfService = permissions.includes('view:guild');
+  const lineupReadOnly = !canManageLineup || !lineupLock?.isHeldByMe;
 
   const assignedMemberIds = useMemo(() => {
     const ids = new Set<string>();
@@ -394,20 +413,60 @@ export default function App() {
   const handleSquadGroupsChange: React.Dispatch<React.SetStateAction<SquadGroup[]>> = (update) => {
     setSquadGroups(prev => {
       const next = typeof update === 'function' ? update(prev) : update;
+
+      if (next.length === 0 && prev.length > 0) {
+        const assignedIds = new Set<string>();
+        prev.forEach(group => {
+          group.teams.forEach(team => {
+            team.memberIds.forEach(id => id && assignedIds.add(id));
+            team.reserveMemberIds.forEach(id => id && assignedIds.add(id));
+          });
+        });
+        setMemberPool(members => members.map(member => assignedIds.has(member.id) ? { ...member, assignedSkills: [] } : member));
+      }
+
       void persistSquadGroups(next, prev.length === 0);
       return next;
     });
   };
 
-  const handleDeleteMember = async (memberId: string) => {
-    const member = memberPool.find(item => item.id === memberId);
-    const isInactive = member?.active === false;
-
+  const runLineupLockAction = async (action: () => Promise<AppStateResponse['lineupLock']>, fallbackMessage: string) => {
+    setLineupLockActionLoading(true);
     try {
-      const state = isInactive ? await deleteInactiveMember(memberId) : await deleteMember(memberId);
+      setLineupLock(await action());
+    } catch (err) {
+      void alert({ message: getErrorMessage(err, fallbackMessage), variant: 'error' });
+      void refreshLineupLock();
+    } finally {
+      setLineupLockActionLoading(false);
+    }
+  };
+
+  const handleAcquireLineupLock = () => {
+    void runLineupLockAction(acquireLineupEditLock, 'Không thể bắt đầu chỉnh sửa đội hình');
+  };
+
+  const handleReleaseLineupLock = () => {
+    void runLineupLockAction(releaseLineupEditLock, 'Không thể kết thúc chỉnh sửa đội hình');
+  };
+
+  const handleOverrideLineupLock = async () => {
+    const confirmed = await confirm({
+      message: `Đội hình đang được chỉnh bởi ${lineupLock?.holderName || 'người khác'}. Bạn có chắc muốn chiếm quyền chỉnh sửa?`,
+      variant: 'warning',
+      confirmLabel: 'Chiếm quyền',
+    });
+    if (!confirmed) return;
+
+    void runLineupLockAction(overrideLineupEditLock, 'Không thể chiếm quyền chỉnh sửa đội hình');
+  };
+
+  const handleDeleteMember = async (memberId: string) => {
+    try {
+      const state = await deleteMember(memberId);
       await applyAppState(state);
     } catch (err) {
-      void alert({ message: getErrorMessage(err, isInactive ? 'Không thể xóa vĩnh viễn thành viên' : 'Không thể gỡ role Bang Viên khỏi thành viên'), variant: 'error' });
+      void alert({ message: getErrorMessage(err, 'Không thể gỡ role Bang Viên khỏi thành viên'), variant: 'error' });
       throw err;
     }
   };
@@ -557,6 +616,29 @@ export default function App() {
     refreshSnapshotsRef.current = refreshSnapshots;
   }, [refreshSnapshots]);
 
+  React.useEffect(() => {
+    if (!isAuthenticated || !isAuthorized || !currentGuild || !canManageLineup || !lineupLock?.isHeldByMe) return;
+
+    const timer = window.setInterval(() => {
+      void heartbeatLineupEditLock()
+        .then(lock => setLineupLock(lock))
+        .catch(() => refreshLineupLock());
+    }, 20000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [canManageLineup, currentGuild, isAuthenticated, isAuthorized, lineupLock?.isHeldByMe, refreshLineupLock]);
+
+  React.useEffect(() => {
+    if (!isAuthenticated || !isAuthorized || !currentGuild || !permissions.includes('view:guild')) {
+      setLineupLock(null);
+      return;
+    }
+
+    void refreshLineupLock();
+  }, [currentGuild, isAuthenticated, isAuthorized, permissions, refreshLineupLock]);
+
   const {
     accessibleGuilds,
     switchingGuild,
@@ -621,6 +703,9 @@ export default function App() {
   const handleLogout = async () => {
     closeWebSocket();
     clearCurrentUiState();
+    if (lineupLock?.isHeldByMe) {
+      void releaseLineupEditLock().catch(() => undefined);
+    }
     try {
       await logoutDiscord();
     } catch (err) {
@@ -634,6 +719,7 @@ export default function App() {
       setCurrentGuild(null);
       setCurrentRole(null);
       setPermissions([]);
+      setLineupLock(null);
       setSquadGroups([]);
       setAccessibleGuilds([]);
       resetSnapshots();
@@ -747,7 +833,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            {activeTab === 'teams' && squadGroups.length > 0 && currentRole !== 'member' && (
+            {activeTab === 'teams' && squadGroups.length > 0 && !lineupReadOnly && (
               <>
                 <button
                   onClick={clearAll}
@@ -823,7 +909,13 @@ export default function App() {
               getMemberById={getMemberById}
               isZoomed={isZoomed}
               onZoomToggle={() => setIsZoomed(!isZoomed)}
-              readOnly={!canManageLineup}
+              readOnly={lineupReadOnly}
+              canManageLineup={canManageLineup}
+              lineupLock={lineupLock ?? null}
+              lineupLockActionLoading={lineupLockActionLoading}
+              onAcquireLineupLock={handleAcquireLineupLock}
+              onReleaseLineupLock={handleReleaseLineupLock}
+              onOverrideLineupLock={handleOverrideLineupLock}
               snapshotsOnly={false}
               canManageSnapshots={canManageSnapshots}
               canRestoreSnapshots={canRestoreSnapshots}

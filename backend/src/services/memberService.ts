@@ -233,6 +233,32 @@ export async function deleteInactiveMemberFromDatabase(userId: string, activeGui
   return { status: 200 as const, body: state };
 }
 
+export async function deleteInactiveMembersFromDatabase(userId: string, activeGuildId: string | null | undefined) {
+  const access = await requireAccessibleGuild(userId, 'manage:members', activeGuildId);
+
+  if (!access) {
+    return { status: 404 as const, body: { error: 'Chưa có server nào được import.' } };
+  }
+
+  if (access.forbidden) {
+    return { status: 403 as const, body: { error: 'Bạn không có quyền xóa thành viên.' } };
+  }
+
+  const result = await prisma.member.deleteMany({
+    where: {
+      guildId: access.guild.id,
+      active: false,
+    },
+  });
+
+  if (result.count > 0) {
+    publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'member_removed' });
+  }
+
+  const state = await getUserAppState(userId, activeGuildId);
+  return { status: 200 as const, body: state };
+}
+
 export async function updateMyIngameName(userId: string, discordUserId: string, activeGuildId: string | null | undefined, ingameName: string) {
   const access = await requireAccessibleGuild(userId, 'view:guild', activeGuildId);
 
