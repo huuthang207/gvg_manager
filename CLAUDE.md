@@ -38,6 +38,7 @@ npm start                # Run compiled dist/server.js
 npm test                 # Node test runner via tsx over src/**/*.test.ts
 npm run prisma:generate  # Generate Prisma client
 npm run prisma:migrate   # Run prisma migrate dev
+npm run prisma:migrate:deploy  # Apply migrations in deploy/prod-like environments
 ```
 
 Run one backend test file with:
@@ -45,6 +46,8 @@ Run one backend test file with:
 ```bash
 npx tsx --test src/serializers/memberSerializer.test.ts
 ```
+
+Current backend test files cover member serialization, squad serialization, and attendance rendering.
 
 ## Environment
 
@@ -56,8 +59,10 @@ Backend `.env` is based on `backend/.env.example` and expects:
 - `FRONTEND_URL` for OAuth callback redirects.
 - `DATABASE_URL` for PostgreSQL.
 - `PORT` defaults to `3001` if unset.
+- `CORS_ORIGINS` can override allowed frontend origins; otherwise `FRONTEND_URL` or the local Vite origins are used.
+- `DISCORD_SYNC_FALLBACK_INTERVAL_MS` controls the periodic fallback guild sync interval, with a minimum of 60 seconds.
 
-Frontend `.env` is based on `frontend/.env.example`; `VITE_DISCORD_API_URL` points to the backend.
+Frontend `.env` is based on `frontend/.env.example`; `VITE_DISCORD_API_URL` points to the backend. Set `VITE_REALTIME_DEBUG=true` to log WebSocket activity outside dev mode.
 
 ## Architecture notes
 

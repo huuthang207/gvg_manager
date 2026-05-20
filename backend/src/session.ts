@@ -46,10 +46,16 @@ export function deleteSession(sessionId: string): void {
   sessions.delete(sessionId);
 }
 
+function getSessionCookieAttributes(): string {
+  const sameSite = process.env.SESSION_COOKIE_SAME_SITE || 'Lax';
+  const secure = process.env.SESSION_COOKIE_SECURE === 'true' ? '; Secure' : '';
+  return `HttpOnly; SameSite=${sameSite}; Path=/${secure}`;
+}
+
 export function getSessionCookie(sessionId: string): string {
-  return `session_id=${sessionId}; HttpOnly; SameSite=Lax; Path=/`;
+  return `session_id=${sessionId}; ${getSessionCookieAttributes()}`;
 }
 
 export function getClearSessionCookie(): string {
-  return `session_id=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+  return `session_id=; ${getSessionCookieAttributes()}; Max-Age=0`;
 }
