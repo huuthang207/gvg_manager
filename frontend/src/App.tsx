@@ -4,11 +4,12 @@
  */
 
 import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { Member, Skill, SquadGroup } from './types.ts';
+import { ClassType, Member, Skill, SquadGroup } from './types.ts';
 import { Sidebar } from './features/app/Sidebar.tsx';
 import { MemberDashboard } from './features/members/MemberDashboard.tsx';
 import { TeamLayout } from './features/lineup/TeamLayout.tsx';
-import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMyIngameName, deleteMember, deleteInactiveMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState } from './services/discordApi.ts';
+import { AttendanceView } from './features/attendance/AttendanceView.tsx';
+import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMemberClassRole, updateMyIngameName, deleteMember, deleteInactiveMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState, updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession } from './services/discordApi.ts';
 import { useLineupSnapshots } from './hooks/useLineupSnapshots.ts';
 import { cn } from './lib/utils.ts';
 import { getErrorMessage } from './lib/error.ts';
@@ -19,13 +20,13 @@ import { useAuthBootstrap } from './features/auth/useAuthBootstrap.ts';
 import { useSystemDialog } from './features/app/SystemDialogProvider.tsx';
 import { API_BASE } from './services/apiBase.ts';
 
-type Tab = 'dashboard' | 'teams';
+type Tab = 'dashboard' | 'teams' | 'attendance';
 type LineupEntryMode = 'menu' | 'create' | 'current';
 
 const getLineupEntryStorageKey = (userId: string, guildId: string) => `gvg_lineup_entry_${userId}_${guildId}`;
 const getActiveTabStorageKey = (userId: string, guildId: string) => `gvg_active_tab_${userId}_${guildId}`;
 const isLineupEntryMode = (value: string | null): value is LineupEntryMode => value === 'menu' || value === 'create' || value === 'current';
-const isTab = (value: string | null): value is Tab => value === 'dashboard' || value === 'teams';
+const isTab = (value: string | null): value is Tab => value === 'dashboard' || value === 'teams' || value === 'attendance';
 
 export default function App() {
   // Active tab state
@@ -51,6 +52,8 @@ export default function App() {
   const [currentRole, setCurrentRole] = useState<AppStateResponse['currentRole']>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [currentGuild, setCurrentGuild] = useState<AppStateResponse['guild']>(null);
+  const [attendance, setAttendance] = useState<AppStateResponse['attendance']>({ config: null, activeSession: null, recentSessions: [] });
+  const [attendanceActionLoading, setAttendanceActionLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -72,18 +75,21 @@ export default function App() {
       return;
     }
 
+    const canManageAttendance = permissions.includes('manage:lineup');
     const storedMode = localStorage.getItem(getLineupEntryStorageKey(currentUser.id, currentGuild.id));
     const storedTab = localStorage.getItem(getActiveTabStorageKey(currentUser.id, currentGuild.id));
     setLineupEntryMode(isLineupEntryMode(storedMode) ? storedMode : 'menu');
-    setActiveTab(isTab(storedTab) ? storedTab : 'dashboard');
-  }, [currentGuild, currentUser]);
+    setActiveTab(isTab(storedTab) && (storedTab !== 'attendance' || canManageAttendance) ? storedTab : 'dashboard');
+  }, [currentGuild, currentUser, permissions]);
 
   const updateActiveTab = useCallback((tab: Tab) => {
+    if (tab === 'attendance' && !permissions.includes('manage:lineup')) return;
+
     setActiveTab(tab);
     if (currentUser && currentGuild) {
       localStorage.setItem(getActiveTabStorageKey(currentUser.id, currentGuild.id), tab);
     }
-  }, [currentGuild, currentUser]);
+  }, [currentGuild, currentUser, permissions]);
 
   const updateLineupEntryMode = useCallback((mode: LineupEntryMode) => {
     setLineupEntryMode(mode);
@@ -163,6 +169,7 @@ export default function App() {
     setPermissions,
     setSquadGroups,
     setCurrentUser,
+    setAttendance,
   });
 
   const refreshAppStateFromRealtime = useCallback(async () => {
@@ -446,6 +453,16 @@ export default function App() {
     }
   };
 
+  const handleUpdateMemberClassRole = async (memberId: string, classType: ClassType) => {
+    try {
+      const state = await updateMemberClassRole(memberId, classType);
+      await applyAppState(state);
+    } catch (err) {
+      void alert({ message: getErrorMessage(err, 'Không thể cập nhật role môn phái'), variant: 'error' });
+      throw err;
+    }
+  };
+
   const handleUpdateMyIngameName = async (ingameName: string) => {
     try {
       const state = await updateMyIngameName(ingameName);
@@ -467,6 +484,53 @@ export default function App() {
       void alert({ message: getErrorMessage(err, 'Không thể cập nhật cấu hình role'), variant: 'error' });
       throw err;
     }
+  };
+
+  const runAttendanceAction = async (action: () => Promise<AppStateResponse>, fallbackMessage: string) => {
+    setAttendanceActionLoading(true);
+    try {
+      const state = await action();
+      await applyAppState(state);
+    } catch (err) {
+      void alert({ message: getErrorMessage(err, fallbackMessage), variant: 'error' });
+    } finally {
+      setAttendanceActionLoading(false);
+    }
+  };
+
+  const handleSetAttendanceChannel = (discordChannelId: string) => {
+    void runAttendanceAction(
+      () => updateAttendanceChannel(discordChannelId.trim()),
+      'Không thể lưu kênh điểm danh',
+    );
+  };
+
+  const handleOpenAttendanceSession = (headerText: string) => {
+    void runAttendanceAction(
+      () => openAttendanceSession(headerText.trim()),
+      'Không thể mở phiên điểm danh',
+    );
+  };
+
+  const handleCloseAttendanceSession = async () => {
+    const confirmed = await confirm({
+      message: 'Bạn có chắc muốn đóng phiên điểm danh hiện tại?',
+      variant: 'danger',
+      confirmLabel: 'Đóng phiên',
+    });
+    if (!confirmed) return;
+
+    void runAttendanceAction(
+      closeActiveAttendanceSession,
+      'Không thể đóng phiên điểm danh',
+    );
+  };
+
+  const handleRefreshAttendanceSession = () => {
+    void runAttendanceAction(
+      refreshActiveAttendanceSession,
+      'Không thể refresh phiên điểm danh',
+    );
   };
 
   const {
@@ -669,6 +733,7 @@ export default function App() {
         accessibleGuilds={accessibleGuilds}
         onGuildSwitch={handleGuildSwitch}
         switchingGuild={switchingGuild}
+        canManageAttendance={canManageLineup}
       />
 
       {/* Main Content */}
@@ -677,7 +742,7 @@ export default function App() {
         <header className="h-14 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/45 px-6 backdrop-blur-md z-10 shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-bold text-white">
-              {activeTab === 'dashboard' ? 'Quản Lý Thành Viên' : 'Sắp Xếp Đội Hình'}
+              {activeTab === 'dashboard' ? 'Quản Lý Thành Viên' : activeTab === 'teams' ? 'Sắp Xếp Đội Hình' : 'Điểm Danh Bang Chiến'}
             </h1>
           </div>
 
@@ -723,6 +788,7 @@ export default function App() {
               onRefresh={handleSyncDiscord}
               onAcknowledgeClassChange={handleAcknowledgeClassChange}
               onUpdateIngameName={handleUpdateIngameName}
+              onUpdateMemberClassRole={handleUpdateMemberClassRole}
               onUpdateMyIngameName={handleUpdateMyIngameName}
               currentUser={currentUser}
               currentRole={currentRole}
@@ -781,6 +847,17 @@ export default function App() {
                 removeSnapshot,
                 refreshSnapshots,
               }}
+            />
+          )}
+
+          {activeTab === 'attendance' && canManageLineup && (
+            <AttendanceView
+              attendance={attendance}
+              actionLoading={attendanceActionLoading}
+              onSetChannel={handleSetAttendanceChannel}
+              onOpenSession={handleOpenAttendanceSession}
+              onCloseSession={handleCloseAttendanceSession}
+              onRefreshSession={handleRefreshAttendanceSession}
             />
           )}
         </div>

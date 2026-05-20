@@ -13,6 +13,7 @@ interface UseAppStateLoaderParams {
   setPermissions: Dispatch<SetStateAction<string[]>>;
   setSquadGroups: Dispatch<SetStateAction<SquadGroup[]>>;
   setCurrentUser: Dispatch<SetStateAction<AppStateResponse['user']>>;
+  setAttendance: Dispatch<SetStateAction<AppStateResponse['attendance']>>;
 }
 
 export function useAppStateLoader(params: UseAppStateLoaderParams) {
@@ -26,6 +27,7 @@ export function useAppStateLoader(params: UseAppStateLoaderParams) {
     setPermissions,
     setSquadGroups,
     setCurrentUser,
+    setAttendance,
   } = params;
 
   const preloadSkillLogos = (skillList: Skill[]) => {
@@ -82,7 +84,8 @@ export function useAppStateLoader(params: UseAppStateLoaderParams) {
     setCurrentRole(state.currentRole ?? null);
     setPermissions(state.permissions ?? []);
     setSquadGroups(state.squadGroups || []);
-  }, [resolveSkills, setCurrentGuild, setCurrentRole, setLastSyncedAt, setMemberPool, setPermissions, setRoleConfig, setSkills, setSquadGroups]);
+    setAttendance(state.attendance);
+  }, [resolveSkills, setAttendance, setCurrentGuild, setCurrentRole, setLastSyncedAt, setMemberPool, setPermissions, setRoleConfig, setSkills, setSquadGroups]);
 
   const loadAppState = useCallback(async () => {
     const state = await getAppState();

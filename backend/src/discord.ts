@@ -44,6 +44,15 @@ export async function getGuildMembers(guildId: string): Promise<DiscordMember[]>
   return (await getGuildMembersWithRoles(guildId)).members;
 }
 
+export async function addGuildMemberRole(guildId: string, discordUserId: string, roleName: string): Promise<boolean> {
+  const roles = await getGuildRoles(guildId);
+  const role = roles.find(r => r.name === roleName);
+  if (!role) return false;
+
+  await discordApi.put(`/guilds/${guildId}/members/${discordUserId}/roles/${role.id}`);
+  return true;
+}
+
 export async function removeGuildMemberRole(guildId: string, discordUserId: string, roleName: string): Promise<boolean> {
   const roles = await getGuildRoles(guildId);
   const role = roles.find(r => r.name === roleName);

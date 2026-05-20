@@ -1,6 +1,6 @@
 import { API_BASE, requestJson } from './apiBase.ts';
 import { AppStateResponse, ImportResponse } from './apiTypes.ts';
-import { Skill } from '../types.ts';
+import { ClassType, Skill } from '../types.ts';
 
 export async function importDiscordMembers(
   guildId: string,
@@ -24,6 +24,15 @@ export async function updateMemberIngameName(memberId: string, ingameName: strin
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify({ ingameName }),
+  });
+}
+
+export async function updateMemberClassRole(memberId: string, classType: ClassType): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/${memberId}/class-role`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ classType }),
   });
 }
 

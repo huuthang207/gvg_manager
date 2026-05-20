@@ -9,6 +9,7 @@ import {
   removeBangVienRoleFromMember,
   removeSkillFromMember,
   updateBotMemberIngameName,
+  updateMemberClassRoleForManager,
   updateMemberIngameNameForManager,
   updateMyIngameName,
 } from '../services/memberService.js';
@@ -51,6 +52,34 @@ export function createMemberRoutes() {
       const result = await updateMemberIngameNameForManager(auth.user.id, auth.session.activeGuildId, memberId, ingameName);
       res.status(result.status).json(result.body);
     } catch (err) {
+      next(err);
+    }
+  });
+
+  router.patch('/api/members/:memberId/class-role', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const { memberId } = req.params;
+      const classType = typeof req.body?.classType === 'string' ? req.body.classType.trim() : '';
+
+      if (!classType) {
+        res.status(400).json({ error: 'Môn phái không hợp lệ.' });
+        return;
+      }
+
+      const result = await updateMemberClassRoleForManager(auth.user.id, auth.session.activeGuildId, memberId, classType);
+      res.status(result.status).json(result.body);
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        res.status(403).json({ error: 'Bot không có quyền quản lý role này hoặc role của bot thấp hơn role cần gán/gỡ.' });
+        return;
+      }
+      if (err.response?.status === 404) {
+        res.status(404).json({ error: 'Không tìm thấy thành viên hoặc role môn phái trên Discord.' });
+        return;
+      }
       next(err);
     }
   });

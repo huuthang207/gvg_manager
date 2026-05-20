@@ -2,6 +2,7 @@ import { prisma } from './db.js';
 import { getAccessibleGuildForUser } from './permissions.js';
 import { serializeMembers } from './serializers/memberSerializer.js';
 import { serializeDivisions, serializeSquadGroups } from './serializers/squadSerializer.js';
+import { getAttendanceStateForGuild } from './services/attendanceService.js';
 
 export interface AppStateGuildContext {
   guildId: string;
@@ -56,12 +57,19 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
       divisions: null,
       squadGroups: [],
       skills: [],
+      attendance: {
+        config: null,
+        activeSession: null,
+        recentSessions: [],
+      },
       lastSyncedAt: null,
       roleConfig: null,
       currentRole: null,
       permissions: [],
     };
   }
+
+  const attendance = await getAttendanceStateForGuild(guild.id);
 
   return {
     user: serializeUser(user),
@@ -80,6 +88,7 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
       logo: skill.logo,
       description: skill.description ?? undefined,
     })),
+    attendance,
     lastSyncedAt: guild.lastSyncedAt?.toISOString() ?? null,
     roleConfig: {
       classRoleMap: Object.fromEntries(guild.classRoleMappings.map(mapping => [mapping.classType, mapping.roleName])),

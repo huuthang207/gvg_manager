@@ -24,6 +24,7 @@ export {
   importDiscordMembers,
   acknowledgeClassChange,
   updateMemberIngameName,
+  updateMemberClassRole,
   updateMyIngameName,
   deleteMember,
   deleteInactiveMember,
@@ -35,3 +36,4 @@ export {
 } from './memberApi.ts';
 export { saveSquadLayout, getLineupSnapshots, createLineupSnapshot, updateLineupSnapshot, getLineupSnapshot, restoreLineupSnapshot, deleteLineupSnapshot } from './lineupApi.ts';
 export { updateAccessRoles, updateRoleConfig } from './settingsApi.ts';
+export { updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, getAttendanceHistory, getAttendanceSession, deleteAttendanceHistorySession } from './attendanceApi.ts';

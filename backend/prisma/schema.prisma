@@ -18,6 +18,18 @@ enum SlotType {
   reserve
 }
 
+enum AttendanceChoice {
+  GO
+  MAYBE
+  NOGO
+}
+
+enum AttendanceSessionStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
 model User {
   id            String   @id @default(cuid())
   discordUserId String   @unique
@@ -32,25 +44,27 @@ model User {
 }
 
 model Guild {
-  id             String   @id @default(cuid())
-  discordGuildId String   @unique
+  id             String    @id @default(cuid())
+  discordGuildId String    @unique
   name           String
   icon           String?
   ownerUserId    String
   lastSyncedAt   DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  owner                User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  members              Member[]
-  teams                Team[]
-  squadGroups          SquadGroup[]
-  lineupSnapshots      LineupSnapshot[]
-  skills               Skill[]
-  classRoleMappings    GuildClassRoleMapping[]
-  requiredRoles        GuildRequiredRole[]
-  accessRoles          GuildAccessRole[]
-  memberships          GuildMembership[]
+  owner                   User                     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members                 Member[]
+  teams                   Team[]
+  squadGroups             SquadGroup[]
+  lineupSnapshots         LineupSnapshot[]
+  skills                  Skill[]
+  classRoleMappings       GuildClassRoleMapping[]
+  requiredRoles           GuildRequiredRole[]
+  accessRoles             GuildAccessRole[]
+  memberships             GuildMembership[]
+  attendanceChannelConfig AttendanceChannelConfig?
+  attendanceSessions      AttendanceSession[]
 }
 
 model GuildAccessRole {
@@ -65,6 +79,56 @@ model GuildAccessRole {
 
   @@unique([guildId, roleName, appRole])
   @@index([guildId, appRole])
+}
+
+model AttendanceChannelConfig {
+  id               String   @id @default(cuid())
+  guildId          String   @unique
+  discordChannelId String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+}
+
+model AttendanceSession {
+  id                    String                  @id @default(cuid())
+  guildId               String
+  status                AttendanceSessionStatus @default(OPEN)
+  headerText            String?
+  discordChannelId      String?
+  discordMessageId      String?
+  openedByDiscordUserId String?
+  closedByDiscordUserId String?
+  openedAt              DateTime                @default(now())
+  closedAt              DateTime?
+  lastRenderedAt        DateTime?
+  lastVoteAt            DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  guild Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  votes AttendanceVote[]
+
+  @@index([guildId, status])
+  @@index([guildId, openedAt])
+}
+
+model AttendanceVote {
+  id                 String           @id @default(cuid())
+  sessionId          String
+  memberId           String
+  choice             AttendanceChoice
+  snapshotIngameName String?
+  snapshotClassType  String?
+  votedAt            DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  member  Member            @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, memberId])
+  @@index([sessionId, choice])
 }
 
 model GuildMembership {
@@ -107,29 +171,30 @@ model GuildRequiredRole {
 }
 
 model Member {
-  id            String    @id @default(cuid())
-  guildId       String
-  discordUserId String
-  username      String
-  displayName   String
-  ingameName    String?
+  id                String    @id @default(cuid())
+  guildId           String
+  discordUserId     String
+  username          String
+  displayName       String
+  ingameName        String?
   avatar            String?
   classType         String
   previousClassType String?
   classChangedAt    DateTime?
   joinedAt          DateTime?
   active            Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  guild                     Guild                 @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  roles                     MemberRole[]
-  slots                     TeamSlot[]
-  squadTeamSlots            SquadTeamSlot[]
-  ledSquadGroups            SquadGroup[]          @relation("SquadGroupLeader")
-  ledLineupSnapshotGroups   LineupSnapshotGroup[] @relation("LineupSnapshotGroupLeader")
-  lineupSnapshotSlots       LineupSnapshotSlot[]  @relation("LineupSnapshotSlotMember")
-  memberSkills              MemberSkill[]
+  guild                   Guild                 @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  roles                   MemberRole[]
+  slots                   TeamSlot[]
+  squadTeamSlots          SquadTeamSlot[]
+  ledSquadGroups          SquadGroup[]          @relation("SquadGroupLeader")
+  ledLineupSnapshotGroups LineupSnapshotGroup[] @relation("LineupSnapshotGroupLeader")
+  lineupSnapshotSlots     LineupSnapshotSlot[]  @relation("LineupSnapshotSlotMember")
+  memberSkills            MemberSkill[]
+  attendanceVotes         AttendanceVote[]
 
   @@unique([guildId, discordUserId])
   @@index([guildId, active])
@@ -184,8 +249,8 @@ model SquadGroup {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  guild        Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  leaderMember Member? @relation("SquadGroupLeader", fields: [leaderMemberId], references: [id], onDelete: SetNull)
+  guild        Guild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  leaderMember Member?     @relation("SquadGroupLeader", fields: [leaderMemberId], references: [id], onDelete: SetNull)
   teams        SquadTeam[]
 
   @@unique([guildId, orderIndex])
@@ -196,8 +261,8 @@ model SquadTeam {
   groupId    String
   name       String
   orderIndex Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   group SquadGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
   slots SquadTeamSlot[]
@@ -222,7 +287,7 @@ model SquadTeamSlot {
 
 model LineupSnapshot {
   id        String   @id @default(cuid())
-  guildId    String
+  guildId   String
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -249,13 +314,13 @@ model LineupSnapshotGroup {
 
 model LineupSnapshotTeam {
   id         String   @id @default(cuid())
-  groupId     String
+  groupId    String
   name       String
   orderIndex Int
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  group LineupSnapshotGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group LineupSnapshotGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   slots LineupSnapshotSlot[]
 
   @@unique([groupId, orderIndex])
@@ -263,7 +328,7 @@ model LineupSnapshotTeam {
 
 model LineupSnapshotSlot {
   id        String   @id @default(cuid())
-  teamId     String
+  teamId    String
   slotType  String
   slotIndex Int
   memberId  String?

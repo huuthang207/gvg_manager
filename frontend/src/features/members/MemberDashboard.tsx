@@ -19,6 +19,7 @@ interface MemberDashboardProps {
   onRefresh: () => void;
   onAcknowledgeClassChange: (memberId: string) => void;
   onUpdateIngameName: (memberId: string, ingameName: string) => Promise<void>;
+  onUpdateMemberClassRole: (memberId: string, classType: ClassType) => Promise<void>;
   onUpdateMyIngameName: (ingameName: string) => Promise<void>;
   currentUser: DiscordUser | null;
   currentRole: 'owner' | 'manager' | 'member' | null;
@@ -41,6 +42,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   onRefresh,
   onAcknowledgeClassChange,
   onUpdateIngameName,
+  onUpdateMemberClassRole,
   onUpdateMyIngameName,
   currentUser,
   currentRole,
@@ -515,7 +517,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             onAcknowledgeClassChange(selectedMember.id);
             setSelectedMemberId(null);
           }}
+          roleConfig={roleConfig}
           onUpdateIngameName={onUpdateIngameName}
+          onUpdateMemberClassRole={onUpdateMemberClassRole}
         />
       )}
     </div>
@@ -855,17 +859,23 @@ const AccessRolePicker: React.FC<AccessRolePickerProps> = ({
 // Member detail modal
 interface MemberDetailModalProps {
   member: Member;
+  roleConfig: AppStateResponse['roleConfig'];
   onClose: () => void;
   onDelete: () => void;
   onAcknowledgeClassChange: () => void;
   onUpdateIngameName: (memberId: string, ingameName: string) => Promise<void>;
+  onUpdateMemberClassRole: (memberId: string, classType: ClassType) => Promise<void>;
 }
 
-const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, onClose, onDelete, onAcknowledgeClassChange, onUpdateIngameName }) => {
+const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfig, onClose, onDelete, onAcknowledgeClassChange, onUpdateIngameName, onUpdateMemberClassRole }) => {
   const [ingameName, setIngameName] = useState(member.ingameName || member.name);
+  const [selectedClass, setSelectedClass] = useState<ClassType>(member.classType);
   const [saving, setSaving] = useState(false);
+  const [savingClass, setSavingClass] = useState(false);
   const trimmedName = ingameName.trim();
+  const mappedClassRole = roleConfig?.classRoleMap[selectedClass] || '';
   const canSave = trimmedName.length > 0 && trimmedName !== (member.ingameName || member.name);
+  const canSaveClass = selectedClass !== member.classType && !!mappedClassRole;
 
   const handleSaveIngameName = async () => {
     if (!canSave) return;
@@ -875,6 +885,17 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, onClose, 
       onClose();
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveClassRole = async () => {
+    if (!canSaveClass) return;
+    setSavingClass(true);
+    try {
+      await onUpdateMemberClassRole(member.id, selectedClass);
+      onClose();
+    } finally {
+      setSavingClass(false);
     }
   };
 
@@ -951,17 +972,40 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, onClose, 
           </div>
 
           {/* Class */}
-          <div className="flex items-center justify-between py-3 border-b border-slate-800">
-            <span className="text-xs text-slate-400">Phái</span>
-            <span
-              className="text-xs font-bold px-2 py-1 rounded"
-              style={{
-                backgroundColor: `${CLASS_COLORS[member.classType]}20`,
-                color: CLASS_COLORS[member.classType],
-              }}
-            >
-              {member.classType}
-            </span>
+          <div className="space-y-2 py-3 border-b border-slate-800">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-400">Phái</span>
+              <span
+                className="text-xs font-bold px-2 py-1 rounded"
+                style={{
+                  backgroundColor: `${CLASS_COLORS[member.classType]}20`,
+                  color: CLASS_COLORS[member.classType],
+                }}
+              >
+                {member.classType}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={selectedClass}
+                onChange={event => setSelectedClass(event.target.value as ClassType)}
+                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              >
+                {CLASSES.map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleSaveClassRole}
+                disabled={!canSaveClass || savingClass}
+                className="px-3 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 disabled:hover:bg-blue-500"
+              >
+                {savingClass ? 'Đang lưu...' : 'Đổi phái'}
+              </button>
+            </div>
+            <p className={cn('text-[11px]', mappedClassRole ? 'text-slate-500' : 'text-amber-300')}>
+              {mappedClassRole ? `Discord role sẽ đồng bộ: ${mappedClassRole}` : 'Chưa cấu hình Discord role cho phái này.'}
+            </p>
           </div>
 
           {member.previousClassType && member.previousClassType !== member.classType && (

@@ -11,6 +11,7 @@ import { createGuildRoutes } from './routes/guildRoutes.js';
 import { createMemberRoutes } from './routes/memberRoutes.js';
 import { createLineupRoutes } from './routes/lineupRoutes.js';
 import { createSettingsRoutes } from './routes/settingsRoutes.js';
+import { createAttendanceRoutes } from './routes/attendanceRoutes.js';
 import { syncAllPersistedGuilds } from './services/syncService.js';
 import { attachRealtimeGateway } from './services/realtimeGateway.js';
 
@@ -34,6 +35,7 @@ app.use(createGuildRoutes());
 app.use(createMemberRoutes());
 app.use(createLineupRoutes());
 app.use(createSettingsRoutes());
+app.use(createAttendanceRoutes());
 
 function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
   console.error('[Discord API Error]', err.message);

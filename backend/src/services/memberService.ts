@@ -1,10 +1,18 @@
 import { prisma } from '../db.js';
 import { getUserAppState } from '../appState.js';
-import { removeGuildMemberRole } from '../discord.js';
+import { addGuildMemberRole, removeGuildMemberRole } from '../discord.js';
+import { syncGuildMembers } from '../discordSync.js';
 import { requireAccessibleGuild } from '../permissions.js';
 import { publishGuildAppStateChanged } from './realtimeGateway.js';
 
 const BANG_VIEN_ROLE_NAME = 'Bang Viên';
+const CLASS_TYPES = ['Toái Mộng', 'Cửu Linh', 'Long Ngâm', 'Thiết Y', 'Tố Vấn', 'Thần Tương', 'Huyết Hà'] as const;
+
+type ClassType = typeof CLASS_TYPES[number];
+
+function isClassType(value: string): value is ClassType {
+  return CLASS_TYPES.includes(value as ClassType);
+}
 
 export async function updateBotMemberIngameName(discordGuildId: string, discordUserId: string, ingameName: string) {
   const member = await prisma.member.findFirst({
@@ -64,6 +72,87 @@ export async function updateMemberIngameNameForManager(userId: string, activeGui
   await prisma.member.update({
     where: { id: memberId },
     data: { ingameName }
+  });
+
+  publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'member_updated' });
+
+  const state = await getUserAppState(userId, activeGuildId);
+  return { status: 200 as const, body: state };
+}
+
+export async function updateMemberClassRoleForManager(userId: string, activeGuildId: string | null | undefined, memberId: string, classType: string) {
+  const access = await requireAccessibleGuild(userId, 'manage:members', activeGuildId);
+
+  if (!access) {
+    return { status: 404 as const, body: { error: 'Chưa có server nào được import.' } };
+  }
+
+  if (access.forbidden) {
+    return { status: 403 as const, body: { error: 'Bạn không có quyền cập nhật role môn phái.' } };
+  }
+
+  if (!isClassType(classType)) {
+    return { status: 400 as const, body: { error: 'Môn phái không hợp lệ.' } };
+  }
+
+  const member = await prisma.member.findFirst({
+    where: { id: memberId, guildId: access.guild.id },
+    include: { roles: true },
+  });
+
+  if (!member) {
+    return { status: 404 as const, body: { error: 'Member not found' } };
+  }
+
+  const mappings = await prisma.guildClassRoleMapping.findMany({ where: { guildId: access.guild.id } });
+  const classRoleMap = Object.fromEntries(mappings.map(mapping => [mapping.classType, mapping.roleName.trim()])) as Record<string, string>;
+  const targetRoleName = classRoleMap[classType];
+
+  if (!targetRoleName) {
+    return { status: 400 as const, body: { error: `Chưa cấu hình role Discord cho phái ${classType}.` } };
+  }
+
+  const configuredClassRoles = Object.values(classRoleMap).filter(Boolean);
+  if (new Set(configuredClassRoles).size !== configuredClassRoles.length) {
+    return { status: 400 as const, body: { error: 'Cấu hình role môn phái đang bị trùng.' } };
+  }
+
+  const currentRoles = new Set(member.roles.map(role => role.roleName));
+  const rolesToRemove = configuredClassRoles.filter(roleName => roleName !== targetRoleName && currentRoles.has(roleName));
+
+  try {
+    if (!currentRoles.has(targetRoleName)) {
+      const added = await addGuildMemberRole(access.guild.discordGuildId, member.discordUserId, targetRoleName);
+      if (!added) {
+        return { status: 404 as const, body: { error: `Không tìm thấy role ${targetRoleName} trên Discord.` } };
+      }
+    }
+
+    for (const roleName of rolesToRemove) {
+      const removed = await removeGuildMemberRole(access.guild.discordGuildId, member.discordUserId, roleName);
+      if (!removed) {
+        return { status: 404 as const, body: { error: `Không tìm thấy role ${roleName} trên Discord.` } };
+      }
+    }
+  } catch (err) {
+    const requiredRoles = await prisma.guildRequiredRole.findMany({ where: { guildId: access.guild.id } });
+    await syncGuildMembers({
+      guildId: access.guild.id,
+      discordGuildId: access.guild.discordGuildId,
+      classRoleMap,
+      requiredRoles: requiredRoles.map(role => role.roleName),
+      selectedMemberIds: [member.discordUserId],
+    });
+    throw err;
+  }
+
+  const requiredRoles = await prisma.guildRequiredRole.findMany({ where: { guildId: access.guild.id } });
+  await syncGuildMembers({
+    guildId: access.guild.id,
+    discordGuildId: access.guild.discordGuildId,
+    classRoleMap,
+    requiredRoles: requiredRoles.map(role => role.roleName),
+    selectedMemberIds: [member.discordUserId],
   });
 
   publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'member_updated' });

@@ -1,5 +1,7 @@
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { prisma } from './db.js';
+import { attendanceCommand, handleAttendanceInteraction, setAttendanceChannelCommand } from './botAttendance.js';
+import { setAttendanceDiscordClient } from './services/attendanceDiscordService.js';
 import { publishGuildAppStateChanged } from './services/realtimeGateway.js';
 import { queueGuildSync } from './services/syncService.js';
 
@@ -38,20 +40,22 @@ function validateIngameName(value: string) {
 export async function startDiscordBot() {
   const token = process.env.DISCORD_BOT_TOKEN;
   const clientId = process.env.DISCORD_CLIENT_ID;
+  const guildId = process.env.FIXED_GUILD_DISCORD_ID;
 
-  if (!token || !clientId) {
-    console.log('[Discord Bot] Slash command disabled: DISCORD_BOT_TOKEN or DISCORD_CLIENT_ID missing');
+  if (!token || !clientId || !guildId) {
+    console.log('[Discord Bot] Slash command disabled: DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, or FIXED_GUILD_DISCORD_ID missing');
     return;
   }
 
   const rest = new REST({ version: '10' }).setToken(token);
   await rest.put(
-    Routes.applicationCommands(clientId),
-    { body: [setNameCommand.toJSON()] }
+    Routes.applicationGuildCommands(clientId, guildId),
+    { body: [setNameCommand.toJSON(), setAttendanceChannelCommand.toJSON(), attendanceCommand.toJSON()] }
   );
-  console.log('[Discord Bot] Slash command /setname registered');
+  console.log(`[Discord Bot] Guild slash commands registered for guild ${guildId}`);
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+  setAttendanceDiscordClient(client);
 
   client.once('ready', () => {
     console.log(`[Discord Bot] Logged in as ${client.user?.tag}`);
@@ -110,6 +114,8 @@ export async function startDiscordBot() {
   });
 
   client.on('interactionCreate', async interaction => {
+    if (await handleAttendanceInteraction(interaction)) return;
+
     if (!interaction.isChatInputCommand() || interaction.commandName !== 'setname') return;
 
     if (!interaction.guildId) {

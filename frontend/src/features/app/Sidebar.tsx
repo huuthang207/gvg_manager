@@ -4,11 +4,11 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { Users, LayoutGrid, UserCircle, LogOut, ChevronsUpDown, Check } from 'lucide-react';
+import { ClipboardCheck, Users, LayoutGrid, UserCircle, LogOut, ChevronsUpDown, Check } from 'lucide-react';
 import { AccessibleGuild, AppStateResponse, DiscordUser } from '../../services/discordApi.ts';
 import { cn } from '../../lib/utils.ts';
 
-type Tab = 'dashboard' | 'teams';
+type Tab = 'dashboard' | 'teams' | 'attendance';
 
 interface SidebarProps {
   activeTab: Tab;
@@ -19,6 +19,7 @@ interface SidebarProps {
   accessibleGuilds: AccessibleGuild[];
   onGuildSwitch: (guildId: string) => void;
   switchingGuild: boolean;
+  canManageAttendance: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -30,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   accessibleGuilds,
   onGuildSwitch,
   switchingGuild,
+  canManageAttendance,
 }) => {
   const [guildMenuOpen, setGuildMenuOpen] = useState(false);
 
@@ -44,6 +46,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Đội Hình',
       icon: <LayoutGrid size={20} />,
     },
+    ...(canManageAttendance ? [{
+      id: 'attendance' as const,
+      label: 'Điểm danh',
+      icon: <ClipboardCheck size={20} />,
+    }] : []),
   ];
 
   const currentGuildInitial = useMemo(() => {
@@ -54,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const currentGuildLabel = currentGuild?.name || 'Chưa chọn server';
 
   return (
-    <aside className="w-16 border-r border-slate-800/80 bg-slate-950/55 flex flex-col h-full shrink-0 relative backdrop-blur-md">
+    <aside className="w-16 border-r border-slate-800/80 bg-slate-950/55 flex flex-col h-full shrink-0 relative z-40 backdrop-blur-md">
       <div className="h-14 flex items-center justify-center border-b border-slate-800/80">
         <div className="w-10 h-10 rounded-xl bg-indigo-500/90 shadow-lg shadow-indigo-950/35 flex items-center justify-center">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
@@ -115,17 +122,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             key={item.id}
             onClick={() => onTabChange(item.id)}
             className={cn(
-              'w-full aspect-square rounded-xl flex items-center justify-center transition-all relative group',
+              'w-full aspect-square rounded-xl flex items-center justify-center transition-all',
               activeTab === item.id
                 ? 'bg-sky-500/90 text-white shadow-lg shadow-sky-950/30'
                 : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
             )}
-            title={item.label}
           >
             {item.icon}
-            <span className="absolute left-full ml-3 rounded border border-slate-700/70 bg-slate-900/95 px-2 py-1 text-xs font-bold text-slate-100 shadow-lg shadow-slate-950/30 whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-              {item.label}
-            </span>
           </button>
         ))}
       </nav>
