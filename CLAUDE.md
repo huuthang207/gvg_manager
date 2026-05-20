@@ -56,6 +56,7 @@ Backend `.env` is based on `backend/.env.example` and expects:
 - `DISCORD_BOT_TOKEN` for bot/member APIs; Discord Server Members Intent must be enabled.
 - `BOT_INTERNAL_TOKEN` for bot-to-backend internal updates.
 - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `DISCORD_REDIRECT_URI` for OAuth.
+- `FIXED_GUILD_DISCORD_ID` identifies the single Discord server managed by the app; `FIXED_GUILD_NAME` and `ADMIN_DISCORD_USER_ID` allow first-login auto-provisioning in a fresh database.
 - `FRONTEND_URL` for OAuth callback redirects.
 - `DATABASE_URL` for PostgreSQL.
 - `PORT` defaults to `3001` if unset.

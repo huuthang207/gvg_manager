@@ -27,13 +27,32 @@ export async function handleOAuthCallback(code: string, redirectUri: string) {
     throw new Error('FIXED_GUILD_DISCORD_ID not configured');
   }
 
-  const fixedGuild = await prisma.guild.findUnique({
+  let fixedGuild = await prisma.guild.findUnique({
     where: { discordGuildId: fixedGuildDiscordId },
     include: { requiredRoles: true },
   });
 
   if (!fixedGuild) {
-    throw new Error('Fixed guild is not provisioned in database');
+    const adminDiscordUserId = process.env.ADMIN_DISCORD_USER_ID;
+    if (!adminDiscordUserId || discordUser.id !== adminDiscordUserId) {
+      throw new Error('Fixed guild is not provisioned in database');
+    }
+
+    fixedGuild = await prisma.guild.create({
+      data: {
+        discordGuildId: fixedGuildDiscordId,
+        name: process.env.FIXED_GUILD_NAME || fixedGuildDiscordId,
+        icon: null,
+        ownerUserId: user.id,
+        memberships: {
+          create: {
+            userId: user.id,
+            role: 'owner',
+          },
+        },
+      },
+      include: { requiredRoles: true },
+    });
   }
 
   const userGuilds = await getUserGuilds(tokenData.access_token);
