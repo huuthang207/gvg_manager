@@ -184,23 +184,32 @@ export const MainBoard: React.FC<MainBoardProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
             {CLASSES.map(cls => (
               <div
                 key={cls}
-                className="flex items-center gap-2 rounded-lg border bg-slate-900/50 px-2 py-1.5 min-w-0 shadow-sm shadow-slate-950/10"
+                className="min-w-0 rounded-xl border px-2.5 py-2 shadow-sm shadow-slate-950/10"
                 style={{
                   borderColor: `${CLASS_COLORS[cls]}35`,
-                  background: `linear-gradient(90deg, ${CLASS_COLORS[cls]}12 0%, rgba(15, 23, 42, 0.36) 72%)`,
+                  background: `linear-gradient(135deg, ${CLASS_COLORS[cls]}1f 0%, rgba(15, 23, 42, 0.58) 72%)`,
                 }}
               >
-                <img src={CLASS_ICONS[cls]} alt="" className="w-8 h-8 object-contain shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold text-slate-200 truncate">{cls}</p>
-                  <p className="text-sm font-black leading-none" style={{ color: CLASS_COLORS[cls] }}>
+                <div className="flex items-center justify-between gap-2">
+                  <img src={CLASS_ICONS[cls]} alt="" className="h-7 w-7 shrink-0 object-contain" />
+                  <span
+                    className="min-w-7 rounded-md border px-1.5 py-0.5 text-center text-[11px] font-black"
+                    style={{
+                      color: CLASS_COLORS[cls],
+                      borderColor: `${CLASS_COLORS[cls]}55`,
+                      backgroundColor: `${CLASS_COLORS[cls]}14`,
+                    }}
+                  >
                     {classStats[cls]}
-                  </p>
+                  </span>
                 </div>
+                <p className="mt-1.5 truncate text-[11px] font-bold text-slate-100" title={cls}>
+                  {cls}
+                </p>
               </div>
             ))}
           </div>

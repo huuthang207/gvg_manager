@@ -28,6 +28,7 @@ interface MemberDashboardProps {
   canSelfService: boolean;
   roleConfig: AppStateResponse['roleConfig'];
   onUpdateRoleConfig: (classRoleMap: Record<string, string>, requiredRoles: string[], accessRoles?: { managerRoles: string[]; memberRoles: string[] }) => Promise<void>;
+  onResetCurrentGuildData: (confirmation: string) => Promise<void>;
   syncing?: boolean;
   lastSyncedAt?: string | null;
 }
@@ -50,6 +51,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   canSelfService,
   roleConfig,
   onUpdateRoleConfig,
+  onResetCurrentGuildData,
   syncing = false,
   lastSyncedAt,
 }) => {
@@ -171,21 +173,41 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       <div className="flex h-full overflow-hidden">
         <aside className="w-80 shrink-0 border-r border-slate-800/80 bg-slate-950/35 overflow-y-auto custom-scrollbar backdrop-blur-sm">
           <div className="p-5 space-y-5">
-            <section className="rounded-xl border border-sky-400/20 bg-sky-500/8 p-4 shadow-lg shadow-slate-950/15 space-y-3">
-              <div>
-                <h2 className="text-sm font-bold text-slate-100">Thông tin của tôi</h2>
-                <p className="text-[10px] text-slate-400 mt-0.5">Thông tin thành viên trong server</p>
+            <section className="overflow-hidden rounded-2xl border border-sky-400/25 bg-gradient-to-br from-sky-500/14 via-slate-900/70 to-indigo-500/10 shadow-xl shadow-sky-950/15">
+              <div className="border-b border-sky-400/15 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-sky-300">Hồ sơ</p>
+                <h2 className="mt-1 text-base font-black text-white">Thông tin của tôi</h2>
               </div>
               {selfMember ? (
-                <div className="space-y-2">
-                  <MyInfoRow label="Tên thành viên" value={selfMember.discordDisplayName || selfMember.name} />
-                  <MyInfoRow label="Tên ingame" value={selfMember.ingameName || 'Chưa cập nhật'} />
-                  <MyInfoRow label="Chức vụ" value={getRoleLabel()} />
-                  <MyInfoRow label="Môn phái" value={selfMember.classType} valueColor={CLASS_COLORS[selfMember.classType]} />
-                  <MyInfoRow label="Tham gia Discord" value={formatJoinedDays(selfMember.joinedAt)} />
+                <div className="space-y-3 p-4">
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-950/35 p-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-600/70 bg-slate-900/80 overflow-hidden">
+                      {getMemberAvatar(selfMember) ? (
+                        <img src={getMemberAvatar(selfMember)!} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-lg font-black text-sky-200">{(selfMember.ingameName || selfMember.name)[0]?.toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-slate-100">{selfMember.ingameName || 'Chưa cập nhật tên ingame'}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full border border-sky-400/25 bg-sky-500/12 px-2 py-0.5 text-[10px] font-bold text-sky-200">{getRoleLabel()}</span>
+                        <span
+                          className="rounded-full border px-2 py-0.5 text-[10px] font-bold"
+                          style={{ color: CLASS_COLORS[selfMember.classType], borderColor: `${CLASS_COLORS[selfMember.classType]}55`, backgroundColor: `${CLASS_COLORS[selfMember.classType]}14` }}
+                        >
+                          {selfMember.classType}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    <MyInfoRow label="Tham gia Discord" value={formatJoinedDays(selfMember.joinedAt)} />
+                    <MyInfoRow label="Discord" value={selfMember.discordUsername ? `@${selfMember.discordUsername}` : selfMember.discordDisplayName || 'Chưa có dữ liệu'} />
+                  </div>
                 </div>
               ) : (
-                <p className="text-xs text-slate-500">Không tìm thấy thông tin thành viên của bạn.</p>
+                <p className="p-4 text-xs text-slate-500">Không tìm thấy thông tin thành viên của bạn.</p>
               )}
             </section>
 
@@ -194,19 +216,23 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             </div>
 
             <section className="space-y-2">
-              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                <Filter size={12} />
-                Phái
+              <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider">
+                <span className="flex items-center gap-2 text-slate-400">
+                  <Filter size={12} />
+                  Thống kê phái
+                </span>
+                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2 py-0.5 text-[9px] text-slate-500">
+                  {stats.total} người
+                </span>
               </div>
-              <div className="app-surface-soft rounded-xl overflow-hidden">
-                {CLASSES.map((cls, index) => (
+              <div className="grid grid-cols-2 gap-2">
+                {CLASSES.map(cls => (
                   <ClassStatRow
                     key={cls}
                     label={cls}
                     value={stats.byClass[cls]}
                     color={CLASS_COLORS[cls]}
                     icon={CLASS_ICONS[cls]}
-                    isLast={index === CLASSES.length - 1}
                   />
                 ))}
               </div>
@@ -446,6 +472,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         <RoleConfigModal
           roleConfig={roleConfig}
           onClose={() => setIsRoleConfigOpen(false)}
+          canResetGuildData={currentRole === 'owner'}
+          onResetCurrentGuildData={async (confirmation) => {
+            await onResetCurrentGuildData(confirmation);
+            setIsRoleConfigOpen(false);
+          }}
           onSave={async (classRoleMap, requiredRoles, accessRoles) => {
             await onUpdateRoleConfig(classRoleMap, requiredRoles, accessRoles);
             setIsRoleConfigOpen(false);
@@ -520,42 +551,45 @@ interface ClassStatRowProps {
   value: number;
   color: string;
   icon: string;
-  isLast: boolean;
 }
 
-const ClassStatRow: React.FC<ClassStatRowProps> = ({ label, value, color, icon, isLast }) => {
+const ClassStatRow: React.FC<ClassStatRowProps> = ({ label, value, color, icon }) => {
   return (
     <div
-      className={cn("flex items-center justify-between gap-3 px-3 py-2.5", !isLast && "border-b border-slate-800/80")}
+      className="rounded-xl border border-slate-800/80 px-2.5 py-2 shadow-sm shadow-slate-950/10"
       style={{
-        background: `linear-gradient(90deg, ${color}18 0%, rgba(15, 23, 42, 0) 68%)`,
+        background: `linear-gradient(135deg, ${color}1f 0%, rgba(15, 23, 42, 0.62) 72%)`,
       }}
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <img src={icon} alt="" className="w-9 h-9 object-contain shrink-0" />
-        <span className="text-xs font-bold text-slate-100 truncate">{label}</span>
+      <div className="flex items-center justify-between gap-2">
+        <img src={icon} alt="" className="h-7 w-7 shrink-0 object-contain" />
+        <span
+          className="min-w-7 rounded-md border px-1.5 py-0.5 text-center text-[11px] font-black"
+          style={{
+            color,
+            borderColor: `${color}55`,
+            backgroundColor: `${color}14`,
+          }}
+        >
+          {value}
+        </span>
       </div>
-      <span
-        className="min-w-8 rounded-md border px-2 py-1 text-center text-xs font-black"
-        style={{
-          color,
-          borderColor: `${color}55`,
-          backgroundColor: `${color}14`,
-        }}
-      >
-        {value}
-      </span>
+      <p className="mt-1.5 truncate text-[11px] font-bold text-slate-100" title={label}>
+        {label}
+      </p>
     </div>
   );
 };
 
 interface RoleConfigModalProps {
   roleConfig: AppStateResponse['roleConfig'];
+  canResetGuildData: boolean;
   onClose: () => void;
+  onResetCurrentGuildData: (confirmation: string) => Promise<void>;
   onSave: (classRoleMap: Record<string, string>, requiredRoles: string[], accessRoles: { managerRoles: string[]; memberRoles: string[] }) => Promise<void>;
 }
 
-const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, onSave }) => {
+const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, canResetGuildData, onClose, onResetCurrentGuildData, onSave }) => {
   const [allRoles, setAllRoles] = useState<string[]>([]);
   const [classRoleMap, setClassRoleMap] = useState<Record<ClassType, string>>(
     Object.fromEntries(CLASSES.map(cls => [cls, roleConfig?.classRoleMap[cls] || ''])) as Record<ClassType, string>
@@ -566,6 +600,8 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
   const [newManagerRole, setNewManagerRole] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState('');
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -585,6 +621,20 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
     if (!role || managerRoles.includes(role)) return;
     setManagerRoles(prev => [...prev, role]);
     setNewManagerRole('');
+  };
+
+  const handleResetGuildData = async () => {
+    if (resetConfirmation !== 'RESET') return;
+
+    setResetting(true);
+    setError('');
+    try {
+      await onResetCurrentGuildData(resetConfirmation);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Không thể reset dữ liệu server'));
+    } finally {
+      setResetting(false);
+    }
   };
 
   const handleSave = async () => {
@@ -709,6 +759,37 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, onClose, 
                   ))}
                 </div>
               </section>
+
+              {canResetGuildData && (
+                <section className="space-y-3 rounded-xl border border-red-500/30 bg-red-500/8 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-300" />
+                    <div>
+                      <label className="text-[10px] font-bold text-red-300 uppercase tracking-wider block">Khu vực nguy hiểm</label>
+                      <p className="mt-1 text-[11px] text-red-100/80">
+                        Reset sẽ xóa dữ liệu server hiện tại: thành viên đã import, đội hình, kỹ năng, đội hình đã lưu và điểm danh. Cấu hình role và quyền owner được giữ lại để có thể đồng bộ lại.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Nhập RESET để xác nhận</label>
+                    <input
+                      value={resetConfirmation}
+                      onChange={event => setResetConfirmation(event.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950/70 border border-red-500/30 rounded-lg text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-red-400"
+                      placeholder="RESET"
+                    />
+                  </div>
+                  <button
+                    onClick={handleResetGuildData}
+                    disabled={resetConfirmation !== 'RESET' || resetting}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-red-500/20 px-4 py-2 text-xs font-bold text-red-200 transition-colors hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-red-500/20"
+                  >
+                    <Trash2 size={14} />
+                    {resetting ? 'Đang reset...' : 'Reset dữ liệu server hiện tại'}
+                  </button>
+                </section>
+              )}
             </>
           )}
         </div>

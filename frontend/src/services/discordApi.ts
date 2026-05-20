@@ -35,5 +35,5 @@ export {
   fetchCurrentDiscordRoles,
 } from './memberApi.ts';
 export { saveSquadLayout, getLineupEditLock, acquireLineupEditLock, heartbeatLineupEditLock, releaseLineupEditLock, overrideLineupEditLock, getLineupSnapshots, createLineupSnapshot, updateLineupSnapshot, getLineupSnapshot, restoreLineupSnapshot, deleteLineupSnapshot } from './lineupApi.ts';
-export { updateAccessRoles, updateRoleConfig } from './settingsApi.ts';
+export { resetCurrentGuildData, updateAccessRoles, updateRoleConfig } from './settingsApi.ts';
 export { updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, getAttendanceHistory, getAttendanceSession, deleteAttendanceHistorySession } from './attendanceApi.ts';

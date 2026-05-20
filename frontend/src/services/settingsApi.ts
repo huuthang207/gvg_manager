@@ -10,6 +10,15 @@ export async function updateAccessRoles(managerRoles: string[], memberRoles: str
   });
 }
 
+export async function resetCurrentGuildData(confirmation: string): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/discord/reset-current-guild-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ confirmation }),
+  });
+}
+
 export async function updateRoleConfig(classRoleMap: Record<string, string>, requiredRoles: string[]): Promise<AppStateResponse> {
   return requestJson(`${API_BASE}/api/discord/role-config`, {
     method: 'PUT',

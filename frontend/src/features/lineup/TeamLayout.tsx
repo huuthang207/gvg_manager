@@ -109,6 +109,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   const [activeData, setActiveData] = React.useState<any>(null);
   const [sidePanelTab, setSidePanelTab] = React.useState<'members' | 'skills'>('members');
   const restoreRequestedRef = React.useRef(false);
+  const menuSnapshotsFetchedRef = React.useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -374,10 +375,16 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   }, [onLineupEntryModeChange, snapshotState.snapshotActionLoading, squadGroups.length]);
 
   React.useEffect(() => {
-    if (lineupEntryMode === 'menu' && !snapshotsOnly && !snapshotState.snapshotsLoading && snapshotState.snapshots.length === 0) {
+    if (lineupEntryMode !== 'menu' || snapshotsOnly) {
+      menuSnapshotsFetchedRef.current = false;
+      return;
+    }
+
+    if (!menuSnapshotsFetchedRef.current && !snapshotState.snapshotsLoading) {
+      menuSnapshotsFetchedRef.current = true;
       void snapshotActions.refreshSnapshots();
     }
-  }, [lineupEntryMode, snapshotsOnly, snapshotActions.refreshSnapshots, snapshotState.snapshots.length, snapshotState.snapshotsLoading]);
+  }, [lineupEntryMode, snapshotsOnly, snapshotActions.refreshSnapshots, snapshotState.snapshotsLoading]);
 
   React.useEffect(() => {
     if (snapshotsOnly && !snapshotState.snapshotsOpen && !snapshotState.snapshotsLoading) {

@@ -8,10 +8,11 @@ export type Permission =
   | 'manage:snapshots'
   | 'restore:snapshots'
   | 'manage:members'
-  | 'manage:settings';
+  | 'manage:settings'
+  | 'reset:guild-data';
 
 const ROLE_PERMISSIONS: Record<GuildRole, Permission[]> = {
-  owner: ['view:guild', 'manage:lineup', 'manage:snapshots', 'restore:snapshots', 'manage:members', 'manage:settings'],
+  owner: ['view:guild', 'manage:lineup', 'manage:snapshots', 'restore:snapshots', 'manage:members', 'manage:settings', 'reset:guild-data'],
   manager: ['view:guild', 'manage:lineup', 'manage:snapshots', 'restore:snapshots', 'manage:members'],
   member: ['view:guild'],
 };

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth.js';
-import { normalizeRoleConfigInput, updateGuildAccessRoles, updateGuildRoleConfig } from '../services/settingsService.js';
+import { normalizeRoleConfigInput, resetCurrentGuildData, updateGuildAccessRoles, updateGuildRoleConfig } from '../services/settingsService.js';
 
 export function createSettingsRoutes() {
   const router = Router();
@@ -46,6 +46,18 @@ export function createSettingsRoutes() {
       const memberRoles = Array.isArray(req.body?.memberRoles) ? req.body.memberRoles : [];
 
       const result = await updateGuildAccessRoles(auth.user.id, auth.session.activeGuildId, managerRoles, memberRoles);
+      res.status(result.status).json(result.body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/api/discord/reset-current-guild-data', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const result = await resetCurrentGuildData(auth.user.id, auth.session.activeGuildId, req.body?.confirmation);
       res.status(result.status).json(result.body);
     } catch (err) {
       next(err);

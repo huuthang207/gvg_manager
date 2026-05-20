@@ -9,7 +9,7 @@ import { Sidebar } from './features/app/Sidebar.tsx';
 import { MemberDashboard } from './features/members/MemberDashboard.tsx';
 import { TeamLayout } from './features/lineup/TeamLayout.tsx';
 import { AttendanceView } from './features/attendance/AttendanceView.tsx';
-import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMemberClassRole, updateMyIngameName, deleteMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState, updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, acquireLineupEditLock, getLineupEditLock, heartbeatLineupEditLock, overrideLineupEditLock, releaseLineupEditLock } from './services/discordApi.ts';
+import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMemberClassRole, updateMyIngameName, deleteMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState, updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, acquireLineupEditLock, getLineupEditLock, heartbeatLineupEditLock, overrideLineupEditLock, releaseLineupEditLock, resetCurrentGuildData } from './services/discordApi.ts';
 import { useLineupSnapshots } from './hooks/useLineupSnapshots.ts';
 import { cn } from './lib/utils.ts';
 import { getErrorMessage } from './lib/error.ts';
@@ -532,6 +532,18 @@ export default function App() {
     }
   };
 
+  const handleResetCurrentGuildData = async (confirmation: string) => {
+    try {
+      const state = await resetCurrentGuildData(confirmation);
+      resetSnapshots();
+      await applyAppState(state);
+      updateActiveTab('dashboard');
+    } catch (err) {
+      void alert({ message: getErrorMessage(err, 'Không thể reset dữ liệu server'), variant: 'error' });
+      throw err;
+    }
+  };
+
   const handleUpdateRoleConfig = async (classRoleMap: Record<string, string>, requiredRoles: string[], accessRoles?: { managerRoles: string[]; memberRoles: string[] }) => {
     try {
       let state = await updateRoleConfig(classRoleMap, requiredRoles);
@@ -883,6 +895,7 @@ export default function App() {
               canSelfService={canSelfService}
               roleConfig={roleConfig}
               onUpdateRoleConfig={handleUpdateRoleConfig}
+              onResetCurrentGuildData={handleResetCurrentGuildData}
               syncing={syncing}
               lastSyncedAt={lastSyncedAt}
             />

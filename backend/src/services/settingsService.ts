@@ -67,6 +67,61 @@ export function normalizeAccessRoles(managerRoles: unknown[], memberRoles: unkno
   };
 }
 
+export async function resetCurrentGuildData(userId: string, activeGuildId: string | null | undefined, confirmation: unknown) {
+  if (confirmation !== 'RESET') {
+    return { status: 400 as const, body: { error: 'Vui lòng nhập RESET để xác nhận.' } };
+  }
+
+  const access = await requireAccessibleGuild(userId, 'reset:guild-data', activeGuildId);
+
+  if (!access) {
+    return { status: 404 as const, body: { error: 'Chưa có server nào được import.' } };
+  }
+
+  if (access.forbidden || access.role !== 'owner') {
+    return { status: 403 as const, body: { error: 'Chỉ bang chủ có quyền reset dữ liệu.' } };
+  }
+
+  const guildId = access.guild.id;
+
+  await prisma.$transaction(async tx => {
+    const attendanceSessions = await tx.attendanceSession.findMany({
+      where: { guildId },
+      select: { id: true },
+    });
+    const attendanceSessionIds = attendanceSessions.map(session => session.id);
+
+    if (attendanceSessionIds.length > 0) {
+      await tx.attendanceVote.deleteMany({ where: { sessionId: { in: attendanceSessionIds } } });
+    }
+    await tx.attendanceSession.deleteMany({ where: { guildId } });
+    await tx.attendanceChannelConfig.deleteMany({ where: { guildId } });
+
+    await tx.lineupSnapshot.deleteMany({ where: { guildId } });
+    await tx.squadGroup.deleteMany({ where: { guildId } });
+    await tx.team.deleteMany({ where: { guildId } });
+
+    const members = await tx.member.findMany({
+      where: { guildId },
+      select: { id: true },
+    });
+    const memberIds = members.map(member => member.id);
+
+    if (memberIds.length > 0) {
+      await tx.memberSkill.deleteMany({ where: { memberId: { in: memberIds } } });
+      await tx.memberRole.deleteMany({ where: { memberId: { in: memberIds } } });
+    }
+    await tx.member.deleteMany({ where: { guildId } });
+    await tx.skill.deleteMany({ where: { guildId } });
+    await tx.guild.update({ where: { id: guildId }, data: { lastSyncedAt: null } });
+  });
+
+  publishGuildAppStateChanged({ guildId, reason: 'settings_updated' });
+
+  const state = await getUserAppState(userId, activeGuildId);
+  return { status: 200 as const, body: state };
+}
+
 export async function updateGuildAccessRoles(userId: string, activeGuildId: string | null | undefined, managerRoles: unknown[], memberRoles: unknown[]) {
   const access = await requireAccessibleGuild(userId, 'manage:settings', activeGuildId);
 
