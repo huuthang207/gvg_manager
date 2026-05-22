@@ -5,7 +5,9 @@ export type ClassType =
   | 'Thiết Y'
   | 'Tố Vấn'
   | 'Thần Tương'
-  | 'Huyết Hà';
+  | 'Huyết Hà'
+  | 'Chưa xác định'
+  | 'Xung đột role phái';
 
 export interface Skill {
   id: string;

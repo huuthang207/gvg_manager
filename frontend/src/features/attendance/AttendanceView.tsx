@@ -32,7 +32,7 @@ function getMemberName(member: Member) {
 }
 
 function isKnownClass(value: string): value is ClassType {
-  return CLASSES.includes(value as ClassType);
+  return (CLASSES as readonly string[]).includes(value);
 }
 
 function getClassColor(classType: string) {
@@ -40,10 +40,10 @@ function getClassColor(classType: string) {
 }
 
 function sortClassEntries(entries: Array<[string, number]>) {
-  const order = new Map(CLASSES.map((classType, index) => [classType, index]));
+  const order = new Map<string, number>(CLASSES.map((classType, index) => [classType, index]));
   return [...entries].sort(([a], [b]) => {
-    const aOrder = order.get(a as ClassType);
-    const bOrder = order.get(b as ClassType);
+    const aOrder = order.get(a);
+    const bOrder = order.get(b);
     if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
     if (aOrder !== undefined) return -1;
     if (bOrder !== undefined) return 1;
@@ -522,16 +522,6 @@ export function AttendanceView({
         <div>
           <h1 className="text-3xl font-black text-white">Điểm danh Bang Chiến</h1>
           <p className="mt-1 text-sm text-slate-400">Theo dõi phiên điểm danh từ web, Discord bot và lịch sử gần đây.</p>
-        </div>
-        <div className={cn(
-          'inline-flex w-fit items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-bold',
-          attendance.config
-            ? 'border-sky-500/25 bg-sky-500/10 text-sky-100'
-            : 'border-amber-500/25 bg-amber-500/10 text-amber-100',
-        )}>
-          <Hash size={16} />
-          <span className="text-slate-400">Kênh:</span>
-          <span>{attendance.config ? (attendance.config.discordChannelName || attendance.config.discordChannelId) : 'Chưa cấu hình'}</span>
         </div>
       </div>
 

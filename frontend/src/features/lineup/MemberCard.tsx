@@ -6,7 +6,7 @@
 import React from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Member, Skill } from '../../types.ts';
-import { CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
+import { getClassColor, getClassIcon } from '../../constants.ts';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 
@@ -24,8 +24,9 @@ interface MemberCardProps {
 
 export const MemberCard = React.forwardRef<HTMLDivElement, MemberCardProps>(
   ({ member, skills, isOverlay, inSlot, isLeader, className, onEdit, onDelete, onRemoveSkill }, ref) => {
-    const color = CLASS_COLORS[member.classType];
-    
+    const color = getClassColor(member.classType);
+    const classIcon = getClassIcon(member.classType);
+
     return (
       <div
         ref={ref}
@@ -47,7 +48,13 @@ export const MemberCard = React.forwardRef<HTMLDivElement, MemberCardProps>(
           borderLeftColor: color,
         } : {}}
       >
-        <img src={CLASS_ICONS[member.classType]} alt="" className="w-7 h-7 object-contain shrink-0" />
+        {classIcon ? (
+          <img src={classIcon} alt="" className="w-7 h-7 object-contain shrink-0" />
+        ) : (
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-600/70 bg-slate-950/40 text-[10px] font-black text-slate-200">
+            ?
+          </div>
+        )}
         
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
           <p className="font-bold truncate text-slate-100">{member.name}</p>

@@ -7,7 +7,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { X, Users, ChevronRight, AlertCircle, CheckCircle, Loader2, Plus, Shield, Search } from 'lucide-react';
 import { DiscordMemberPreview, DiscordGuild, importDiscordMembers, loginWithDiscord, getDiscordGuilds, getBotInviteUrl } from '../../services/discordApi.ts';
 import { Member, ClassType } from '../../types.ts';
-import { CLASSES, CLASS_COLORS } from '../../constants.ts';
+import { CLASSES, CLASS_COLORS, CONFLICT_CLASS, UNKNOWN_CLASS, getClassColor } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
 import { getErrorMessage } from '../../lib/error.ts';
 
@@ -32,8 +32,8 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
   const [allRoles, setAllRoles] = useState<string[]>([]);
 
   // Step 2: Role mapping state
-  const [classRoleMap, setClassRoleMap] = useState<Record<ClassType, string>>(
-    Object.fromEntries(CLASSES.map(c => [c, ''])) as Record<ClassType, string>
+  const [classRoleMap, setClassRoleMap] = useState<Record<string, string>>(
+    Object.fromEntries(CLASSES.map(c => [c, '']))
   );
   const [requiredRoles, setRequiredRoles] = useState<string[]>([]);
   const [newRequiredRole, setNewRequiredRole] = useState('');
@@ -84,7 +84,7 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
       const data = await importDiscordMembers(guild.id);
       setAllRoles(data.roles.map(r => r.roleName));
       setMembers(data.members);
-      setClassRoleMap(Object.fromEntries(CLASSES.map(c => [c, ''])) as Record<ClassType, string>);
+      setClassRoleMap(Object.fromEntries(CLASSES.map(c => [c, ''])));
       setRequiredRoles([]);
       setStep('mapping');
     } catch (err) {
@@ -109,25 +109,17 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
     const required = new Set(requiredRoles);
 
     return members.filter(member => {
-      if (required.size > 0) {
-        const hasAllRequired = [...required].every(r => member.roles.includes(r));
-        if (!hasAllRequired) return false;
-      }
-
-      for (const { cls, role } of mappedClassRoles) {
-        if (member.roles.includes(role)) {
-          return true;
-        }
-      }
-      return false;
+      if (required.size === 0) return true;
+      return [...required].every(r => member.roles.includes(r));
     }).map(member => {
-      let classType: ClassType = 'Toái Mộng';
-      for (const { cls, role } of mappedClassRoles) {
-        if (member.roles.includes(role)) {
-          classType = cls;
-          break;
-        }
-      }
+      const matchedClasses = mappedClassRoles
+        .filter(({ role }) => member.roles.includes(role))
+        .map(({ cls }) => cls);
+      const classType: ClassType = matchedClasses.length === 1
+        ? matchedClasses[0]
+        : matchedClasses.length === 0
+          ? UNKNOWN_CLASS
+          : CONFLICT_CLASS;
       return { ...member, classType };
     });
   }, [members, classRoleMap, requiredRoles]);
@@ -147,12 +139,7 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
   };
 
   const proceedToPreview = () => {
-    const unmappedClasses = CLASSES.filter(c => !classRoleMap[c]);
-    if (unmappedClasses.length > 0) {
-      setError(`Còn phái chưa được gán role: ${unmappedClasses.join(', ')}`);
-      return;
-    }
-    const usedRoles = Object.values(classRoleMap);
+    const usedRoles = Object.values(classRoleMap).filter(Boolean);
     if (new Set(usedRoles).size !== usedRoles.length) {
       setError('Một role không thể gán cho nhiều phái');
       return;
@@ -209,7 +196,8 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
     guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=64` : null;
 
   const mappedCount = Object.values(classRoleMap).filter(Boolean).length;
-  const canProceed = mappedCount === CLASSES.length && new Set(Object.values(classRoleMap)).size === CLASSES.length;
+  const usedMappedRoles = Object.values(classRoleMap).filter(Boolean);
+  const canProceed = new Set(usedMappedRoles).size === usedMappedRoles.length;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -427,7 +415,7 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
                         <span className="text-[11px] font-bold text-slate-300">Ánh xạ phái ({mappedCount}/{CLASSES.length})</span>
                         {canProceed
                           ? <CheckCircle size={14} className="text-emerald-400" />
-                          : <span className="text-[10px] text-amber-400">{CLASSES.length - mappedCount} phái chưa gán</span>
+                          : <span className="text-[10px] text-amber-400">Role bị gán trùng</span>
                         }
                       </div>
                       <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
@@ -531,9 +519,9 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
               </div>
 
               <div className="flex flex-wrap gap-3 p-3 bg-slate-800/30 rounded-lg">
-                {CLASSES.map(cls => {
+                {[...CLASSES, UNKNOWN_CLASS, CONFLICT_CLASS].map(cls => {
                   const count = previewMembers.filter(m => m.classType === cls).length;
-                  const color = CLASS_COLORS[cls];
+                  const color = getClassColor(cls);
                   return (
                     <div key={cls} className="flex items-center gap-1.5">
                       <span className="text-[10px] text-slate-500 font-bold uppercase">{cls.split(' ').map(s => s[0]).join('')}</span>
@@ -545,7 +533,7 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
 
               <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
                 {previewMembers.map(member => {
-                  const color = CLASS_COLORS[member.classType];
+                  const color = getClassColor(member.classType);
                   return (
                     <div
                       key={member.id}
@@ -676,7 +664,7 @@ interface RoleMappingRowProps {
   color: string;
   selectedRole: string;
   allRoles: string[];
-  classRoleMap: Record<ClassType, string>;
+  classRoleMap: Record<string, string>;
   onChange: (cls: ClassType, role: string) => void;
 }
 

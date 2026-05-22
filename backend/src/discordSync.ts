@@ -2,12 +2,25 @@ import { prisma } from './db.js';
 import { getGuildMembersWithRoles } from './discord.js';
 import { mapRolesToClasses } from './roleMapper.js';
 
+export const UNKNOWN_CLASS = 'Chưa xác định';
+export const CONFLICT_CLASS = 'Xung đột role phái';
+
 interface SyncOptions {
   guildId: string;
   discordGuildId: string;
   classRoleMap: Record<string, string>;
   requiredRoles: string[];
   selectedMemberIds?: string[];
+}
+
+export function resolveClassFromRoleMap(memberRoles: string[], classRoleMap: Record<string, string>) {
+  const matchedClasses = Object.entries(classRoleMap)
+    .filter(([, roleName]) => roleName && memberRoles.includes(roleName))
+    .map(([classType]) => classType);
+
+  if (matchedClasses.length === 1) return matchedClasses[0];
+  if (matchedClasses.length === 0) return UNKNOWN_CLASS;
+  return CONFLICT_CLASS;
 }
 
 export async function syncGuildMembers(options: SyncOptions) {
@@ -36,9 +49,7 @@ export async function syncGuildMembers(options: SyncOptions) {
     if (selected && !selected.has(member.id)) continue;
     if (required.size > 0 && ![...required].every(role => member.roles.includes(role))) continue;
 
-    let classType: string = member.suggestedClass ?? 'Toái Mộng';
-    const matchedClass = Object.entries(classRoleMap).find(([, roleName]) => member.roles.includes(roleName));
-    if (matchedClass) classType = matchedClass[0];
+    const classType = resolveClassFromRoleMap(member.roles, classRoleMap);
 
     const existingMember = await prisma.member.findUnique({
       where: { guildId_discordUserId: { guildId, discordUserId: member.id } },

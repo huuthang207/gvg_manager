@@ -3,20 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Trash2, RefreshCw, Filter, X, CheckCircle, UserCircle, AlertTriangle, Settings } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, Trash2, Filter, X, UserCircle, AlertTriangle, Settings, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Member, ClassType } from '../../types.ts';
 import { AppStateResponse, DiscordUser, fetchCurrentDiscordRoles } from '../../services/discordApi.ts';
-import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
+import { CLASSES, CLASS_COLORS, CLASS_ICONS, UNKNOWN_CLASS, CONFLICT_CLASS } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
 import { getErrorMessage } from '../../lib/error.ts';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
+import { AppSelect } from '../../components/ui/AppSelect.tsx';
 
 interface MemberDashboardProps {
   members: Member[];
   onImport: (members: Member[]) => void;
   onDelete: (memberId: string) => void | Promise<void>;
-  onRefresh: () => void;
   onAcknowledgeClassChange: (memberId: string) => void;
   onUpdateIngameName: (memberId: string, ingameName: string) => Promise<void>;
   onUpdateMemberClassRole: (memberId: string, classType: ClassType) => Promise<void>;
@@ -29,17 +29,50 @@ interface MemberDashboardProps {
   roleConfig: AppStateResponse['roleConfig'];
   onUpdateRoleConfig: (classRoleMap: Record<string, string>, requiredRoles: string[], accessRoles?: { managerRoles: string[]; memberRoles: string[] }) => Promise<void>;
   onResetCurrentGuildData: (confirmation: string) => Promise<void>;
-  syncing?: boolean;
   lastSyncedAt?: string | null;
 }
 
-type SortField = 'name' | 'classType';
+type SortField = 'discordUsername' | 'ingameName' | 'classType' | 'classStatus' | 'joinedAt';
+type SortDirection = 'asc' | 'desc';
+type ClassStatusFilter = 'all' | 'Bình thường' | 'Thiếu role phái' | 'Trùng role phái' | 'Đã đổi phái';
+
+type ClassStatus = {
+  label: Exclude<ClassStatusFilter, 'all'>;
+  className: string;
+};
+
+const CLASS_FILTER_OPTIONS: Array<ClassType | 'all'> = ['all', ...CLASSES, UNKNOWN_CLASS, CONFLICT_CLASS];
+const CLASS_STATUS_FILTER_OPTIONS: ClassStatusFilter[] = ['all', 'Bình thường', 'Thiếu role phái', 'Trùng role phái', 'Đã đổi phái'];
+
+const getClassStatus = (member: Member): ClassStatus => {
+  if (member.classType === UNKNOWN_CLASS) {
+    return { label: 'Thiếu role phái', className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' };
+  }
+  if (member.classType === CONFLICT_CLASS) {
+    return { label: 'Trùng role phái', className: 'border-orange-500/30 bg-orange-500/10 text-orange-300' };
+  }
+  if (member.previousClassType && member.previousClassType !== member.classType) {
+    return { label: 'Đã đổi phái', className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' };
+  }
+  return { label: 'Bình thường', className: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' };
+};
+
+const sortText = (a: string | null | undefined, b: string | null | undefined) => {
+  const left = a?.trim() || '~~~~';
+  const right = b?.trim() || '~~~~';
+  return left.localeCompare(right, 'vi');
+};
+
+const sortDate = (a?: string | null, b?: string | null) => {
+  const left = a ? new Date(a).getTime() : Number.MAX_SAFE_INTEGER;
+  const right = b ? new Date(b).getTime() : Number.MAX_SAFE_INTEGER;
+  return left - right;
+};
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   members,
   onImport,
   onDelete,
-  onRefresh,
   onAcknowledgeClassChange,
   onUpdateIngameName,
   onUpdateMemberClassRole,
@@ -52,13 +85,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   roleConfig,
   onUpdateRoleConfig,
   onResetCurrentGuildData,
-  syncing = false,
   lastSyncedAt,
 }) => {
   const { confirm } = useSystemDialog();
+  const classFilterRef = useRef<HTMLDivElement | null>(null);
+  const classStatusFilterRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterClass, setFilterClass] = useState<ClassType | 'all'>('all');
-  const [sortField, setSortField] = useState<SortField>('name');
+  const [filterClassStatus, setFilterClassStatus] = useState<ClassStatusFilter>('all');
+  const [classFilterOpen, setClassFilterOpen] = useState(false);
+  const [classStatusFilterOpen, setClassStatusFilterOpen] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('discordUsername');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [isRoleConfigOpen, setIsRoleConfigOpen] = useState(false);
   const [myIngameName, setMyIngameName] = useState('');
@@ -77,6 +115,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   useEffect(() => {
     setMyIngameName(selfMember?.ingameName || selfMember?.name || '');
   }, [selfMember]);
+
+  useEffect(() => {
+    if (!classFilterOpen && !classStatusFilterOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (classFilterRef.current?.contains(target) || classStatusFilterRef.current?.contains(target)) return;
+      setClassFilterOpen(false);
+      setClassStatusFilterOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [classFilterOpen, classStatusFilterOpen]);
 
   const myTrimmedName = myIngameName.trim();
   const canSaveMyIngameName = !!selfMember && myTrimmedName.length > 0 && myTrimmedName !== (selfMember.ingameName || selfMember.name);
@@ -105,6 +157,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     return { total, byClass };
   }, [members]);
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(direction => direction === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setSortField(field);
+    setSortDirection('asc');
+  };
+
   // Filter and sort
   const filteredMembers = useMemo(() => {
     let result = [...members];
@@ -123,16 +184,31 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       result = result.filter(m => m.classType === filterClass);
     }
 
+    // Filter by class status
+    if (filterClassStatus !== 'all') {
+      result = result.filter(m => getClassStatus(m).label === filterClassStatus);
+    }
+
     // Sort
     result.sort((a, b) => {
-      if (sortField === 'name') {
-        return a.name.localeCompare(b.name);
+      let comparison = 0;
+      if (sortField === 'discordUsername') {
+        comparison = sortText(a.discordUsername || a.name, b.discordUsername || b.name);
+      } else if (sortField === 'ingameName') {
+        comparison = sortText(a.ingameName, b.ingameName);
+      } else if (sortField === 'classType') {
+        comparison = sortText(a.classType, b.classType);
+      } else if (sortField === 'classStatus') {
+        comparison = sortText(getClassStatus(a).label, getClassStatus(b).label);
+      } else {
+        comparison = sortDate(a.joinedAt, b.joinedAt);
       }
-      return a.classType.localeCompare(b.classType);
+
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
 
     return result;
-  }, [members, searchQuery, filterClass, sortField]);
+  }, [members, searchQuery, filterClass, filterClassStatus, sortField, sortDirection]);
 
   const getMemberAvatar = (member: Member) => {
     if (member.avatar) {
@@ -211,21 +287,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               )}
             </section>
 
-            <div className="grid grid-cols-1 gap-2">
-              <StatCard label="Thành viên" value={stats.total} color="emerald" compact />
-            </div>
-
             <section className="space-y-2">
               <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider">
                 <span className="flex items-center gap-2 text-slate-400">
                   <Filter size={12} />
                   Thống kê phái
                 </span>
-                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-2 py-0.5 text-[9px] text-slate-500">
+                <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-black text-emerald-200 shadow-sm shadow-emerald-950/20">
                   {stats.total} người
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
                 {CLASSES.map(cls => (
                   <ClassStatRow
                     key={cls}
@@ -239,24 +311,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             </section>
 
             {canManageSettings && (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={onRefresh}
-                  disabled={syncing}
-                  className="app-button-secondary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
-                >
-                  <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-                  {syncing ? 'Đang...' : 'Đồng bộ'}
-                </button>
-                <button
-                  onClick={() => setIsRoleConfigOpen(true)}
-                  className="app-button-primary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
-                  title="Cấu hình role"
-                >
-                  <Settings size={14} />
-                  Cài đặt
-                </button>
-              </div>
+              <button
+                onClick={() => setIsRoleConfigOpen(true)}
+                className="app-button-primary flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold"
+                title="Cấu hình role"
+              >
+                <Settings size={14} />
+                Cài đặt
+              </button>
             )}
           </div>
         </aside>
@@ -286,100 +348,155 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-                    Sắp xếp
-                  </label>
-                  <div className="flex gap-2">
-                    {(['name', 'classType'] as SortField[]).map(field => (
-                      <button
-                        key={field}
-                        onClick={() => setSortField(field)}
-                        className={cn(
-                          "px-3 py-2 rounded-lg text-[11px] font-bold transition-colors whitespace-nowrap",
-                          sortField === field
-                            ? "bg-sky-500/90 text-white shadow-sm shadow-sky-950/20"
-                            : "bg-slate-800/70 text-slate-300 hover:bg-slate-700/80 hover:text-white"
-                        )}
-                      >
-                        {field === 'name' ? 'Tên' : 'Phái'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-                  Lọc theo phái
-                </label>
-                <div className="flex gap-2 flex-wrap">
+                {(filterClass !== 'all' || filterClassStatus !== 'all' || searchQuery) && (
                   <button
-                    onClick={() => setFilterClass('all')}
-                    className={cn(
-                      "px-3 py-1.5 rounded text-[11px] font-bold transition-colors",
-                      filterClass === 'all'
-                        ? "bg-blue-500 text-white"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                    )}
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterClass('all');
+                      setFilterClassStatus('all');
+                    }}
+                    className="flex items-center justify-center gap-1 rounded-lg border border-slate-700/80 bg-slate-800/70 px-3 py-2 text-[11px] font-bold text-slate-300 transition-colors hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300"
                   >
-                    Tất cả
+                    <X size={12} />
+                    Xóa bộ lọc
                   </button>
-                  {CLASSES.map(cls => (
-                    <button
-                      key={cls}
-                      onClick={() => setFilterClass(cls)}
-                      className={cn(
-                        "px-3 py-1.5 rounded text-[11px] font-bold transition-colors",
-                        filterClass === cls
-                          ? "text-slate-950 shadow-sm"
-                          : "bg-slate-800/70 text-slate-300 hover:bg-slate-700/80 hover:text-white"
-                      )}
-                      style={{
-                        backgroundColor: filterClass === cls ? CLASS_COLORS[cls] : undefined,
-                      }}
-                    >
-                      {cls}
-                    </button>
-                  ))}
-
-                  {(filterClass !== 'all' || searchQuery) && (
-                    <button
-                      onClick={() => {
-                        setSearchQuery('');
-                        setFilterClass('all');
-                      }}
-                      className="flex items-center gap-1 px-2 text-[11px] text-slate-400 hover:text-red-400 transition-colors"
-                    >
-                      <X size={12} />
-                      Xóa bộ lọc
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           </div>
 
           <div className="flex-1 overflow-auto custom-scrollbar">
-            {filteredMembers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                <UserCircle size={48} className="mb-3 opacity-50" />
-                <p className="text-sm font-medium">Chưa có thành viên nào</p>
-                <p className="text-xs mt-1">Điều chỉnh bộ lọc hoặc đồng bộ Discord để cập nhật danh sách</p>
-              </div>
-            ) : (
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead className="sticky top-0 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-sm">
                   <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="text-center py-3 px-4 w-14">STT</th>
-                    <th className="text-left py-3 px-4">Thành viên</th>
-                    <th className="text-left py-3 px-4">Phái</th>
-                    <th className="text-left py-3 px-4">Trạng thái</th>
-                    <th className="text-right py-3 px-4">Thao tác</th>
+                    <th className="w-14 px-4 py-3 text-center">STT</th>
+                    <th className="w-[180px] px-4 py-3 text-left">
+                      <SortableHeader label="Thành viên" field="discordUsername" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                    </th>
+                    <th className="w-[180px] px-4 py-3 text-left">
+                      <SortableHeader label="Tên ingame" field="ingameName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                    </th>
+                    <th className="w-[150px] px-4 py-3 text-left">
+                      <div ref={classFilterRef} className="relative inline-flex max-w-full items-center gap-1.5">
+                        <SortableHeader label="Phái" field="classType" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                        <button
+                          type="button"
+                          onClick={event => {
+                            event.stopPropagation();
+                            setClassFilterOpen(open => !open);
+                          }}
+                          className={cn(
+                            'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors',
+                            filterClass !== 'all'
+                              ? 'border-sky-400/45 bg-sky-500/20 text-sky-200'
+                              : 'border-slate-700/80 bg-slate-900/80 text-slate-400 hover:border-slate-500 hover:text-slate-100',
+                          )}
+                          title="Lọc phái"
+                        >
+                          <Filter size={12} />
+                        </button>
+                        {classFilterOpen && (
+                          <div
+                            className="absolute left-0 top-full z-30 mt-2 w-48 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/98 p-1.5 shadow-2xl shadow-slate-950/50 normal-case tracking-normal"
+                            onClick={event => event.stopPropagation()}
+                          >
+                            {CLASS_FILTER_OPTIONS.map(option => {
+                              const active = filterClass === option;
+                              return (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onClick={() => {
+                                    setFilterClass(option);
+                                    setClassFilterOpen(false);
+                                  }}
+                                  className={cn(
+                                    'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold transition-colors',
+                                    active
+                                      ? 'bg-sky-500/20 text-sky-100'
+                                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white',
+                                  )}
+                                >
+                                  <span className="truncate">{option === 'all' ? 'Tất cả phái' : option}</span>
+                                  {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-300" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+                    <th className="w-[170px] px-4 py-3 text-left">
+                      <div ref={classStatusFilterRef} className="relative inline-flex max-w-full items-center gap-1.5">
+                        <SortableHeader label="Trạng thái phái" field="classStatus" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                        <button
+                          type="button"
+                          onClick={event => {
+                            event.stopPropagation();
+                            setClassStatusFilterOpen(open => !open);
+                          }}
+                          className={cn(
+                            'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors',
+                            filterClassStatus !== 'all'
+                              ? 'border-sky-400/45 bg-sky-500/20 text-sky-200'
+                              : 'border-slate-700/80 bg-slate-900/80 text-slate-400 hover:border-slate-500 hover:text-slate-100',
+                          )}
+                          title="Lọc trạng thái phái"
+                        >
+                          <Filter size={12} />
+                        </button>
+                        {classStatusFilterOpen && (
+                          <div
+                            className="absolute left-0 top-full z-30 mt-2 w-52 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/98 p-1.5 shadow-2xl shadow-slate-950/50 normal-case tracking-normal"
+                            onClick={event => event.stopPropagation()}
+                          >
+                            {CLASS_STATUS_FILTER_OPTIONS.map(option => {
+                              const active = filterClassStatus === option;
+                              return (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onClick={() => {
+                                    setFilterClassStatus(option);
+                                    setClassStatusFilterOpen(false);
+                                  }}
+                                  className={cn(
+                                    'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold transition-colors',
+                                    active
+                                      ? 'bg-sky-500/20 text-sky-100'
+                                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white',
+                                  )}
+                                >
+                                  <span className="truncate">{option === 'all' ? 'Tất cả trạng thái' : option}</span>
+                                  {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-300" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </th>
+                    <th className="w-[140px] px-4 py-3 text-left">
+                      <SortableHeader label="Ngày tham gia" field="joinedAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                    </th>
+                    <th className="w-24 px-4 py-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMembers.map((member, index) => (
+                  {filteredMembers.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-16 text-center text-slate-500">
+                        <div className="flex flex-col items-center justify-center">
+                          <UserCircle size={48} className="mb-3 opacity-50" />
+                          <p className="text-sm font-medium">Không có thành viên thỏa điều kiện lọc</p>
+                          <p className="mt-1 text-xs">Điều chỉnh bộ lọc để xem thêm thành viên</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {filteredMembers.map((member, index) => {
+                    const classStatus = getClassStatus(member);
+                    return (
                     <tr
                       key={member.id}
                       onClick={() => {
@@ -391,7 +508,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         {index + 1}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
                           <div className="w-9 h-9 rounded-full bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
                             {getMemberAvatar(member) ? (
                               <img
@@ -406,9 +523,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                               </span>
                             )}
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-bold text-slate-200">{member.name}</p>
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <p className="truncate text-xs font-bold text-slate-200">{member.discordUsername ? `@${member.discordUsername}` : member.name}</p>
                               {member.previousClassType && member.previousClassType !== member.classType && (
                                 <span
                                   className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded"
@@ -419,18 +536,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                                 </span>
                               )}
                             </div>
-                            {(member.discordDisplayName || member.discordUsername) && (
-                              <p className="text-[10px] text-slate-500">
-                                {member.discordDisplayName && member.discordDisplayName !== member.name ? member.discordDisplayName : ''}
-                                {member.discordUsername ? ` @${member.discordUsername}` : ''}
-                              </p>
-                            )}
                           </div>
                         </div>
                       </td>
                       <td className="py-3 px-4">
+                        <span className={cn('block truncate text-xs font-bold', member.ingameName ? 'text-slate-200' : 'text-slate-500')}>
+                          {member.ingameName || 'Chưa cập nhật'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
                         <span
-                          className="text-[11px] font-bold px-2 py-1 rounded"
+                          className="inline-block max-w-full truncate rounded px-2 py-1 text-[11px] font-bold"
                           style={{
                             backgroundColor: `${CLASS_COLORS[member.classType]}20`,
                             color: CLASS_COLORS[member.classType],
@@ -440,10 +556,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="flex items-center gap-1.5 text-[11px] text-emerald-400">
-                          <CheckCircle size={12} />
-                          Đang trong bang
+                        <span className={cn('inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider', classStatus.className)}>
+                          {classStatus.label}
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-xs text-slate-400">
+                        {formatJoinedDays(member.joinedAt)}
                       </td>
                       <td className="py-3 px-4 text-right">
                         {allowMemberManagement && (
@@ -459,10 +577,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
-            )}
           </div>
         </main>
       </div>
@@ -505,6 +623,33 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   );
 };
 
+interface SortableHeaderProps {
+  label: string;
+  field: SortField;
+  sortField: SortField;
+  sortDirection: SortDirection;
+  onSort: (field: SortField) => void;
+}
+
+const SortableHeader: React.FC<SortableHeaderProps> = ({ label, field, sortField, sortDirection, onSort }) => {
+  const active = sortField === field;
+  const Icon = active ? (sortDirection === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(field)}
+      className={cn(
+        'inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[10px] font-black uppercase tracking-wider transition-colors',
+        active ? 'bg-sky-500/15 text-sky-200' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100',
+      )}
+    >
+      <span className="truncate">{label}</span>
+      <Icon size={11} className="shrink-0" />
+    </button>
+  );
+};
+
 interface MyInfoRowProps {
   label: string;
   value: string;
@@ -520,32 +665,6 @@ const MyInfoRow: React.FC<MyInfoRowProps> = ({ label, value, valueColor }) => {
   );
 };
 
-// Stat card component
-interface StatCardProps {
-  label: string;
-  value: number;
-  color: string;
-  compact?: boolean;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ label, value, color, compact }) => {
-  const colors: Record<string, string> = {
-    blue: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
-    emerald: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-    amber: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-    red: 'bg-red-500/10 border-red-500/30 text-red-400',
-  };
-
-  return (
-    <div className={cn("rounded-lg p-3 border", colors[color], compact && 'p-2')}>
-      <p className={cn("font-bold", compact ? "text-lg" : "text-2xl")}>{value}</p>
-      <p className={cn("text-[10px] font-bold uppercase tracking-wider opacity-80", compact && 'text-[9px]')}>
-        {label}
-      </p>
-    </div>
-  );
-};
-
 interface ClassStatRowProps {
   label: ClassType;
   value: number;
@@ -556,27 +675,27 @@ interface ClassStatRowProps {
 const ClassStatRow: React.FC<ClassStatRowProps> = ({ label, value, color, icon }) => {
   return (
     <div
-      className="rounded-xl border border-slate-800/80 px-2.5 py-2 shadow-sm shadow-slate-950/10"
+      className="flex items-center justify-between gap-3 rounded-xl border border-slate-800/80 px-3 py-2 shadow-sm shadow-slate-950/10"
       style={{
         background: `linear-gradient(135deg, ${color}1f 0%, rgba(15, 23, 42, 0.62) 72%)`,
       }}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-2.5">
         <img src={icon} alt="" className="h-7 w-7 shrink-0 object-contain" />
-        <span
-          className="min-w-7 rounded-md border px-1.5 py-0.5 text-center text-[11px] font-black"
-          style={{
-            color,
-            borderColor: `${color}55`,
-            backgroundColor: `${color}14`,
-          }}
-        >
-          {value}
+        <span className="truncate text-[12px] font-bold text-slate-100" title={label}>
+          {label}
         </span>
       </div>
-      <p className="mt-1.5 truncate text-[11px] font-bold text-slate-100" title={label}>
-        {label}
-      </p>
+      <span
+        className="min-w-8 shrink-0 rounded-md border px-2 py-0.5 text-center text-[11px] font-black"
+        style={{
+          color,
+          borderColor: `${color}55`,
+          backgroundColor: `${color}14`,
+        }}
+      >
+        {value}
+      </span>
     </div>
   );
 };
@@ -690,16 +809,16 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, canResetG
                   <p className="mt-1 text-[11px] text-slate-500">Người dùng phải có các role này để vào webapp; nếu không có role quản lý thì sẽ là thành viên.</p>
                 </div>
                 <div className="flex gap-2">
-                  <select
+                  <AppSelect
                     value={newRequiredRole}
                     onChange={e => setNewRequiredRole(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                    className="flex-1"
                   >
                     <option value="">Chọn role...</option>
                     {allRoles.filter(role => !requiredRoles.includes(role)).map(role => (
                       <option key={role} value={role}>{role}</option>
                     ))}
-                  </select>
+                  </AppSelect>
                   <button
                     onClick={() => addRequiredRole(newRequiredRole)}
                     className="px-3 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-xs font-bold transition-colors"
@@ -745,16 +864,16 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, canResetG
                   {CLASSES.map(cls => (
                     <div key={cls} className="space-y-1.5">
                       <span className="text-xs font-bold" style={{ color: CLASS_COLORS[cls] }}>{cls}</span>
-                      <select
+                      <AppSelect
                         value={classRoleMap[cls] || ''}
                         onChange={e => setClassRoleMap(prev => ({ ...prev, [cls]: e.target.value }))}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                        className="w-full"
                       >
                         <option value="">Chọn role...</option>
                         {allRoles.map(role => (
                           <option key={role} value={role}>{role}</option>
                         ))}
-                      </select>
+                      </AppSelect>
                     </div>
                   ))}
                 </div>
@@ -836,16 +955,16 @@ const AccessRolePicker: React.FC<AccessRolePickerProps> = ({
     <div className="rounded-xl border border-slate-800 bg-slate-950/25 p-3 space-y-2">
       <p className="text-xs font-bold text-slate-200">{title}</p>
       <div className="flex gap-2">
-        <select
+        <AppSelect
           value={selectedRole}
           onChange={event => onSelectedRoleChange(event.target.value)}
-          className="min-w-0 flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+          className="flex-1"
         >
           <option value="">Chọn role...</option>
           {availableRoles.map(role => (
             <option key={role} value={role}>{role}</option>
           ))}
-        </select>
+        </AppSelect>
         <button
           onClick={onAddRole}
           className="px-3 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-xs font-bold transition-colors"
@@ -914,85 +1033,94 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md" onClick={onClose}>
       <div
-        className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md shadow-2xl"
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-700/80 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 shadow-2xl shadow-slate-950/60"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-          <h3 className="font-bold text-slate-100">Chi tiết thành viên</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">
-            <X size={18} />
+        <div className="relative overflow-hidden border-b border-slate-800/80 bg-gradient-to-br from-sky-500/15 via-slate-900/70 to-indigo-500/10 px-6 py-5">
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 rounded-lg border border-slate-700/80 bg-slate-950/45 p-2 text-slate-400 transition-colors hover:border-slate-500 hover:bg-slate-900 hover:text-slate-100"
+          >
+            <X size={16} />
           </button>
-        </div>
 
-        <div className="p-6 space-y-4">
-          {/* Avatar & Name */}
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-slate-700 overflow-hidden flex items-center justify-center">
-              {member.avatar ? (
-                <img
-                  src={`https://cdn.discordapp.com/avatars/${member.discordId}/${member.avatar}.png?size=128`}
-                  alt=""
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <span className="text-2xl font-bold text-slate-400">
-                  {member.name[0]?.toUpperCase()}
+          <div className="pr-12">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-sky-200/80">Chi tiết thành viên</p>
+            <div className="mt-4 flex items-center gap-4">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-sky-300/20 bg-slate-900/80 shadow-xl shadow-slate-950/35">
+                {member.avatar ? (
+                  <img
+                    src={`https://cdn.discordapp.com/avatars/${member.discordId}/${member.avatar}.png?size=128`}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className="text-2xl font-black text-sky-100">
+                    {member.name[0]?.toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <h3 className="truncate text-xl font-black text-slate-100">{member.name}</h3>
+                {member.discordId && (
+                  <p className="mt-1 truncate text-xs font-medium text-slate-400">@{member.discordUsername || 'discord'}</p>
+                )}
+                <span
+                  className="mt-3 inline-flex max-w-full items-center rounded-full border px-3 py-1 text-[11px] font-black"
+                  style={{
+                    backgroundColor: `${CLASS_COLORS[member.classType]}18`,
+                    borderColor: `${CLASS_COLORS[member.classType]}55`,
+                    color: CLASS_COLORS[member.classType],
+                  }}
+                >
+                  <span className="truncate">{member.classType}</span>
                 </span>
-              )}
-            </div>
-            <div>
-              <h4 className="text-lg font-bold text-slate-200">{member.name}</h4>
-              {member.discordId && (
-                <p className="text-sm text-slate-500">@{member.discordUsername || 'discord'}</p>
-              )}
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+        <div className="max-h-[65vh] space-y-4 overflow-y-auto p-5 custom-scrollbar">
+          <section className="space-y-3 rounded-xl border border-slate-800/80 bg-slate-950/35 p-4 shadow-sm shadow-slate-950/20">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Tên ingame
             </label>
             <div className="flex gap-2">
               <input
                 value={ingameName}
                 onChange={e => setIngameName(e.target.value)}
-                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                className="min-w-0 flex-1 rounded-lg border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-xs font-medium text-slate-200 placeholder:text-slate-500 focus:border-sky-400/70 focus:outline-none"
                 placeholder="Nhập tên ingame"
               />
               <button
                 onClick={handleSaveIngameName}
                 disabled={!canSave || saving}
-                className="px-3 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 disabled:hover:bg-blue-500"
+                className="rounded-lg bg-sky-500 px-4 py-2 text-xs font-black text-white shadow-sm shadow-sky-950/20 transition-colors hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-sky-500"
               >
                 {saving ? 'Đang lưu...' : 'Lưu'}
               </button>
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/30 px-3 py-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-400">Tên Discord</span>
-              <span className="text-xs font-medium text-slate-300 text-right">{member.discordDisplayName || member.name}</span>
+          <section className="space-y-3 rounded-xl border border-slate-800/80 bg-slate-950/35 p-4 shadow-sm shadow-slate-950/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Thông tin Discord</p>
+            <div className="space-y-2">
+              <MyInfoRow label="Tên Discord" value={member.discordDisplayName || member.name} />
+              {member.discordUsername && <MyInfoRow label="Username" value={`@${member.discordUsername}`} />}
             </div>
-            {member.discordUsername && (
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-slate-400">Username</span>
-                <span className="text-xs font-medium text-slate-300 text-right">@{member.discordUsername}</span>
-              </div>
-            )}
-          </div>
+          </section>
 
-          {/* Class */}
-          <div className="space-y-2 py-3 border-b border-slate-800">
+          <section className="space-y-3 rounded-xl border border-slate-800/80 bg-slate-950/35 p-4 shadow-sm shadow-slate-950/20">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-slate-400">Phái</span>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quản lý phái</p>
               <span
-                className="text-xs font-bold px-2 py-1 rounded"
+                className="max-w-[180px] truncate rounded-full border px-2.5 py-1 text-[11px] font-black"
                 style={{
-                  backgroundColor: `${CLASS_COLORS[member.classType]}20`,
+                  backgroundColor: `${CLASS_COLORS[member.classType]}18`,
+                  borderColor: `${CLASS_COLORS[member.classType]}55`,
                   color: CLASS_COLORS[member.classType],
                 }}
               >
@@ -1000,60 +1128,56 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
               </span>
             </div>
             <div className="flex gap-2">
-              <select
+              <AppSelect
                 value={selectedClass}
                 onChange={event => setSelectedClass(event.target.value as ClassType)}
-                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                className="flex-1"
               >
                 {CLASSES.map(cls => (
                   <option key={cls} value={cls}>{cls}</option>
                 ))}
-              </select>
+              </AppSelect>
               <button
                 onClick={handleSaveClassRole}
                 disabled={!canSaveClass || savingClass}
-                className="px-3 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 disabled:hover:bg-blue-500"
+                className="rounded-lg bg-sky-500 px-4 py-2 text-xs font-black text-white shadow-sm shadow-sky-950/20 transition-colors hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-sky-500"
               >
                 {savingClass ? 'Đang lưu...' : 'Đổi phái'}
               </button>
             </div>
-            <p className={cn('text-[11px]', mappedClassRole ? 'text-slate-500' : 'text-amber-300')}>
+            <p className={cn('text-[11px] font-medium', mappedClassRole ? 'text-slate-500' : 'text-amber-300')}>
               {mappedClassRole ? `Discord role sẽ đồng bộ: ${mappedClassRole}` : 'Chưa cấu hình Discord role cho phái này.'}
             </p>
-          </div>
+          </section>
 
           {member.previousClassType && member.previousClassType !== member.classType && (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-xs text-amber-300 space-y-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={14} />
-                <span>Đã đổi phái: {member.previousClassType} → {member.classType}</span>
-                {member.classChangedAt && (
-                  <span className="text-amber-500 ml-auto">{new Date(member.classChangedAt).toLocaleString('vi-VN')}</span>
-                )}
+            <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200 shadow-sm shadow-amber-950/10">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-300" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-black">Đã đổi phái:</span>
+                    <span className="font-bold">{member.previousClassType} → {member.classType}</span>
+                    {member.classChangedAt && (
+                      <span className="text-[11px] text-amber-400/80">{new Date(member.classChangedAt).toLocaleString('vi-VN')}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={onAcknowledgeClassChange}
+                    className="rounded-lg border border-amber-500/40 bg-amber-500/20 px-3 py-1.5 text-[11px] font-black text-amber-100 transition-colors hover:bg-amber-500/30"
+                  >
+                    Đã xử lý
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={onAcknowledgeClassChange}
-                className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-[11px] font-bold text-amber-200 transition-colors"
-              >
-                Đã xử lý
-              </button>
-            </div>
+            </section>
           )}
-
-          {/* Status */}
-          <div className="flex items-center justify-between py-3 border-t border-slate-800">
-            <span className="text-xs text-slate-400">Trạng thái</span>
-            <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-              <CheckCircle size={12} />
-              Đang trong bang
-            </span>
-          </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-800 flex justify-end">
+        <div className="flex justify-end border-t border-slate-800/80 bg-slate-950/45 px-5 py-4">
           <button
             onClick={onDelete}
-            className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-xs font-bold transition-colors"
+            className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/15 px-4 py-2 text-xs font-black text-red-300 transition-colors hover:bg-red-500/25 hover:text-red-200"
           >
             <Trash2 size={14} />
             Gỡ role Bang Viên

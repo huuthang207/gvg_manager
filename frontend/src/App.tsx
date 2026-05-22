@@ -872,7 +872,6 @@ export default function App() {
               members={memberPool}
               onImport={handleDiscordImport}
               onDelete={handleDeleteMember}
-              onRefresh={handleSyncDiscord}
               onAcknowledgeClassChange={handleAcknowledgeClassChange}
               onUpdateIngameName={handleUpdateIngameName}
               onUpdateMemberClassRole={handleUpdateMemberClassRole}
@@ -885,7 +884,6 @@ export default function App() {
               roleConfig={roleConfig}
               onUpdateRoleConfig={handleUpdateRoleConfig}
               onResetCurrentGuildData={handleResetCurrentGuildData}
-              syncing={syncing}
               lastSyncedAt={lastSyncedAt}
             />
           )}

@@ -7,7 +7,7 @@ import React from 'react';
 import { Member, Skill, SquadGroup } from '../../types.ts';
 import { LineupSnapshotActions, LineupSnapshotState } from '../../hooks/useLineupSnapshots.ts';
 import { DiscordUser } from '../../services/discordApi.ts';
-import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
+import { CLASSES, CLASS_COLORS, CLASS_ICONS, getClassIcon } from '../../constants.ts';
 import { TeamCard } from './TeamCard.tsx';
 import { Archive, BarChart3, ChevronDown, ClipboardList, MessageSquareText, RotateCcw, Save, Search } from 'lucide-react';
 import { SnapshotSaveModal } from './SnapshotSaveModal.tsx';
@@ -332,7 +332,11 @@ Bảng phân công
                         <tr key={row.key} className="bg-slate-900/45 text-slate-200">
                           <td className="rounded-l-lg px-2 py-1.5">
                             <div className="flex min-w-0 items-center gap-2">
-                              <img src={CLASS_ICONS[row.member.classType]} alt="" className="h-6 w-6 shrink-0 object-contain" />
+                              {getClassIcon(row.member.classType) ? (
+                                <img src={getClassIcon(row.member.classType)!} alt="" className="h-6 w-6 shrink-0 object-contain" />
+                              ) : (
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950/50 text-[9px] font-black text-slate-300">?</div>
+                              )}
                               <span className="truncate font-bold text-slate-100">{row.member.name}</span>
                               {row.note && <MessageSquareText size={13} className="shrink-0 text-emerald-300" />}
                             </div>

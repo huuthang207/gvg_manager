@@ -417,6 +417,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
         <SavedLineupsView
           snapshots={snapshotState.snapshots}
           selectedSnapshotId={snapshotState.selectedSnapshotId}
+          pendingSnapshotId={snapshotState.pendingSnapshotId}
           selectedSnapshot={snapshotState.selectedSnapshot}
           loading={snapshotState.snapshotsLoading}
           detailLoading={snapshotState.snapshotDetailLoading}
@@ -427,6 +428,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
           skills={skills}
           getMemberById={getMemberById}
           onSelectSnapshot={snapshotId => { void snapshotActions.selectSnapshot(snapshotId); }}
+          variant="page"
           onRestoreSnapshot={() => undefined}
           onDeleteSnapshot={() => undefined}
         />

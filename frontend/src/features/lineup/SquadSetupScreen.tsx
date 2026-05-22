@@ -16,6 +16,9 @@ interface DraftGroup {
   teamNames: string[];
 }
 
+const MAX_TEAMS_PER_GROUP = 5;
+const MAX_TOTAL_TEAMS = 10;
+
 export const SquadSetupScreen: React.FC<SquadSetupScreenProps> = ({ onCreate }) => {
   const [groupCount, setGroupCount] = useState(3);
   const [groups, setGroups] = useState<DraftGroup[]>([
@@ -35,14 +38,14 @@ export const SquadSetupScreen: React.FC<SquadSetupScreenProps> = ({ onCreate }) 
   }, [groupCount]);
 
   const updateGroupCount = (nextCount: number) => {
-    setGroupCount(Math.min(10, Math.max(1, nextCount)));
+    setGroupCount(Math.min(MAX_TOTAL_TEAMS, Math.max(1, nextCount)));
     setError('');
   };
 
   const updateTeamCount = (groupIndex: number, nextCount: number) => {
     setGroups(prev => {
       const currentTotal = prev.reduce((sum, group, index) => sum + (index === groupIndex ? 0 : group.teamNames.length), 0);
-      const cappedCount = Math.min(10 - currentTotal, Math.max(1, nextCount));
+      const cappedCount = Math.min(MAX_TEAMS_PER_GROUP, MAX_TOTAL_TEAMS - currentTotal, Math.max(1, nextCount));
       return prev.map((group, index) => {
         if (index !== groupIndex) return group;
         return {
@@ -70,8 +73,12 @@ export const SquadSetupScreen: React.FC<SquadSetupScreenProps> = ({ onCreate }) 
   };
 
   const handleCreate = () => {
-    if (totalTeams < 1 || totalTeams > 10) {
-      setError('Tổng số đội phải từ 1 đến 10.');
+    if (totalTeams < 1 || totalTeams > MAX_TOTAL_TEAMS) {
+      setError(`Tổng số đội phải từ 1 đến ${MAX_TOTAL_TEAMS}.`);
+      return;
+    }
+    if (groups.some(group => group.teamNames.length > MAX_TEAMS_PER_GROUP)) {
+      setError(`Mỗi đoàn chỉ được tối đa ${MAX_TEAMS_PER_GROUP} đội.`);
       return;
     }
     if (groups.some(group => !group.name.trim())) {
@@ -106,7 +113,7 @@ export const SquadSetupScreen: React.FC<SquadSetupScreenProps> = ({ onCreate }) 
             </div>
             <div className="min-w-0">
               <h2 className="text-base font-black uppercase tracking-[0.18em] text-white">Khởi tạo đội hình</h2>
-              <p className="mt-1 text-[11px] text-slate-500">Thiết lập đoàn và đội trước khi bắt đầu sắp xếp. Tối đa 10 đội.</p>
+              <p className="mt-1 text-[11px] text-slate-500">Thiết lập đoàn và đội trước khi bắt đầu sắp xếp. Tối đa {MAX_TEAMS_PER_GROUP} đội mỗi đoàn, {MAX_TOTAL_TEAMS} đội toàn đội hình.</p>
             </div>
           </div>
         </div>
@@ -156,7 +163,7 @@ export const SquadSetupScreen: React.FC<SquadSetupScreenProps> = ({ onCreate }) 
                       <Counter
                         value={group.teamNames.length}
                         min={1}
-                        max={Math.max(1, 10 - otherTeamTotal)}
+                        max={Math.max(1, Math.min(MAX_TEAMS_PER_GROUP, MAX_TOTAL_TEAMS - otherTeamTotal))}
                         onChange={value => updateTeamCount(groupIndex, value)}
                       />
                     </div>

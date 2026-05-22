@@ -62,7 +62,7 @@ Backend `.env` is based on `backend/.env.example` and expects:
 - `PORT` defaults to `3001` if unset.
 - `CORS_ORIGINS` can override allowed frontend origins; otherwise `FRONTEND_URL` or the local Vite origins are used.
 - `SESSION_COOKIE_SECURE` and `SESSION_COOKIE_SAME_SITE` control the httpOnly session cookie; use secure `SameSite=None` cookies for cross-site HTTPS deployments.
-- `DISCORD_SYNC_FALLBACK_INTERVAL_MS` controls the periodic fallback guild sync interval, with a minimum of 60 seconds.
+- `DISCORD_SYNC_FALLBACK_INTERVAL_MS` optionally controls the periodic fallback guild sync interval; the backend defaults to 300000 ms and enforces a minimum of 60 seconds.
 
 Frontend `.env` is based on `frontend/.env.example`; `VITE_DISCORD_API_URL` points to the backend. Set `VITE_REALTIME_DEBUG=true` to log WebSocket activity outside dev mode.
 
@@ -72,7 +72,7 @@ Frontend `.env` is based on `frontend/.env.example`; `VITE_DISCORD_API_URL` poin
 
 - `src/server.ts` creates the Express app, enables CORS for the local frontend, installs route modules, starts the HTTP/WebSocket server, starts the Discord bot, and schedules fallback Discord syncs.
 - Route modules live under `src/routes/` and are grouped by domain: auth, guilds, members, lineup, settings, attendance, and health.
-- Services under `src/services/` hold domain logic such as auth, guild switching, settings, member operations, attendance sessions, realtime publishing, and sync orchestration.
+- Services under `src/services/` hold domain logic such as auth, guild switching, settings, member operations, attendance sessions, lineup edit locks, realtime publishing, and sync orchestration.
 - Prisma is initialized through `src/db.ts`; the schema in `prisma/schema.prisma` models users, Discord guilds, memberships/roles, members, lineup teams/slots, squad groups, skills, lineup snapshots, and attendance sessions/votes/channel config.
 - Discord integration is split between OAuth/user guild calls (`src/oauth2.ts`), bot/guild member calls (`src/discord.ts`), bot startup/events (`src/bot.ts`), attendance button handling (`src/botAttendance.ts`, `src/services/attendanceDiscordService.ts`), and sync persistence (`src/discordSync.ts`, `src/services/syncService.ts`).
 - Authorization is session-based. `src/session.ts` manages the cookie-backed session store, `src/auth.ts` resolves sessions, and `src/permissions.ts` maps guild roles/memberships to app permissions.
@@ -89,4 +89,6 @@ Frontend `.env` is based on `frontend/.env.example`; `VITE_DISCORD_API_URL` poin
 
 ## Current repository-specific caveats
 
+- There is no root `package.json`; run npm commands from `frontend/` or `backend/`.
+- No root `README.md`, backend README, Cursor rules, or GitHub Copilot instructions are present; `frontend/README.md` covers local frontend startup.
 - The root directory is the git repository in this environment; `frontend/` also has its own `.gitignore`.
