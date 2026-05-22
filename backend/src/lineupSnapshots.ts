@@ -10,6 +10,7 @@ export type PersistedSquadGroupInput = Array<{
     name?: string;
     memberIds?: string[];
     reserveMemberIds?: string[];
+    memberNotes?: Record<string, string>;
   }>;
 }>;
 
@@ -21,15 +22,16 @@ async function runExclusiveSquadLayoutSave<T>(guildId: string, operation: () => 
   const current = new Promise<void>(resolve => {
     release = resolve;
   });
+  const queued = previous.then(() => current);
 
-  squadLayoutSaveQueues.set(guildId, previous.then(() => current));
+  squadLayoutSaveQueues.set(guildId, queued);
   await previous;
 
   try {
     return await operation();
   } finally {
     release();
-    if (squadLayoutSaveQueues.get(guildId) === current) {
+    if (squadLayoutSaveQueues.get(guildId) === queued) {
       squadLayoutSaveQueues.delete(guildId);
     }
   }
@@ -43,21 +45,32 @@ function removeDuplicateSnapshotMembers(groups: ReturnType<typeof serializeSnaps
   return groups.map(group => ({
     ...group,
     leaderMemberId: group.leaderMemberId && seenMemberIds.has(group.leaderMemberId) ? null : group.leaderMemberId,
-    teams: group.teams.map(team => ({
-      ...team,
-      memberIds: team.memberIds.map(memberId => {
+    teams: group.teams.map(team => {
+      const memberNotes = { ...(team.memberNotes ?? {}) };
+      const filterMemberId = (memberId: string) => {
         if (!memberId) return '';
-        if (seenMemberIds.has(memberId)) return '';
+        if (seenMemberIds.has(memberId)) {
+          delete memberNotes[memberId];
+          return '';
+        }
         seenMemberIds.add(memberId);
         return memberId;
-      }),
-      reserveMemberIds: team.reserveMemberIds.map(memberId => {
-        if (!memberId) return '';
-        if (seenMemberIds.has(memberId)) return '';
-        seenMemberIds.add(memberId);
-        return memberId;
-      }),
-    })),
+      };
+
+      const memberIds = team.memberIds.map(filterMemberId);
+      const reserveMemberIds = team.reserveMemberIds.map(filterMemberId);
+      const assignedMemberIds = new Set([...memberIds, ...reserveMemberIds].filter(Boolean));
+      Object.keys(memberNotes).forEach(memberId => {
+        if (!assignedMemberIds.has(memberId)) delete memberNotes[memberId];
+      });
+
+      return {
+        ...team,
+        memberIds,
+        reserveMemberIds,
+        memberNotes,
+      };
+    }),
   }));
 }
 
@@ -104,7 +117,7 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
         where: { guildId },
         include: {
           teams: {
-            include: { slots: true },
+            include: { slots: { orderBy: [{ slotType: 'asc' }, { slotIndex: 'asc' }] } },
           },
         },
         orderBy: { orderIndex: 'asc' },
@@ -123,7 +136,7 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
         where: { guildId },
         include: {
           teams: {
-            include: { slots: true },
+            include: { slots: { orderBy: [{ slotType: 'asc' }, { slotIndex: 'asc' }] } },
           },
         },
         orderBy: { orderIndex: 'asc' },
@@ -165,7 +178,7 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
 
         const refreshedTeams = await tx.squadTeam.findMany({
           where: { groupId: savedGroup.id },
-          include: { slots: true },
+          include: { slots: { orderBy: [{ slotType: 'asc' }, { slotIndex: 'asc' }] } },
           orderBy: { orderIndex: 'asc' },
         });
         const teamById = new Map(refreshedTeams.map(team => [team.id, team]));
@@ -193,17 +206,30 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
           const reserveIds = [...(team.reserveMemberIds ?? [])].slice(0, 3);
           while (reserveIds.length < 3) reserveIds.push('');
 
+          const getAssignmentNote = (memberId: string | null) => {
+            if (!memberId) return '';
+            return (team.memberNotes?.[memberId] ?? '').trim();
+          };
+
           const slotPayload = [
-            ...mainIds.map((memberId, slotIndex) => ({
-              slotType: 'main',
-              slotIndex,
-              memberId: memberId && validMemberIds.has(memberId) ? memberId : null,
-            })),
-            ...reserveIds.map((memberId, slotIndex) => ({
-              slotType: 'reserve',
-              slotIndex,
-              memberId: memberId && validMemberIds.has(memberId) ? memberId : null,
-            })),
+            ...mainIds.map((memberId, slotIndex) => {
+              const validMemberId = memberId && validMemberIds.has(memberId) ? memberId : null;
+              return {
+                slotType: 'main',
+                slotIndex,
+                memberId: validMemberId,
+                assignmentNote: getAssignmentNote(validMemberId),
+              };
+            }),
+            ...reserveIds.map((memberId, slotIndex) => {
+              const validMemberId = memberId && validMemberIds.has(memberId) ? memberId : null;
+              return {
+                slotType: 'reserve',
+                slotIndex,
+                memberId: validMemberId,
+                assignmentNote: getAssignmentNote(validMemberId),
+              };
+            }),
           ];
 
           for (const slot of slotPayload) {
@@ -217,12 +243,14 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
               },
               update: {
                 memberId: slot.memberId,
+                assignmentNote: slot.assignmentNote,
               },
               create: {
                 teamId: savedTeam.id,
                 slotType: slot.slotType,
                 slotIndex: slot.slotIndex,
                 memberId: slot.memberId,
+                assignmentNote: slot.assignmentNote,
               },
             });
           }
@@ -289,6 +317,7 @@ async function writeCurrentGuildLayoutToSnapshot(
           slotIndex: slot.slotIndex,
           memberId: slot.memberId,
           skillIds: slot.member?.memberSkills.map(memberSkill => memberSkill.skillId) ?? [],
+          assignmentNote: slot.assignmentNote,
         })),
       });
     }
@@ -296,7 +325,7 @@ async function writeCurrentGuildLayoutToSnapshot(
 }
 
 export async function createLineupSnapshotFromCurrentGuild(guildId: string, name: string) {
-  return prisma.$transaction(async tx => {
+  return runExclusiveSquadLayoutSave(guildId, () => prisma.$transaction(async tx => {
     const snapshot = await tx.lineupSnapshot.create({
       data: { guildId, name },
     });
@@ -309,7 +338,9 @@ export async function createLineupSnapshotFromCurrentGuild(guildId: string, name
         groups: {
           include: {
             teams: {
-              include: { slots: true },
+              include: {
+                slots: { orderBy: [{ slotType: 'asc' }, { slotIndex: 'asc' }] },
+              },
               orderBy: { orderIndex: 'asc' },
             },
           },
@@ -317,11 +348,11 @@ export async function createLineupSnapshotFromCurrentGuild(guildId: string, name
         },
       },
     });
-  });
+  }));
 }
 
 export async function overwriteLineupSnapshotFromCurrentGuild(guildId: string, snapshotId: string, name?: string) {
-  return prisma.$transaction(async tx => {
+  return runExclusiveSquadLayoutSave(guildId, () => prisma.$transaction(async tx => {
     const existingSnapshot = await tx.lineupSnapshot.findFirst({
       where: { id: snapshotId, guildId },
       select: { id: true },
@@ -344,7 +375,9 @@ export async function overwriteLineupSnapshotFromCurrentGuild(guildId: string, s
         groups: {
           include: {
             teams: {
-              include: { slots: true },
+              include: {
+                slots: { orderBy: [{ slotType: 'asc' }, { slotIndex: 'asc' }] },
+              },
               orderBy: { orderIndex: 'asc' },
             },
           },
@@ -352,7 +385,7 @@ export async function overwriteLineupSnapshotFromCurrentGuild(guildId: string, s
         },
       },
     });
-  });
+  }));
 }
 
 export async function restoreLineupSnapshotToCurrentGuild(guildId: string, snapshotId: string) {
@@ -362,7 +395,7 @@ export async function restoreLineupSnapshotToCurrentGuild(guildId: string, snaps
       groups: {
         include: {
           teams: {
-            include: { slots: true },
+            include: { slots: { orderBy: [{ slotType: 'asc' }, { slotIndex: 'asc' }] } },
             orderBy: { orderIndex: 'asc' },
           },
         },
@@ -411,7 +444,7 @@ export async function getLineupSnapshotDetailForGuild(guildId: string, snapshotI
       groups: {
         include: {
           teams: {
-            include: { slots: true },
+            include: { slots: { orderBy: [{ slotType: 'asc' }, { slotIndex: 'asc' }] } },
             orderBy: { orderIndex: 'asc' },
           },
         },

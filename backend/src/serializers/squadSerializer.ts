@@ -1,4 +1,4 @@
-type Slot = { slotType: string; slotIndex: number; memberId: string | null };
+type Slot = { slotType: string; slotIndex: number; memberId: string | null; assignmentNote?: string | null };
 type SnapshotSlot = Slot & { skillIds?: string[] };
 
 type TeamWithSlots = {
@@ -19,6 +19,7 @@ type GroupWithTeams = {
 export function toTeamSlotArrays(team: TeamWithSlots) {
   const memberIds = Array(6).fill('');
   const reserveMemberIds = Array(3).fill('');
+  const memberNotes: Record<string, string> = {};
 
   for (const slot of team.slots) {
     if (slot.slotType === 'main' && slot.slotIndex < memberIds.length) {
@@ -27,6 +28,11 @@ export function toTeamSlotArrays(team: TeamWithSlots) {
     if (slot.slotType === 'reserve' && slot.slotIndex < reserveMemberIds.length) {
       reserveMemberIds[slot.slotIndex] = slot.memberId ?? '';
     }
+
+    const note = slot.assignmentNote?.trim();
+    if (slot.memberId && note) {
+      memberNotes[slot.memberId] = note;
+    }
   }
 
   return {
@@ -34,6 +40,7 @@ export function toTeamSlotArrays(team: TeamWithSlots) {
     name: team.name,
     memberIds,
     reserveMemberIds,
+    memberNotes,
   };
 }
 

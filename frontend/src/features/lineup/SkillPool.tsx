@@ -11,9 +11,6 @@ import { useDraggable } from '@dnd-kit/core';
 
 interface SkillPoolProps {
   skills: Skill[];
-  onAddSkills: (skills: Omit<Skill, 'id'>[]) => void;
-  onDeleteSkill: (id: string) => void;
-  onClearAllSkills: () => void;
 }
 
 export const SkillPool: React.FC<SkillPoolProps> = ({
@@ -28,16 +25,6 @@ export const SkillPool: React.FC<SkillPoolProps> = ({
   return (
     <div className="flex flex-col h-full min-h-0 bg-slate-950/20 overflow-hidden transition-all">
       <div className="flex flex-col gap-4 border-b border-slate-800/80 bg-slate-950/35 p-4 backdrop-blur-md">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-100 flex items-center gap-2">
-            <Zap size={16} className="text-amber-400" />
-            Kỹ Năng
-            <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full ml-1">
-              {skills.length}
-            </span>
-          </h2>
-        </div>
-        
         <div className="relative px-0.5">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
           <input 

@@ -92,7 +92,6 @@ export function createLineupRoutes() {
 
       try {
         const lock = renewLineupEditLock(access, auth.user);
-        publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'lineup_lock_changed' });
         res.json({ lock });
       } catch (err) {
         if (err instanceof LineupEditLockError) {
@@ -187,6 +186,7 @@ export function createLineupRoutes() {
             name?: string;
             memberIds?: string[];
             reserveMemberIds?: string[];
+            memberNotes?: Record<string, string>;
           }>;
         }>;
       };

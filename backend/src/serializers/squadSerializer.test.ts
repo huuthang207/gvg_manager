@@ -16,21 +16,26 @@ test('toTeamSlotArrays maps main/reserve slots to fixed arrays', () => {
 
   assert.deepEqual(output.memberIds, ['m1', '', '', '', '', 'm6']);
   assert.deepEqual(output.reserveMemberIds, ['', 'r2', '']);
+  assert.deepEqual(output.memberNotes, {});
 });
 
-test('toSnapshotTeamSlotArrays maps snapshot slot skills', () => {
+test('toSnapshotTeamSlotArrays maps snapshot slot skills and notes', () => {
   const output = toSnapshotTeamSlotArrays({
     id: 't1',
     name: 'Team 1',
     slots: [
-      { slotType: 'main', slotIndex: 0, memberId: 'm1', skillIds: ['s1', 's2'] },
-      { slotType: 'reserve', slotIndex: 1, memberId: 'r2', skillIds: ['s3'] },
+      { slotType: 'main', slotIndex: 0, memberId: 'm1', skillIds: ['s1', 's2'], assignmentNote: 'Call target' },
+      { slotType: 'reserve', slotIndex: 1, memberId: 'r2', skillIds: ['s3'], assignmentNote: 'Dự bị buff' },
     ],
   });
 
   assert.deepEqual(output.slotSkills, {
     'main-0': ['s1', 's2'],
     'reserve-1': ['s3'],
+  });
+  assert.deepEqual(output.memberNotes, {
+    m1: 'Call target',
+    r2: 'Dự bị buff',
   });
 });
 

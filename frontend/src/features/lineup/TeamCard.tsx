@@ -44,6 +44,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({ team, skills, index, getMemb
             onRemoveSkillFromMember={onRemoveSkillFromMember}
             readOnly={readOnly}
             snapshotSkillIds={hideSkills ? [] : team.slotSkills?.[`main-${idx}`]}
+            assignmentNote={memberId ? team.memberNotes?.[memberId] : undefined}
           />
         ))}
       </div>
@@ -66,6 +67,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({ team, skills, index, getMemb
               onRemoveSkillFromMember={onRemoveSkillFromMember}
               readOnly={readOnly}
               snapshotSkillIds={hideSkills ? [] : team.slotSkills?.[`reserve-${idx}`]}
+              assignmentNote={memberId ? team.memberNotes?.[memberId] : undefined}
             />
           ))}
         </div>

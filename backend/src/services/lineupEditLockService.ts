@@ -1,6 +1,6 @@
 import { AccessibleGuild, GuildRole } from '../permissions.js';
 
-const LINEUP_EDIT_LOCK_TTL_MS = Number(process.env.LINEUP_EDIT_LOCK_TTL_MS ?? 60000);
+const LINEUP_EDIT_LOCK_TTL_MS = Number(process.env.LINEUP_EDIT_LOCK_TTL_MS ?? 300000);
 
 type LineupEditLockRecord = {
   guildId: string;

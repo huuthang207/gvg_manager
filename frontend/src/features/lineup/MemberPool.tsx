@@ -5,9 +5,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { Member, ClassType, Skill } from '../../types.ts';
-import { CLASSES, CLASS_COLORS } from '../../constants.ts';
+import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { DraggableMember } from './MemberCard.tsx';
-import { Search, Filter, Users } from 'lucide-react';
+import { Search, Filter } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 
 import { useDroppable } from '@dnd-kit/core';
@@ -16,7 +16,6 @@ interface MemberPoolProps {
   members: Member[];
   skills: Skill[];
   assignedMemberIds: Set<string>;
-  onDeleteMember: (id: string) => void;
   onRemoveSkillFromMember: (memberId: string, skillId: string) => void;
 }
 
@@ -24,7 +23,6 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
   members,
   skills,
   assignedMemberIds,
-  onDeleteMember,
   onRemoveSkillFromMember,
 }) => {
   const [search, setSearch] = useState('');
@@ -67,23 +65,6 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
     >
       <div ref={setNodeRef} className="pointer-events-none absolute inset-0" />
       <div className="flex flex-col gap-4 border-b border-slate-800/80 bg-slate-950/35 p-4 backdrop-blur-md">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-slate-100 flex items-center gap-2">
-            <Users size={16} className="text-sky-400" />
-            Thành Viên 
-            <div className="flex items-center gap-1.5 ml-1">
-              <span className="text-[10px] bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full">
-                {unassignedMembers.length}
-              </span>
-              {search && (
-                <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">
-                  {filteredMembers.length}
-                </span>
-              )}
-            </div>
-          </h2>
-        </div>
-
         <div className="relative px-0.5">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
           <input 
@@ -95,43 +76,49 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
           />
         </div>
 
-        <div className="flex flex-wrap gap-1.5 px-0.5">
-          <button
-            onClick={() => setSelectedClass('All')}
-            className={cn(
-              "px-2 py-1 text-[10px] font-bold uppercase rounded-md border transition-all flex items-center gap-1.5",
-              selectedClass === 'All' 
-                ? "bg-slate-200 text-slate-950 border-slate-200 shadow-md"
-                : "bg-slate-800/60 border-slate-700/60 text-slate-400 hover:border-slate-600 hover:text-slate-200"
-            )}
-          >
-            Tất cả 
-            <span className={cn(
-              "text-[9px] opacity-70",
-              selectedClass === 'All' ? "text-slate-900" : "text-slate-500"
-            )}>
-              {unassignedMembers.length}
-            </span>
-          </button>
-          {CLASSES.map(cls => (
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/45 p-1.5 shadow-inner shadow-black/10">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
-              key={cls}
-              onClick={() => setSelectedClass(cls)}
+              onClick={() => setSelectedClass('All')}
               className={cn(
-                "px-2 py-1 text-[10px] font-bold uppercase rounded-md border transition-all flex items-center gap-1.5",
-                selectedClass === cls ? "text-slate-950 shadow-md" : "bg-slate-800/60 border-slate-700/60 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                "flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-1 text-[10px] font-bold transition-all",
+                selectedClass === 'All'
+                  ? "border-sky-300/70 bg-sky-400/15 text-sky-100 shadow-lg shadow-sky-950/25 ring-1 ring-sky-300/25"
+                  : "border-slate-700/60 bg-slate-800/45 text-slate-400 hover:border-sky-400/35 hover:bg-slate-800/75 hover:text-slate-100"
               )}
-              style={selectedClass === cls ? { backgroundColor: CLASS_COLORS[cls], border: 'none' } : {}}
+              title="Tất cả"
             >
-              {cls.split(' ').map(s => s[0]).join('')}
-              <span className={cn(
-                "text-[9px] opacity-70",
-                selectedClass === cls ? "text-slate-900" : "text-slate-500"
-              )}>
-                {classCounts[cls]}
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-700/70 text-[9px] text-slate-200">
+                All
               </span>
+              <span>{unassignedMembers.length}</span>
             </button>
-          ))}
+            {CLASSES.map(cls => {
+              const selected = selectedClass === cls;
+              return (
+                <button
+                  key={cls}
+                  onClick={() => setSelectedClass(cls)}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1 rounded-lg border px-1.5 py-1 text-[10px] font-bold transition-all",
+                    selected
+                      ? "border-transparent bg-slate-900 text-white shadow-lg shadow-black/20 ring-1"
+                      : "border-slate-700/60 bg-slate-800/45 text-slate-400 hover:border-slate-500/80 hover:bg-slate-800/75 hover:text-slate-100"
+                  )}
+                  style={selected ? { boxShadow: `0 0 0 1px ${CLASS_COLORS[cls]}66, 0 10px 24px rgba(2, 6, 23, 0.25)` } : {}}
+                  title={cls}
+                >
+                  <span
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border bg-slate-950/40 p-0.5"
+                    style={{ borderColor: `${CLASS_COLORS[cls]}66`, backgroundColor: `${CLASS_COLORS[cls]}18` }}
+                  >
+                    <img src={CLASS_ICONS[cls]} alt="" className="h-full w-full object-contain" />
+                  </span>
+                  <span style={selected ? { color: CLASS_COLORS[cls] } : {}}>{classCounts[cls]}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -148,7 +135,6 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
               member={member}
               skills={(member.assignedSkills || []).map(id => skills.find(s => s.id === id)).filter(Boolean) as Skill[]}
               origin="pool"
-              onDelete={() => onDeleteMember(member.id)}
               onRemoveSkill={(skillId) => onRemoveSkillFromMember(member.id, skillId)}
             />
           ))

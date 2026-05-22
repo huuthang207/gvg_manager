@@ -66,18 +66,12 @@ export function useAppStateLoader(params: UseAppStateLoaderParams) {
     setMemberPool(prev => {
       const previousSkillsByMemberId = new Map(prev.map(member => [member.id, member.assignedSkills || []]));
 
-      return state.members.map(member => {
-        const assignedSkills = member.assignedSkills?.length
-          ? member.assignedSkills
-          : previousSkillsByMemberId.get(member.id) || [];
-
-        return {
-          ...member,
-          assignedSkills,
-          classType: member.classType as Member['classType'],
-          previousClassType: member.previousClassType as Member['classType'] | null | undefined,
-        };
-      });
+      return state.members.map(member => ({
+        ...member,
+        assignedSkills: member.assignedSkills ?? previousSkillsByMemberId.get(member.id) ?? [],
+        classType: member.classType as Member['classType'],
+        previousClassType: member.previousClassType as Member['classType'] | null | undefined,
+      }));
     });
     setSkills(await resolveSkills(state.skills));
     setLastSyncedAt(state.lastSyncedAt);

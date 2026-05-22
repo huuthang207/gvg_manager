@@ -74,14 +74,16 @@ export const SystemDialogProvider: React.FC<React.PropsWithChildren> = ({ childr
   const [activeDialog, setActiveDialog] = React.useState<ActiveDialog | null>(null);
   const queueRef = React.useRef<ActiveDialog[]>([]);
 
-  const showNextDialog = React.useCallback(() => {
-    setActiveDialog(current => current ?? queueRef.current.shift() ?? null);
-  }, []);
-
   const enqueueDialog = React.useCallback((dialog: ActiveDialog) => {
-    queueRef.current.push(dialog);
-    showNextDialog();
-  }, [showNextDialog]);
+    setActiveDialog(current => {
+      if (current) {
+        queueRef.current.push(dialog);
+        return current;
+      }
+
+      return dialog;
+    });
+  }, []);
 
   const alert = React.useCallback<SystemDialogContextValue['alert']>((options) => {
     const normalized = normalizeAlertOptions(options);

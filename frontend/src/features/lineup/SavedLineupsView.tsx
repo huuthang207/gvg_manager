@@ -6,7 +6,7 @@
 import React from 'react';
 import { LineupSnapshotDetail, LineupSnapshotSummary } from '../../services/discordApi.ts';
 import { Member, Skill } from '../../types.ts';
-import { CalendarDays, Maximize2, Minimize2, RotateCcw, Trash2, Users } from 'lucide-react';
+import { CalendarDays, RotateCcw, Trash2, Users } from 'lucide-react';
 import { TeamCard } from './TeamCard.tsx';
 import { getSnapshotActionContent, getSnapshotBadge, RecentSnapshotAction } from './lineupSnapshotUi.ts';
 
@@ -28,8 +28,6 @@ interface SavedLineupsViewProps {
   recentSnapshotAction?: RecentSnapshotAction | null;
   skills: Skill[];
   getMemberById: (id: string) => Member | null;
-  isZoomed?: boolean;
-  onZoomToggle?: () => void;
   onSelectSnapshot: (snapshotId: string) => void;
   onRestoreSnapshot: (snapshotId: string) => void;
   onDeleteSnapshot: (snapshotId: string) => void;
@@ -52,8 +50,6 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
   recentSnapshotAction,
   skills,
   getMemberById,
-  isZoomed = false,
-  onZoomToggle,
   onSelectSnapshot,
   onRestoreSnapshot,
   onDeleteSnapshot,
@@ -70,7 +66,6 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden rounded-2xl border border-slate-800 bg-[#0F172A] shadow-2xl">
-      {!isZoomed && (
       <div className="flex w-[360px] shrink-0 flex-col border-r border-slate-800 bg-slate-900/40">
         <div className="border-b border-slate-800 px-5 py-4">
           <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">Đội hình đã lưu</h2>
@@ -136,7 +131,6 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
           )}
         </div>
       </div>
-      )}
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
@@ -160,18 +154,8 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
               </p>
             )}
           </div>
-          {selectedSnapshot && (onZoomToggle || canRestoreSnapshot || canDeleteSnapshot) && (
+          {selectedSnapshot && (canRestoreSnapshot || canDeleteSnapshot) && (
             <div className="flex items-center gap-2">
-              {onZoomToggle && (
-                <button
-                  onClick={onZoomToggle}
-                  className="inline-flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-300 transition-colors hover:bg-sky-500/20"
-                  title={isZoomed ? 'Thu nhỏ' : 'Phóng to'}
-                >
-                  {isZoomed ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                  {isZoomed ? 'Thu nhỏ' : 'Phóng to'}
-                </button>
-              )}
               {canRestoreSnapshot && (
                 <button
                   onClick={() => onRestoreSnapshot(selectedSnapshot.id)}

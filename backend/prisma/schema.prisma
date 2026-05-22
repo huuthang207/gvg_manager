@@ -271,13 +271,14 @@ model SquadTeam {
 }
 
 model SquadTeamSlot {
-  id        String   @id @default(cuid())
-  teamId    String
-  slotType  String
-  slotIndex Int
-  memberId  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  teamId         String
+  slotType       String
+  slotIndex      Int
+  memberId       String?
+  assignmentNote String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   team   SquadTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
   member Member?   @relation(fields: [memberId], references: [id], onDelete: SetNull)
@@ -327,14 +328,15 @@ model LineupSnapshotTeam {
 }
 
 model LineupSnapshotSlot {
-  id        String   @id @default(cuid())
-  teamId    String
-  slotType  String
-  slotIndex Int
-  memberId  String?
-  skillIds  String[] @default([])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  teamId         String
+  slotType       String
+  slotIndex      Int
+  memberId       String?
+  skillIds       String[] @default([])
+  assignmentNote String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   team   LineupSnapshotTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
   member Member?            @relation("LineupSnapshotSlotMember", fields: [memberId], references: [id], onDelete: SetNull)

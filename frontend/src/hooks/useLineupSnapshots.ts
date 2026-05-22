@@ -15,6 +15,7 @@ import { useSystemDialog } from '../features/app/SystemDialogProvider.tsx';
 
 interface UseLineupSnapshotsOptions {
   applyAppState: (state: Awaited<ReturnType<typeof getAppState>>) => Promise<void>;
+  flushPendingSquadLayoutSave?: () => Promise<void>;
 }
 
 export interface LineupSnapshotState {
@@ -34,13 +35,13 @@ export interface LineupSnapshotActions {
   closeSnapshots: () => void;
   selectSnapshot: (snapshotId: string) => Promise<void>;
   saveSnapshot: (mode: 'create' | 'overwrite', name: string, snapshotId?: string | null) => Promise<void>;
-  restoreSnapshot: (snapshotId: string) => Promise<void>;
+  restoreSnapshot: (snapshotId: string) => Promise<Awaited<ReturnType<typeof getAppState>> | null>;
   removeSnapshot: (snapshotId: string) => Promise<void>;
   resetSnapshots: () => void;
   refreshSnapshots: () => Promise<void>;
 }
 
-export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions) {
+export function useLineupSnapshots({ applyAppState, flushPendingSquadLayoutSave }: UseLineupSnapshotsOptions) {
   const { alert, confirm } = useSystemDialog();
   const [snapshots, setSnapshots] = React.useState<LineupSnapshotSummary[]>([]);
   const [snapshotsOpen, setSnapshotsOpen] = React.useState(false);
@@ -116,6 +117,7 @@ export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions)
     snapshotId?: string | null,
   ) => {
     try {
+      await flushPendingSquadLayoutSave?.();
       const detail = mode === 'overwrite'
         ? await updateLineupSnapshot(snapshotId || '', name)
         : await createLineupSnapshot(name);
@@ -128,7 +130,7 @@ export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions)
       void alert({ message: getErrorMessage(err, 'Không thể lưu đội hình'), variant: 'error' });
       throw err;
     }
-  }, [alert, loadSnapshots]);
+  }, [alert, flushPendingSquadLayoutSave, loadSnapshots]);
 
   const restoreSnapshot = React.useCallback(async (snapshotId: string) => {
     const confirmed = await confirm({
@@ -136,7 +138,7 @@ export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions)
       variant: 'warning',
       confirmLabel: 'Khôi phục',
     });
-    if (!confirmed) return;
+    if (!confirmed) return null;
 
     setSnapshotActionLoading(true);
     try {
@@ -144,8 +146,10 @@ export function useLineupSnapshots({ applyAppState }: UseLineupSnapshotsOptions)
       await applyAppState(state);
       setSnapshotsOpen(false);
       void alert({ message: 'Đã khôi phục đội hình thành công.', variant: 'success' });
+      return state;
     } catch (err) {
       void alert({ message: getErrorMessage(err, 'Không thể khôi phục đội hình'), variant: 'error' });
+      return null;
     } finally {
       setSnapshotActionLoading(false);
     }

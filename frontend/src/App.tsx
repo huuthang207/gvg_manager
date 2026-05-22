@@ -11,9 +11,8 @@ import { TeamLayout } from './features/lineup/TeamLayout.tsx';
 import { AttendanceView } from './features/attendance/AttendanceView.tsx';
 import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMemberClassRole, updateMyIngameName, deleteMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState, updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, acquireLineupEditLock, getLineupEditLock, heartbeatLineupEditLock, overrideLineupEditLock, releaseLineupEditLock, resetCurrentGuildData } from './services/discordApi.ts';
 import { useLineupSnapshots } from './hooks/useLineupSnapshots.ts';
-import { cn } from './lib/utils.ts';
+import { Lock, LockOpen, ShieldAlert } from 'lucide-react';
 import { getErrorMessage } from './lib/error.ts';
-import { Maximize2, Minimize2 } from 'lucide-react';
 import { useAppStateLoader } from './features/app/useAppStateLoader.ts';
 import { useGuildContext } from './features/guild/useGuildContext.ts';
 import { useAuthBootstrap } from './features/auth/useAuthBootstrap.ts';
@@ -21,20 +20,14 @@ import { useSystemDialog } from './features/app/SystemDialogProvider.tsx';
 import { API_BASE } from './services/apiBase.ts';
 
 type Tab = 'dashboard' | 'teams' | 'attendance';
-type LineupEntryMode = 'menu' | 'create' | 'current';
 
-const getLineupEntryStorageKey = (userId: string, guildId: string) => `gvg_lineup_entry_${userId}_${guildId}`;
 const getActiveTabStorageKey = (userId: string, guildId: string) => `gvg_active_tab_${userId}_${guildId}`;
-const isLineupEntryMode = (value: string | null): value is LineupEntryMode => value === 'menu' || value === 'create' || value === 'current';
 const isTab = (value: string | null): value is Tab => value === 'dashboard' || value === 'teams' || value === 'attendance';
 
 export default function App() {
   // Active tab state
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [lineupEntryMode, setLineupEntryMode] = useState<LineupEntryMode>('menu');
 
-  // Zoom state for team layout
-  const [isZoomed, setIsZoomed] = useState(false);
 
   // Auth state
   const [authLoading, setAuthLoading] = useState(true);
@@ -61,6 +54,7 @@ export default function App() {
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
   const appStateRefreshRef = useRef(false);
+  const squadLayoutSaveRef = useRef<Promise<void>>(Promise.resolve());
   const refreshSnapshotsRef = useRef<(() => Promise<void>) | null>(null);
   const realtimeDebugEnabled = import.meta.env.DEV || import.meta.env.VITE_REALTIME_DEBUG === 'true';
   const { alert, confirm } = useSystemDialog();
@@ -72,17 +66,14 @@ export default function App() {
 
   React.useEffect(() => {
     if (!currentUser || !currentGuild) {
-      setLineupEntryMode('menu');
       setActiveTab('dashboard');
       return;
     }
 
     const canManageAttendance = permissions.includes('manage:lineup');
-    const storedMode = localStorage.getItem(getLineupEntryStorageKey(currentUser.id, currentGuild.id));
     const storedTab = localStorage.getItem(getActiveTabStorageKey(currentUser.id, currentGuild.id));
-    setLineupEntryMode(squadGroups.length > 0 ? 'current' : isLineupEntryMode(storedMode) ? storedMode : 'menu');
     setActiveTab(isTab(storedTab) && (storedTab !== 'attendance' || canManageAttendance) ? storedTab : 'dashboard');
-  }, [currentGuild, currentUser, permissions, squadGroups.length]);
+  }, [currentGuild?.id, currentUser?.id]);
 
   const updateActiveTab = useCallback((tab: Tab) => {
     if (tab === 'attendance' && !permissions.includes('manage:lineup')) return;
@@ -93,19 +84,10 @@ export default function App() {
     }
   }, [currentGuild, currentUser, permissions]);
 
-  const updateLineupEntryMode = useCallback((mode: LineupEntryMode) => {
-    setLineupEntryMode(mode);
-    if (currentUser && currentGuild) {
-      localStorage.setItem(getLineupEntryStorageKey(currentUser.id, currentGuild.id), mode);
-    }
-  }, [currentGuild, currentUser]);
-
   const clearCurrentUiState = useCallback(() => {
     if (currentUser && currentGuild) {
-      localStorage.removeItem(getLineupEntryStorageKey(currentUser.id, currentGuild.id));
       localStorage.removeItem(getActiveTabStorageKey(currentUser.id, currentGuild.id));
     }
-    setLineupEntryMode('menu');
     setActiveTab('dashboard');
   }, [currentGuild, currentUser]);
 
@@ -137,7 +119,7 @@ export default function App() {
         const previous = map.get(member.id);
         map.set(member.id, {
           ...normalizeMember(member),
-          assignedSkills: member.assignedSkills?.length ? member.assignedSkills : previous?.assignedSkills || [],
+          assignedSkills: member.assignedSkills ?? previous?.assignedSkills ?? [],
         });
       });
       removedMemberIds.forEach(id => {
@@ -153,7 +135,7 @@ export default function App() {
 
       return sortMembers(members.map(member => ({
         ...normalizeMember(member),
-        assignedSkills: member.assignedSkills?.length ? member.assignedSkills : previousSkillsByMemberId.get(member.id) || [],
+        assignedSkills: member.assignedSkills ?? previousSkillsByMemberId.get(member.id) ?? [],
       })));
     });
   }, [normalizeMember, sortMembers]);
@@ -387,28 +369,26 @@ export default function App() {
     })));
   };
 
-  const handleClearAllSkills = async () => {
-    const confirmed = await confirm({
-      message: 'Bạn có chắc muốn xóa TẤT CẢ kỹ năng?',
-      variant: 'danger',
-      confirmLabel: 'Xóa tất cả',
-    });
-    if (!confirmed) return;
-
-    setSkills([]);
-    setMemberPool(prev => prev.map(m => ({ ...m, assignedSkills: [] })));
-  };
-
-  const persistSquadGroups = async (groups: SquadGroup[], applySavedState = false) => {
-    try {
-      const state = await saveSquadLayout(groups);
-      if (applySavedState) {
-        setSquadGroups(state.squadGroups || []);
+  const persistSquadGroups = (groups: SquadGroup[], applySavedState = false) => {
+    const saveTask = squadLayoutSaveRef.current.then(async () => {
+      try {
+        const state = await saveSquadLayout(groups);
+        if (applySavedState) {
+          setSquadGroups(state.squadGroups || []);
+        }
+      } catch (err) {
+        void alert({ message: getErrorMessage(err, 'Không thể lưu đội hình'), variant: 'error' });
+        throw err;
       }
-    } catch (err) {
-      void alert({ message: getErrorMessage(err, 'Không thể lưu đội hình'), variant: 'error' });
-    }
+    });
+
+    squadLayoutSaveRef.current = saveTask.catch(() => undefined);
+    return saveTask;
   };
+
+  const flushPendingSquadLayoutSave = useCallback(async () => {
+    await squadLayoutSaveRef.current;
+  }, []);
 
   const handleSquadGroupsChange: React.Dispatch<React.SetStateAction<SquadGroup[]>> = (update) => {
     setSquadGroups(prev => {
@@ -428,6 +408,25 @@ export default function App() {
       void persistSquadGroups(next, prev.length === 0);
       return next;
     });
+  };
+
+  const handleMemberNoteChange = (teamId: string, memberId: string, note: string) => {
+    handleSquadGroupsChange(prev => prev.map(group => ({
+      ...group,
+      teams: group.teams.map(team => {
+        if (team.id !== teamId) return team;
+
+        const memberNotes = { ...(team.memberNotes ?? {}) };
+        const trimmedNote = note.trim();
+        if (trimmedNote) {
+          memberNotes[memberId] = trimmedNote;
+        } else {
+          delete memberNotes[memberId];
+        }
+
+        return { ...team, memberNotes };
+      }),
+    })));
   };
 
   const runLineupLockAction = async (action: () => Promise<AppStateResponse['lineupLock']>, fallbackMessage: string) => {
@@ -622,7 +621,7 @@ export default function App() {
     removeSnapshot,
     resetSnapshots,
     refreshSnapshots,
-  } = useLineupSnapshots({ applyAppState });
+  } = useLineupSnapshots({ applyAppState, flushPendingSquadLayoutSave });
 
   React.useEffect(() => {
     refreshSnapshotsRef.current = refreshSnapshots;
@@ -735,8 +734,6 @@ export default function App() {
       setSquadGroups([]);
       setAccessibleGuilds([]);
       resetSnapshots();
-      setLineupEntryMode('menu');
-      setIsZoomed(false);
     }
   };
 
@@ -755,25 +752,6 @@ export default function App() {
     }
     updateActiveTab('dashboard');
   };
-
-  const clearAll = useCallback(async () => {
-    const confirmed = await confirm({
-      message: 'Bạn có chắc chắn muốn xóa toàn bộ đội hình?',
-      variant: 'danger',
-      confirmLabel: 'Xóa toàn bộ',
-    });
-    if (!confirmed) return;
-
-    handleSquadGroupsChange(prev => prev.map(group => ({
-      ...group,
-      teams: group.teams.map(team => ({
-        ...team,
-        memberIds: Array(6).fill(''),
-        reserveMemberIds: Array(3).fill(''),
-      })),
-    })));
-    setMemberPool(prev => prev.map(m => ({ ...m, assignedSkills: [] })));
-  }, [confirm]);
 
   if (authLoading) {
     return (
@@ -842,34 +820,48 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            {activeTab === 'teams' && squadGroups.length > 0 && !lineupReadOnly && (
-              <>
-                <button
-                  onClick={clearAll}
-                  className="p-2 text-slate-500 hover:text-red-400 transition-all hover:scale-110 active:scale-90"
-                  title="Xóa toàn bộ"
+            {activeTab === 'teams' && canManageLineup && (
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 ${lineupLock?.isHeldByMe ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200' : lineupLock ? 'border-amber-400/25 bg-amber-500/10 text-amber-200' : 'border-sky-400/25 bg-sky-500/10 text-sky-200'}`}
+                  title={lineupLock?.isHeldByMe ? 'Người khác vẫn có thể xem cập nhật realtime nhưng không thể thay đổi.' : lineupLock ? 'Đội hình đang được khóa bởi người khác.' : 'Bấm bắt đầu để khóa quyền thay đổi đội hình cho phiên của bạn.'}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3,6 5,6 21,6" />
-                    <path d="M19,6v14a2,2 0 0,1-2,2H7a2,2 0 0,1-2-2V6m3,0V4a2,2 0 0,1,2-2h4a2,2 0 0,1,2,2v2" />
-                  </svg>
-                </button>
+                  {lineupLock?.isHeldByMe ? <LockOpen size={14} className="shrink-0" /> : lineupLock ? <Lock size={14} className="shrink-0" /> : <ShieldAlert size={14} className="shrink-0" />}
+                  <span className="max-w-44 truncate text-[11px] font-black uppercase tracking-wider">
+                    {lineupLock?.isHeldByMe ? 'Đang chỉnh sửa' : lineupLock ? `Khóa bởi ${lineupLock.holderName}` : 'Chế độ xem'}
+                  </span>
+                </div>
 
-                <button
-                  onClick={() => setIsZoomed(!isZoomed)}
-                  className={cn(
-                    "p-2 rounded-lg transition-all flex items-center justify-center",
-                    isZoomed
-                      ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30"
-                      : "text-slate-500 hover:text-blue-400 hover:bg-slate-800/50"
-                  )}
-                  title={isZoomed ? "Hiện menu" : "Phóng to"}
-                >
-                  {isZoomed ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                </button>
-              </>
+                {lineupLock?.isHeldByMe ? (
+                  <button
+                    onClick={handleReleaseLineupLock}
+                    disabled={lineupLockActionLoading}
+                    className="rounded-lg border border-emerald-400/30 bg-emerald-500/12 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-200 transition-colors hover:border-emerald-300/50 hover:bg-emerald-500/18 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Kết thúc
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleAcquireLineupLock}
+                      disabled={lineupLockActionLoading || !!lineupLock}
+                      className="rounded-lg border border-sky-400/30 bg-sky-500/12 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-sky-200 transition-colors hover:border-sky-300/50 hover:bg-sky-500/18 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Bắt đầu
+                    </button>
+                    {lineupLock?.canOverride && (
+                      <button
+                        onClick={handleOverrideLineupLock}
+                        disabled={lineupLockActionLoading}
+                        className="rounded-lg border border-amber-400/30 bg-amber-500/12 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-200 transition-colors hover:border-amber-300/50 hover:bg-amber-500/18 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Chiếm quyền
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             )}
-
           </div>
         </header>
 
@@ -903,30 +895,19 @@ export default function App() {
               squadGroups={squadGroups}
               memberPool={memberPool}
               skills={skills}
+              currentUser={currentUser}
               assignedMemberIds={assignedMemberIds}
               onSquadGroupsChange={handleSquadGroupsChange}
-              lineupEntryMode={lineupEntryMode}
-              onLineupEntryModeChange={updateLineupEntryMode}
               onSquadGroupLeaderChange={handleSquadGroupLeaderChange}
               onMemberPoolChange={setMemberPool}
               onAssignSkillToMember={handleAssignSkillToMember}
               onSkillsChange={setSkills}
-              onAddSkills={handleAddSkills}
-              onDeleteSkill={handleDeleteSkill}
-              onClearAllSkills={handleClearAllSkills}
               onRemoveSkillFromMember={handleRemoveSkillFromMember}
-              onClearAll={clearAll}
+              onMemberNoteChange={handleMemberNoteChange}
               getMemberById={getMemberById}
-              isZoomed={isZoomed}
-              onZoomToggle={() => setIsZoomed(!isZoomed)}
               readOnly={lineupReadOnly}
-              canManageLineup={canManageLineup}
-              lineupLock={lineupLock ?? null}
-              lineupLockActionLoading={lineupLockActionLoading}
-              onAcquireLineupLock={handleAcquireLineupLock}
-              onReleaseLineupLock={handleReleaseLineupLock}
-              onOverrideLineupLock={handleOverrideLineupLock}
               snapshotsOnly={false}
+              canManageLineup={canManageLineup}
               canManageSnapshots={canManageSnapshots}
               canRestoreSnapshots={canRestoreSnapshots}
               snapshotState={{
