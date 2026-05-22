@@ -34,8 +34,8 @@ export async function refreshActiveAttendanceSession(): Promise<AppStateResponse
   });
 }
 
-export async function getAttendanceHistory(limit = 20): Promise<{ sessions: AttendanceSession[] }> {
-  return requestJson(`${API_BASE}/api/attendance/history?limit=${encodeURIComponent(String(limit))}`, {
+export async function getAttendanceHistory(limit = 20, offset = 0): Promise<{ sessions: AttendanceSession[]; hasMore?: boolean; nextOffset?: number }> {
+  return requestJson(`${API_BASE}/api/attendance/history?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`, {
     credentials: 'include',
   });
 }

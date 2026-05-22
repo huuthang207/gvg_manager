@@ -2,6 +2,7 @@ import type { AttendanceChoice } from '@prisma/client';
 import { prisma } from '../db.js';
 import { serializeAttendanceSession } from '../serializers/attendanceSerializer.js';
 import { renderAttendancePublicContent } from './attendanceRenderService.js';
+import { fetchDiscordChannelName } from './discordClientService.js';
 import { publishGuildAppStateChanged } from './realtimeGateway.js';
 
 const attendanceSessionInclude = {
@@ -88,10 +89,13 @@ export async function getAttendanceStateForGuild(guildId: string) {
     }),
   ]);
 
+  const discordChannelName = await fetchDiscordChannelName(config?.discordChannelId ?? null);
+
   return {
     config: config ? {
       id: config.id,
       discordChannelId: config.discordChannelId,
+      discordChannelName,
       createdAt: config.createdAt.toISOString(),
       updatedAt: config.updatedAt.toISOString(),
     } : null,
@@ -198,6 +202,7 @@ export async function castAttendanceVote(input: {
   discordUserId: string;
   sessionId: string;
   choice: AttendanceChoice;
+  discordMessageId?: string | null;
 }) {
   const guild = await findGuildByDiscordId(input.discordGuildId);
 
@@ -206,7 +211,14 @@ export async function castAttendanceVote(input: {
   }
 
   const session = await prisma.attendanceSession.findFirst({
-    where: { id: input.sessionId, guildId: guild.id, status: 'OPEN' },
+    where: {
+      guildId: guild.id,
+      status: 'OPEN',
+      OR: [
+        { id: input.sessionId },
+        ...(input.discordMessageId ? [{ discordMessageId: input.discordMessageId }] : []),
+      ],
+    },
   });
 
   if (!session) {
@@ -288,21 +300,31 @@ export async function refreshAttendanceSession(discordGuildId: string) {
   return { status: 200 as const, body: { session: serializeAttendanceSession(updatedSession) } };
 }
 
-export async function listAttendanceSessions(discordGuildId: string, take = 20) {
+export async function listAttendanceSessions(discordGuildId: string, take = 20, offset = 0) {
   const guild = await findGuildByDiscordId(discordGuildId);
 
   if (!guild) {
     return { status: 404 as const, body: { error: 'Server Discord chưa được import vào hệ thống.' } };
   }
 
+  const limit = Math.min(Math.max(take, 1), 50);
   const sessions = await prisma.attendanceSession.findMany({
     where: { guildId: guild.id },
     include: attendanceSessionInclude,
     orderBy: { openedAt: 'desc' },
-    take: Math.min(Math.max(take, 1), 50),
+    skip: Math.max(offset, 0),
+    take: limit + 1,
   });
+  const page = sessions.slice(0, limit);
 
-  return { status: 200 as const, body: { sessions: sessions.map(serializeAttendanceSession) } };
+  return {
+    status: 200 as const,
+    body: {
+      sessions: page.map(serializeAttendanceSession),
+      hasMore: sessions.length > limit,
+      nextOffset: offset + page.length,
+    },
+  };
 }
 
 export async function getAttendanceSessionById(discordGuildId: string, sessionId: string) {
@@ -343,6 +365,13 @@ export async function deleteAttendanceSession(discordGuildId: string, sessionId:
   publishGuildAppStateChanged({ guildId: guild.id, reason: 'attendance_updated' });
 
   return { status: 200 as const, body: { success: true } };
+}
+
+export async function markAttendanceRendered(sessionId: string) {
+  await prisma.attendanceSession.update({
+    where: { id: sessionId },
+    data: { lastRenderedAt: new Date() },
+  });
 }
 
 export async function getAttendanceRenderPayload(sessionId: string) {

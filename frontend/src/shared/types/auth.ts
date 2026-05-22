@@ -50,7 +50,7 @@ export interface AttendanceSession {
 }
 
 export interface AttendanceState {
-  config: { id: string; discordChannelId: string; createdAt: string; updatedAt: string } | null;
+  config: { id: string; discordChannelId: string; discordChannelName: string | null; createdAt: string; updatedAt: string } | null;
   activeSession: AttendanceSession | null;
   recentSessions: AttendanceSession[];
 }

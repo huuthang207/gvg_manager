@@ -1,16 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, CircleHelp, ClipboardCheck, Play, RefreshCw, Save, Square, Trash2, X, XCircle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, CircleHelp, ClipboardCheck, Hash, Play, Save, Search, Square, Trash2, X, XCircle } from 'lucide-react';
+import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
+import { cn } from '../../lib/utils.ts';
 import { deleteAttendanceHistorySession, getAttendanceHistory, getAttendanceSession } from '../../services/discordApi.ts';
 import type { AttendanceChoice, AttendanceSession, AttendanceState, AttendanceVote } from '../../shared/types/auth.ts';
+import type { Member } from '../../shared/types/member.ts';
+import type { ClassType } from '../../types.ts';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 
-const choiceMeta: Record<AttendanceChoice, { label: string; icon: React.ReactNode; className: string }> = {
-  GO: { label: 'Tham gia', icon: <CheckCircle2 size={16} />, className: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' },
-  MAYBE: { label: 'Dự bị', icon: <CircleHelp size={16} />, className: 'text-amber-300 bg-amber-500/10 border-amber-500/20' },
-  NOGO: { label: 'Không tham gia', icon: <XCircle size={16} />, className: 'text-red-300 bg-red-500/10 border-red-500/20' },
+const choiceMeta: Record<AttendanceChoice, { label: string; shortLabel: string; icon: React.ReactNode; className: string }> = {
+  GO: { label: 'Tham gia', shortLabel: 'Tham gia', icon: <CheckCircle2 size={16} />, className: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25' },
+  MAYBE: { label: 'Dự bị', shortLabel: 'Dự bị', icon: <CircleHelp size={16} />, className: 'text-amber-300 bg-amber-500/10 border-amber-500/25' },
+  NOGO: { label: 'Không tham gia', shortLabel: 'Không tham gia', icon: <XCircle size={16} />, className: 'text-red-300 bg-red-500/10 border-red-500/25' },
 };
-
-const classAccentColors = ['text-sky-300', 'text-violet-300', 'text-rose-300', 'text-amber-300', 'text-emerald-300', 'text-cyan-300', 'text-orange-300'];
 
 function formatDate(value: string | null) {
   if (!value) return '-';
@@ -25,16 +27,66 @@ function getVoteClass(vote: AttendanceVote) {
   return vote.snapshotClassType || vote.member.classType || 'Unknown';
 }
 
+function getMemberName(member: Member) {
+  return member.ingameName || member.discordDisplayName || member.name || member.discordUsername || 'Không rõ tên';
+}
+
+function isKnownClass(value: string): value is ClassType {
+  return CLASSES.includes(value as ClassType);
+}
+
+function getClassColor(classType: string) {
+  return isKnownClass(classType) ? CLASS_COLORS[classType] : '#94A3B8';
+}
+
+function sortClassEntries(entries: Array<[string, number]>) {
+  const order = new Map(CLASSES.map((classType, index) => [classType, index]));
+  return [...entries].sort(([a], [b]) => {
+    const aOrder = order.get(a as ClassType);
+    const bOrder = order.get(b as ClassType);
+    if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+    if (aOrder !== undefined) return -1;
+    if (bOrder !== undefined) return 1;
+    return a.localeCompare(b, 'vi');
+  });
+}
+
+function ClassBadge({ classType }: { classType: string }) {
+  const color = getClassColor(classType);
+  const icon = isKnownClass(classType) ? CLASS_ICONS[classType] : null;
+
+  return (
+    <span
+      className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-black"
+      style={{ borderColor: `${color}55`, backgroundColor: `${color}18`, color }}
+    >
+      {icon ? <img src={icon} alt="" className="h-3.5 w-3.5 rounded-full object-cover" /> : null}
+      <span className="truncate">{classType}</span>
+    </span>
+  );
+}
+
 function ChoiceSummaryCard({ choice, count }: { choice: AttendanceChoice; count: number }) {
   const meta = choiceMeta[choice];
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${meta.className}`}>
-      <div className="flex items-center gap-2 text-sm font-bold">
-        {meta.icon}
-        {meta.label}
+    <div className={cn('rounded-2xl border px-3 py-2.5 shadow-sm shadow-slate-950/20', meta.className)}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="inline-flex min-w-0 items-center gap-2 text-xs font-black">
+          {meta.icon}
+          <span className="truncate">{meta.label}</span>
+        </div>
+        <div className="text-2xl font-black text-white tabular-nums">{count}</div>
       </div>
-      <div className="mt-2 text-2xl font-black text-white">{count}</div>
     </div>
+  );
+}
+
+function SummaryPill({ choice, count }: { choice: AttendanceChoice; count: number }) {
+  const meta = choiceMeta[choice];
+  return (
+    <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-black', meta.className)}>
+      {meta.shortLabel} {count}
+    </span>
   );
 }
 
@@ -45,25 +97,37 @@ function ClassSummary({ votes }: { votes: AttendanceVote[] }) {
       const classType = getVoteClass(vote);
       counts.set(classType, (counts.get(classType) || 0) + 1);
     });
-    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b, 'vi'));
+    return sortClassEntries([...counts.entries()]);
   }, [votes]);
+  const maxCount = Math.max(...classCounts.map(([, count]) => count), 1);
 
   return (
     <section className="app-surface rounded-2xl p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-black text-slate-100">Số lượng theo phái đã vote</h3>
-        <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-bold text-slate-300">
+        <div>
+          <h3 className="text-sm font-black text-slate-100">Cơ cấu phái</h3>
+          <p className="text-xs text-slate-500">Tổng hợp tất cả lựa chọn</p>
+        </div>
+        <span className="rounded-full border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-xs font-black text-slate-300">
           Tổng {votes.length}
         </span>
       </div>
       {classCounts.length ? (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
-          {classCounts.map(([classType, count], index) => (
-            <div key={classType} className="rounded-xl border border-slate-800 bg-slate-950/45 px-3 py-2">
-              <div className={`truncate text-xs font-black ${classAccentColors[index % classAccentColors.length]}`}>{classType}</div>
-              <div className="mt-1 text-2xl font-black text-white">{count}</div>
-            </div>
-          ))}
+        <div className="space-y-2">
+          {classCounts.map(([classType, count]) => {
+            const color = getClassColor(classType);
+            return (
+              <div key={classType} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <ClassBadge classType={classType} />
+                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs font-black text-white tabular-nums">{count}</span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800/80">
+                  <div className="h-full rounded-full" style={{ width: `${Math.max((count / maxCount) * 100, 8)}%`, backgroundColor: color }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-sm text-slate-500">
@@ -74,51 +138,147 @@ function ClassSummary({ votes }: { votes: AttendanceVote[] }) {
   );
 }
 
-function VoteList({ title, votes, choice }: { title: string; votes: AttendanceVote[]; choice: AttendanceChoice }) {
+function VoteChoiceBadge({ choice }: { choice: AttendanceChoice }) {
   const meta = choiceMeta[choice];
   return (
+    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-black', meta.className)}>
+      {meta.icon}
+      {meta.label}
+    </span>
+  );
+}
+
+function VoteTable({ votes, totalVotes }: { votes: AttendanceVote[]; totalVotes: number }) {
+  return (
     <section className="app-surface rounded-2xl p-4">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <h3 className="text-sm font-black text-slate-100">{title}</h3>
-        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-bold ${meta.className}`}>
-          {meta.icon}
-          {votes.length}
-        </span>
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-black text-slate-100">Danh sách điểm danh</h3>
+          <p className="text-xs text-slate-500">Hiển thị {votes.length}/{totalVotes} vote</p>
+        </div>
       </div>
       {votes.length ? (
-        <div className="space-y-2">
-          {votes.map((vote, index) => (
-            <div key={vote.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-950/45 px-3 py-2 text-sm">
-              <div className="min-w-0">
-                <span className="text-slate-500 font-mono mr-2">#{index + 1}</span>
-                <span className="font-bold text-slate-100">{getVoteName(vote)}</span>
-                <span className="ml-2 inline-flex rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-sky-200">
-                  {getVoteClass(vote)}
-                </span>
-              </div>
-              <span className="text-xs text-slate-500 shrink-0">{formatDate(vote.updatedAt)}</span>
-            </div>
-          ))}
+        <div className="max-h-[560px] overflow-auto rounded-xl border border-slate-800/80 custom-scrollbar">
+          <table className="min-w-full divide-y divide-slate-800/80 text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-950/95 text-xs uppercase tracking-wider text-slate-500 backdrop-blur">
+              <tr>
+                <th className="w-16 px-3 py-3 font-black">#</th>
+                <th className="min-w-[220px] px-3 py-3 font-black">Thành viên</th>
+                <th className="min-w-[140px] px-3 py-3 font-black">Phái</th>
+                <th className="min-w-[150px] px-3 py-3 font-black">Lựa chọn</th>
+                <th className="min-w-[170px] px-3 py-3 text-right font-black">Cập nhật</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 bg-slate-950/25">
+              {votes.map((vote, index) => (
+                <tr key={vote.id} className="transition-colors hover:bg-slate-900/70">
+                  <td className="px-3 py-3 font-mono text-xs font-black text-slate-500">#{index + 1}</td>
+                  <td className="px-3 py-3">
+                    <div className="font-bold text-slate-100">{getVoteName(vote)}</div>
+                    <div className="text-xs text-slate-500">{vote.member.username}</div>
+                  </td>
+                  <td className="px-3 py-3"><ClassBadge classType={getVoteClass(vote)} /></td>
+                  <td className="px-3 py-3"><VoteChoiceBadge choice={vote.choice} /></td>
+                  <td className="px-3 py-3 text-right text-xs font-medium text-slate-500">{formatDate(vote.updatedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-sm text-slate-500">
-          Chưa có dữ liệu.
+        <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-8 text-center text-sm text-slate-500">
+          Không có vote phù hợp với bộ lọc.
         </div>
       )}
     </section>
   );
 }
 
-function SessionDetail({
-  session,
-}: {
-  session: AttendanceSession;
-}) {
-  const groupedVotes = useMemo(() => ({
-    GO: session.votes.filter(vote => vote.choice === 'GO'),
-    MAYBE: session.votes.filter(vote => vote.choice === 'MAYBE'),
-    NOGO: session.votes.filter(vote => vote.choice === 'NOGO'),
-  }), [session.votes]);
+function NotVotedTable({ members }: { members: Member[] }) {
+  return (
+    <section className="app-surface rounded-2xl p-4">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-black text-slate-100">Chưa điểm danh</h3>
+          <p className="text-xs text-slate-500">Thành viên active chưa chọn Tham gia, Dự bị hoặc Không tham gia</p>
+        </div>
+        <span className="w-fit rounded-full border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-xs font-black text-slate-300">
+          {members.length} người
+        </span>
+      </div>
+      {members.length ? (
+        <div className="max-h-[360px] overflow-auto rounded-xl border border-slate-800/80 custom-scrollbar">
+          <table className="min-w-full divide-y divide-slate-800/80 text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-950/95 text-xs uppercase tracking-wider text-slate-500 backdrop-blur">
+              <tr>
+                <th className="w-16 px-3 py-3 font-black">#</th>
+                <th className="min-w-[220px] px-3 py-3 font-black">Thành viên</th>
+                <th className="min-w-[140px] px-3 py-3 font-black">Phái</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 bg-slate-950/25">
+              {members.map((member, index) => (
+                <tr key={member.id} className="transition-colors hover:bg-slate-900/70">
+                  <td className="px-3 py-3 font-mono text-xs font-black text-slate-500">#{index + 1}</td>
+                  <td className="px-3 py-3">
+                    <div className="font-bold text-slate-100">{getMemberName(member)}</div>
+                    <div className="text-xs text-slate-500">{member.discordUsername || member.name}</div>
+                  </td>
+                  <td className="px-3 py-3"><ClassBadge classType={member.classType} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-emerald-500/30 bg-emerald-500/10 px-3 py-8 text-center text-sm font-bold text-emerald-200">
+          Tất cả thành viên active đã điểm danh.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SessionSummaryCard({ session, channelName, onOpenDetails }: { session: AttendanceSession; channelName?: string | null; onOpenDetails: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpenDetails}
+      className="w-full rounded-2xl border border-sky-400/20 bg-gradient-to-br from-sky-500/10 via-slate-900/75 to-indigo-500/10 p-4 text-left shadow-lg shadow-slate-950/25 backdrop-blur-sm transition-colors hover:border-sky-300/35 hover:from-sky-500/15"
+    >
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="min-w-0">
+          <div className={cn(
+            'mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black',
+            session.status === 'OPEN'
+              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+              : 'border-slate-600/60 bg-slate-800/60 text-slate-300',
+          )}>
+            <ClipboardCheck size={14} />
+            {session.status === 'OPEN' ? 'Đang mở' : 'Đã đóng'}
+          </div>
+          <h2 className="truncate text-2xl font-black text-white">{session.headerText || 'Điểm danh Bang Chiến'}</h2>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400">
+            <span>Mở: {formatDate(session.openedAt)}</span>
+            <span>Cập nhật: {formatDate(session.lastVoteAt || session.updatedAt)}</span>
+            {session.discordChannelId ? <span>Kênh: {channelName || session.discordChannelId}</span> : null}
+            <span className="font-bold text-sky-200">Click để mở chi tiết</span>
+          </div>
+        </div>
+        <div className="grid min-w-full grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[440px]">
+          <ChoiceSummaryCard choice="GO" count={session.summary.go} />
+          <ChoiceSummaryCard choice="MAYBE" count={session.summary.maybe} />
+          <ChoiceSummaryCard choice="NOGO" count={session.summary.nogo} />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function SessionDetailsPanel({ session, members }: { session: AttendanceSession; members: Member[] }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [choiceFilter, setChoiceFilter] = useState<AttendanceChoice | 'ALL'>('ALL');
+  const [classFilter, setClassFilter] = useState('ALL');
   const sortedVotesByClass = useMemo(() => (
     [...session.votes].sort((a, b) => {
       const classCompare = getVoteClass(a).localeCompare(getVoteClass(b), 'vi');
@@ -126,46 +286,74 @@ function SessionDetail({
       return getVoteName(a).localeCompare(getVoteName(b), 'vi');
     })
   ), [session.votes]);
+  const notVotedMembers = useMemo(() => {
+    const votedMemberIds = new Set(session.votes.map(vote => vote.memberId));
+    return members
+      .filter(member => member.active !== false && !votedMemberIds.has(member.id))
+      .sort((a, b) => {
+        const classCompare = a.classType.localeCompare(b.classType, 'vi');
+        if (classCompare !== 0) return classCompare;
+        return getMemberName(a).localeCompare(getMemberName(b), 'vi');
+      });
+  }, [members, session.votes]);
+  const classOptions = useMemo(() => sortClassEntries([...new Set(session.votes.map(getVoteClass))].map(classType => [classType, 0])), [session.votes]);
+  const filteredVotes = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return sortedVotesByClass.filter(vote => {
+      if (choiceFilter !== 'ALL' && vote.choice !== choiceFilter) return false;
+      if (classFilter !== 'ALL' && getVoteClass(vote) !== classFilter) return false;
+      if (!query) return true;
+      return [getVoteName(vote), vote.member.username, vote.member.displayName, vote.member.ingameName]
+        .filter(Boolean)
+        .some(value => value!.toLowerCase().includes(query));
+    });
+  }, [choiceFilter, classFilter, searchTerm, sortedVotesByClass]);
 
   return (
-    <div className="space-y-4">
-      <div className="app-surface rounded-2xl p-5">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-bold text-sky-200 mb-3">
-              <ClipboardCheck size={14} />
-              {session.status === 'OPEN' ? 'Đang mở' : 'Đã đóng'}
+    <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[360px_1fr]">
+        <ClassSummary votes={sortedVotesByClass} />
+        <div className="space-y-3">
+          <section className="app-surface rounded-2xl p-4">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_auto_auto]">
+              <div className="relative">
+                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  value={searchTerm}
+                  onChange={event => setSearchTerm(event.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/60 py-2 pl-9 pr-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-500"
+                  placeholder="Tìm theo tên ingame hoặc Discord..."
+                />
+              </div>
+              <select
+                value={choiceFilter}
+                onChange={event => setChoiceFilter(event.target.value as AttendanceChoice | 'ALL')}
+                className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-500"
+              >
+                <option value="ALL">Tất cả lựa chọn</option>
+                <option value="GO">Tham gia</option>
+                <option value="MAYBE">Dự bị</option>
+                <option value="NOGO">Không tham gia</option>
+              </select>
+              <select
+                value={classFilter}
+                onChange={event => setClassFilter(event.target.value)}
+                className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-500"
+              >
+                <option value="ALL">Tất cả phái</option>
+                {classOptions.map(([classType]) => <option key={classType} value={classType}>{classType}</option>)}
+              </select>
             </div>
-            <h2 className="text-2xl font-black text-white">{session.headerText || 'Điểm danh Bang Chiến'}</h2>
-            <div className="mt-2 text-sm text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
-              <span>Mở: {formatDate(session.openedAt)}</span>
-              <span>Cập nhật: {formatDate(session.lastVoteAt || session.updatedAt)}</span>
-              {session.discordChannelId ? <span>Kênh: {session.discordChannelId}</span> : null}
-            </div>
-          </div>
-          <div className="space-y-3 min-w-full lg:min-w-[360px]">
-            <div className="grid grid-cols-3 gap-3">
-              <ChoiceSummaryCard choice="GO" count={session.summary.go} />
-              <ChoiceSummaryCard choice="MAYBE" count={session.summary.maybe} />
-              <ChoiceSummaryCard choice="NOGO" count={session.summary.nogo} />
-            </div>
-          </div>
+          </section>
+          <VoteTable votes={filteredVotes} totalVotes={session.votes.length} />
+          <NotVotedTable members={notVotedMembers} />
         </div>
       </div>
-
-      <ClassSummary votes={sortedVotesByClass} />
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <VoteList title="Danh sách tham gia" choice="GO" votes={groupedVotes.GO} />
-        <VoteList title="Danh sách dự bị" choice="MAYBE" votes={groupedVotes.MAYBE} />
-        <VoteList title="Danh sách không tham gia" choice="NOGO" votes={groupedVotes.NOGO} />
-      </div>
-    </div>
   );
 }
 
 export function AttendanceView({
   attendance,
+  members,
   actionLoading,
   onSetChannel,
   onOpenSession,
@@ -173,6 +361,7 @@ export function AttendanceView({
   onRefreshSession,
 }: {
   attendance: AttendanceState;
+  members: Member[];
   actionLoading: boolean;
   onSetChannel: (discordChannelId: string) => void;
   onOpenSession: (headerText: string) => void;
@@ -183,14 +372,26 @@ export function AttendanceView({
   const [historySessions, setHistorySessions] = useState<AttendanceSession[]>(attendance.recentSessions);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyNextOffset, setHistoryNextOffset] = useState(0);
   const [selectedHistorySession, setSelectedHistorySession] = useState<AttendanceSession | null>(null);
+  const [activeDetailsOpen, setActiveDetailsOpen] = useState(false);
   const [selectedHistoryLoading, setSelectedHistoryLoading] = useState(false);
   const [selectedHistoryError, setSelectedHistoryError] = useState('');
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(() => new Set());
   const [deleteError, setDeleteError] = useState('');
   const [channelId, setChannelId] = useState(attendance.config?.discordChannelId || '');
   const [headerText, setHeaderText] = useState('');
+  const [setupModal, setSetupModal] = useState<'open' | null>(null);
   const historyList = historySessions.filter(session => session.id !== attendance.activeSession?.id);
+  const recentHistoryList = historyList.slice(0, 5);
+  const historyListIds = useMemo(() => historyList.map(session => session.id), [historyList]);
+  const selectedHistoryCount = historyListIds.filter(id => selectedHistoryIds.has(id)).length;
+  const allVisibleHistorySelected = historyListIds.length > 0 && selectedHistoryCount === historyListIds.length;
+  const deleteActionDisabled = historyLoading || bulkDeleting;
 
   React.useEffect(() => {
     setChannelId(attendance.config?.discordChannelId || '');
@@ -201,10 +402,22 @@ export function AttendanceView({
     setHistoryLoading(true);
     setHistoryError('');
     getAttendanceHistory(20)
-      .then(result => setHistorySessions(result.sessions))
+      .then(result => {
+        setHistorySessions(result.sessions);
+        setHistoryHasMore(!!result.hasMore);
+        setHistoryNextOffset(result.nextOffset ?? result.sessions.length);
+      })
       .catch(() => setHistoryError('Không thể tải lịch sử điểm danh.'))
       .finally(() => setHistoryLoading(false));
   }, [attendance.recentSessions]);
+
+  React.useEffect(() => {
+    const validIds = new Set(historyListIds);
+    setSelectedHistoryIds(prev => {
+      const next = new Set([...prev].filter(id => validIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [historyListIds]);
 
   const openHistorySession = (sessionId: string) => {
     const preview = historySessions.find(session => session.id === sessionId) || null;
@@ -217,194 +430,456 @@ export function AttendanceView({
       .finally(() => setSelectedHistoryLoading(false));
   };
 
-  const deleteHistorySession = async (session: AttendanceSession) => {
+  const loadMoreHistory = () => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    getAttendanceHistory(20, historyNextOffset)
+      .then(result => {
+        setHistorySessions(prev => [...prev, ...result.sessions.filter(session => !prev.some(item => item.id === session.id))]);
+        setHistoryHasMore(!!result.hasMore);
+        setHistoryNextOffset(result.nextOffset ?? historyNextOffset + result.sessions.length);
+      })
+      .catch(() => setHistoryError('Không thể tải thêm lịch sử điểm danh.'))
+      .finally(() => setHistoryLoading(false));
+  };
+
+  const toggleHistorySelection = (sessionId: string) => {
+    setSelectedHistoryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllHistory = () => {
+    setSelectedHistoryIds(prev => {
+      const next = new Set(prev);
+      if (allVisibleHistorySelected) {
+        historyListIds.forEach(id => next.delete(id));
+      } else {
+        historyListIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearHistorySelection = () => setSelectedHistoryIds(new Set());
+
+  const deleteHistoryIds = async (ids: string[], message: string) => {
+    const uniqueIds = [...new Set(ids)].filter(id => historyListIds.includes(id));
+    if (!uniqueIds.length) return;
+
     const confirmed = await confirm({
-      message: `Xóa lịch sử điểm danh "${session.headerText || 'Điểm danh Bang Chiến'}"?`,
+      message,
       variant: 'danger',
       confirmLabel: 'Xóa',
     });
     if (!confirmed) return;
 
-    setDeletingSessionId(session.id);
+    setBulkDeleting(uniqueIds.length > 1);
+    setDeletingSessionId(uniqueIds.length === 1 ? uniqueIds[0] : null);
     setDeleteError('');
-    try {
-      await deleteAttendanceHistorySession(session.id);
-      setHistorySessions(prev => prev.filter(item => item.id !== session.id));
-      if (selectedHistorySession?.id === session.id) {
+    const results = await Promise.allSettled(uniqueIds.map(id => deleteAttendanceHistorySession(id)));
+    const deletedIds = uniqueIds.filter((_, index) => results[index].status === 'fulfilled');
+    const deletedIdSet = new Set(deletedIds);
+
+    if (deletedIds.length) {
+      setHistorySessions(prev => prev.filter(item => !deletedIdSet.has(item.id)));
+      setSelectedHistoryIds(prev => new Set([...prev].filter(id => !deletedIdSet.has(id))));
+      if (selectedHistorySession && deletedIdSet.has(selectedHistorySession.id)) {
         setSelectedHistorySession(null);
       }
-    } catch {
-      setDeleteError('Không thể xóa lịch sử điểm danh.');
-    } finally {
-      setDeletingSessionId(null);
     }
+
+    if (deletedIds.length !== uniqueIds.length) {
+      setDeleteError(deletedIds.length ? `Đã xóa ${deletedIds.length}/${uniqueIds.length} lịch sử. Một số phiên không thể xóa.` : 'Không thể xóa lịch sử điểm danh.');
+    }
+
+    setBulkDeleting(false);
+    setDeletingSessionId(null);
+  };
+
+  const deleteHistorySession = async (session: AttendanceSession) => {
+    await deleteHistoryIds([session.id], `Xóa lịch sử điểm danh "${session.headerText || 'Điểm danh Bang Chiến'}"?`);
+  };
+
+  const deleteSelectedHistorySessions = async () => {
+    const ids = historyListIds.filter(id => selectedHistoryIds.has(id));
+    await deleteHistoryIds(ids, `Xóa ${ids.length} lịch sử điểm danh đã chọn?`);
+  };
+
+  const deleteAllHistorySessions = async () => {
+    await deleteHistoryIds(historyListIds, `Xóa tất cả ${historyListIds.length} lịch sử điểm danh đang hiển thị?`);
   };
 
   return (
-    <main className="flex-1 overflow-auto custom-scrollbar p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
+    <main className="flex-1 space-y-5 overflow-auto p-5 custom-scrollbar lg:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-black text-white">Điểm danh Bang Chiến</h1>
           <p className="mt-1 text-sm text-slate-400">Theo dõi phiên điểm danh từ web, Discord bot và lịch sử gần đây.</p>
         </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm text-slate-300">
-          Kênh điểm danh:{' '}
-          <span className="font-bold text-slate-100">{attendance.config?.discordChannelId || 'Chưa cấu hình'}</span>
+        <div className={cn(
+          'inline-flex w-fit items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-bold',
+          attendance.config
+            ? 'border-sky-500/25 bg-sky-500/10 text-sky-100'
+            : 'border-amber-500/25 bg-amber-500/10 text-amber-100',
+        )}>
+          <Hash size={16} />
+          <span className="text-slate-400">Kênh:</span>
+          <span>{attendance.config ? (attendance.config.discordChannelName || attendance.config.discordChannelId) : 'Chưa cấu hình'}</span>
         </div>
       </div>
 
-      <section className="app-surface rounded-2xl p-5 space-y-4">
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.2fr] gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-wider text-slate-500">Discord channel id</label>
-              <div className="flex gap-2">
-                <input
-                  value={channelId}
-                  onChange={event => setChannelId(event.target.value)}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-500"
-                  placeholder="Ví dụ: 123456789012345678"
-                />
-                <button
-                  onClick={() => onSetChannel(channelId)}
-                  disabled={actionLoading || !channelId.trim()}
-                  className="app-button-primary inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-                >
-                  <Save size={16} />
-                  Lưu
-                </button>
-              </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
+        <section className="app-surface h-fit rounded-2xl p-4">
+          <div className="mb-4">
+            <h2 className="text-lg font-black text-white">Quản lý điểm danh</h2>
+            <p className="mt-1 text-sm text-slate-500">Cấu hình kênh, mở phiên và điều khiển phiên đang chạy.</p>
+          </div>
+          <div className="mb-4 rounded-2xl border border-slate-800/80 bg-slate-950/35 p-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-500">
+              <Hash size={14} />
+              Kênh điểm danh
             </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-wider text-slate-500">Mở phiên điểm danh</label>
-              <div className="flex gap-2">
-                <input
-                  value={headerText}
-                  onChange={event => setHeaderText(event.target.value)}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-500"
-                  placeholder="Điểm danh Bang Chiến"
-                  disabled={!!attendance.activeSession}
-                />
-                <button
-                  onClick={() => onOpenSession(headerText)}
-                  disabled={actionLoading || !!attendance.activeSession || !attendance.config}
-                  className="app-button-primary inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-                >
-                  <Play size={16} />
-                  Mở
-                </button>
-              </div>
+            <div className="mb-2 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-sm font-bold text-sky-100">
+              {attendance.config ? (attendance.config.discordChannelName || attendance.config.discordChannelId) : 'Chưa cấu hình'}
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={channelId}
+                onChange={event => setChannelId(event.target.value)}
+                className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-sky-500"
+                placeholder="Discord channel id"
+              />
+              <button
+                onClick={() => onSetChannel(channelId)}
+                disabled={actionLoading || !channelId.trim()}
+                className="app-button-primary inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold"
+              >
+                <Save size={16} />
+              </button>
             </div>
           </div>
-
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 gap-2">
             <button
-              onClick={onRefreshSession}
-              disabled={actionLoading || !attendance.activeSession}
-              className="app-button-secondary inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+              onClick={() => setSetupModal('open')}
+              disabled={actionLoading || !!attendance.activeSession || !attendance.config}
+              className="app-button-primary inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"
             >
-              <RefreshCw size={16} />
-              Refresh
+              <Play size={16} />
+              Mở điểm danh
             </button>
             <button
               onClick={onCloseSession}
               disabled={actionLoading || !attendance.activeSession}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+              className="app-button-danger inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"
             >
               <Square size={16} />
               Đóng phiên
             </button>
           </div>
-      </section>
+        </section>
 
-      {attendance.activeSession ? (
-        <SessionDetail session={attendance.activeSession} />
-      ) : (
-        <div className="app-surface rounded-2xl p-10 text-center">
-          <ClipboardCheck size={42} className="mx-auto text-slate-500 mb-3" />
-          <h2 className="text-xl font-black text-white">Chưa có phiên điểm danh đang mở</h2>
-          <p className="mt-2 text-sm text-slate-400">Mở phiên mới từ web hoặc dùng lệnh Discord /diemdanhbangchien open.</p>
+        <div className="space-y-4">
+          {attendance.activeSession ? (
+            <SessionSummaryCard session={attendance.activeSession} channelName={attendance.config?.discordChannelName} onOpenDetails={() => setActiveDetailsOpen(true)} />
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/25 px-6 py-8 text-center">
+              <ClipboardCheck size={38} className="mx-auto mb-3 text-slate-500" />
+              <h2 className="text-xl font-black text-white">Chưa có phiên điểm danh đang mở</h2>
+              <p className="mt-2 text-sm text-slate-400">Mở phiên mới từ web hoặc dùng lệnh Discord /diemdanhbangchien open.</p>
+            </div>
+          )}
+
+          <section className="app-surface rounded-2xl p-4">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDays size={16} className="text-slate-400" />
+                <h3 className="text-sm font-black text-slate-100">Lịch sử gần đây</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {historyLoading ? <span className="text-xs font-bold text-slate-500">Đang tải...</span> : null}
+                {historyList.length > 5 || historyHasMore ? (
+                  <button onClick={() => setHistoryModalOpen(true)} className="app-button-secondary rounded-xl px-3 py-1.5 text-xs font-black">
+                    Xem tất cả
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {historyError ? (
+              <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                {historyError}
+              </div>
+            ) : null}
+            {deleteError ? (
+              <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                {deleteError}
+              </div>
+            ) : null}
+            {historyList.length ? (
+              <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-slate-800/80 bg-slate-950/35 p-2 sm:flex-row sm:items-center sm:justify-between">
+                <label className="inline-flex w-fit items-center gap-2 rounded-xl px-2 py-1 text-xs font-black text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleHistorySelected}
+                    onChange={toggleSelectAllHistory}
+                    disabled={deleteActionDisabled || !historyListIds.length}
+                    className="h-4 w-4 accent-sky-500"
+                  />
+                  Chọn tất cả
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500">Đã chọn {selectedHistoryCount}</span>
+                  {selectedHistoryCount ? (
+                    <button onClick={clearHistorySelection} disabled={deleteActionDisabled} className="app-button-secondary rounded-xl px-3 py-1.5 text-xs font-black">
+                      Bỏ chọn
+                    </button>
+                  ) : null}
+                  <button onClick={() => void deleteSelectedHistorySessions()} disabled={deleteActionDisabled || !selectedHistoryCount} className="app-button-danger rounded-xl px-3 py-1.5 text-xs font-black">
+                    Xóa đã chọn
+                  </button>
+                  <button onClick={() => void deleteAllHistorySessions()} disabled={deleteActionDisabled || !historyListIds.length} className="app-button-danger rounded-xl px-3 py-1.5 text-xs font-black">
+                    Xóa tất cả
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {recentHistoryList.length ? (
+              <div className="space-y-2">
+                {recentHistoryList.map(session => (
+                  <div key={session.id} className="flex items-center gap-2 rounded-2xl border border-slate-800/80 bg-slate-950/35 p-2 transition-colors hover:bg-slate-900/60">
+                    <input
+                      type="checkbox"
+                      checked={selectedHistoryIds.has(session.id)}
+                      onChange={() => toggleHistorySelection(session.id)}
+                      disabled={deleteActionDisabled}
+                      className="h-4 w-4 shrink-0 accent-sky-500"
+                      aria-label={`Chọn lịch sử ${session.headerText || 'Điểm danh Bang Chiến'}`}
+                    />
+                    <button
+                      onClick={() => openHistorySession(session.id)}
+                      className="flex min-w-0 flex-1 flex-col gap-2 rounded-xl px-2 py-1 text-left sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-black text-slate-100">{session.headerText || 'Điểm danh Bang Chiến'}</div>
+                        <div className="text-xs text-slate-500">{formatDate(session.openedAt)} - {formatDate(session.closedAt)}</div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-1.5">
+                        <SummaryPill choice="GO" count={session.summary.go} />
+                        <SummaryPill choice="MAYBE" count={session.summary.maybe} />
+                        <SummaryPill choice="NOGO" count={session.summary.nogo} />
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => void deleteHistorySession(session)}
+                      disabled={deletingSessionId === session.id || bulkDeleting}
+                      className="app-button-danger rounded-xl p-2"
+                      title="Xóa lịch sử điểm danh"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-sm text-slate-500">
+                Chưa có lịch sử điểm danh.
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+
+
+      {historyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={() => setHistoryModalOpen(false)}>
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl custom-scrollbar" onClick={event => event.stopPropagation()}>
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-6 py-5 backdrop-blur">
+              <div>
+                <h2 className="text-xl font-black text-white">Tất cả lịch sử điểm danh</h2>
+                <p className="text-sm text-slate-500">Hiển thị theo từng trang, chỉ tải thêm khi cần.</p>
+              </div>
+              <button onClick={() => setHistoryModalOpen(false)} className="app-button-secondary rounded-xl p-2">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-3 p-5">
+              {historyList.length ? (
+                <div className="flex flex-col gap-2 rounded-2xl border border-slate-800/80 bg-slate-950/35 p-2 sm:flex-row sm:items-center sm:justify-between">
+                  <label className="inline-flex w-fit items-center gap-2 rounded-xl px-2 py-1 text-xs font-black text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleHistorySelected}
+                      onChange={toggleSelectAllHistory}
+                      disabled={deleteActionDisabled || !historyListIds.length}
+                      className="h-4 w-4 accent-sky-500"
+                    />
+                    Chọn tất cả
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500">Đã chọn {selectedHistoryCount}</span>
+                    {selectedHistoryCount ? (
+                      <button onClick={clearHistorySelection} disabled={deleteActionDisabled} className="app-button-secondary rounded-xl px-3 py-1.5 text-xs font-black">
+                        Bỏ chọn
+                      </button>
+                    ) : null}
+                    <button onClick={() => void deleteSelectedHistorySessions()} disabled={deleteActionDisabled || !selectedHistoryCount} className="app-button-danger rounded-xl px-3 py-1.5 text-xs font-black">
+                      Xóa đã chọn
+                    </button>
+                    <button onClick={() => void deleteAllHistorySessions()} disabled={deleteActionDisabled || !historyListIds.length} className="app-button-danger rounded-xl px-3 py-1.5 text-xs font-black">
+                      Xóa tất cả
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {historyList.length ? historyList.map(session => (
+                <div key={session.id} className="flex items-center gap-2 rounded-2xl border border-slate-800/80 bg-slate-950/35 p-2 transition-colors hover:bg-slate-900/60">
+                  <input
+                    type="checkbox"
+                    checked={selectedHistoryIds.has(session.id)}
+                    onChange={() => toggleHistorySelection(session.id)}
+                    disabled={deleteActionDisabled}
+                    className="h-4 w-4 shrink-0 accent-sky-500"
+                    aria-label={`Chọn lịch sử ${session.headerText || 'Điểm danh Bang Chiến'}`}
+                  />
+                  <button
+                    onClick={() => openHistorySession(session.id)}
+                    className="flex min-w-0 flex-1 flex-col gap-2 rounded-xl px-2 py-1 text-left sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-black text-slate-100">{session.headerText || 'Điểm danh Bang Chiến'}</div>
+                      <div className="text-xs text-slate-500">{formatDate(session.openedAt)} - {formatDate(session.closedAt)}</div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-1.5">
+                      <SummaryPill choice="GO" count={session.summary.go} />
+                      <SummaryPill choice="MAYBE" count={session.summary.maybe} />
+                      <SummaryPill choice="NOGO" count={session.summary.nogo} />
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => void deleteHistorySession(session)}
+                    disabled={deletingSessionId === session.id || bulkDeleting}
+                    className="app-button-danger rounded-xl p-2"
+                    title="Xóa lịch sử điểm danh"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              )) : (
+                <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-8 text-center text-sm text-slate-500">
+                  Chưa có lịch sử điểm danh.
+                </div>
+              )}
+              {historyHasMore ? (
+                <button
+                  onClick={loadMoreHistory}
+                  disabled={historyLoading}
+                  className="app-button-secondary w-full rounded-xl px-4 py-2 text-sm font-black"
+                >
+                  {historyLoading ? 'Đang tải...' : 'Tải thêm lịch sử'}
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
       )}
 
-      <section className="app-surface rounded-2xl p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <CalendarDays size={18} className="text-slate-400" />
-          <h2 className="text-lg font-black text-white">Lịch sử điểm danh</h2>
-          {historyLoading ? <span className="text-xs text-slate-500">Đang tải...</span> : null}
+      {activeDetailsOpen && attendance.activeSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={() => setActiveDetailsOpen(false)}>
+          <div className="max-h-[96vh] w-full max-w-[96vw] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl custom-scrollbar" onClick={event => event.stopPropagation()}>
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-6 py-5 backdrop-blur">
+              <div className="min-w-0">
+                <h2 className="truncate text-xl font-black text-white">{attendance.activeSession.headerText || 'Điểm danh Bang Chiến'}</h2>
+                <p className="text-sm text-slate-500">Cơ cấu phái, bộ lọc và danh sách điểm danh đang mở.</p>
+              </div>
+              <button onClick={() => setActiveDetailsOpen(false)} className="app-button-secondary rounded-xl p-2">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 lg:p-6">
+              <SessionDetailsPanel session={attendance.activeSession} members={members} />
+            </div>
+          </div>
         </div>
-        {historyError ? (
-          <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-            {historyError}
-          </div>
-        ) : null}
-        {deleteError ? (
-          <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-            {deleteError}
-          </div>
-        ) : null}
-        {historyList.length ? (
-          <div className="space-y-2">
-            {historyList.map(session => (
-              <div key={session.id} className="flex items-center gap-2 rounded-xl bg-slate-950/45 p-2 transition-colors hover:bg-slate-900/80">
-                <button
-                  onClick={() => openHistorySession(session.id)}
-                  className="min-w-0 flex-1 flex items-center justify-between gap-3 px-2 py-1 text-left"
-                >
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-100 truncate">{session.headerText || 'Điểm danh Bang Chiến'}</div>
-                    <div className="text-xs text-slate-500">{formatDate(session.openedAt)} - {formatDate(session.closedAt)}</div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-bold shrink-0">
-                    <span className="text-emerald-300">GO {session.summary.go}</span>
-                    <span className="text-amber-300">MAYBE {session.summary.maybe}</span>
-                    <span className="text-red-300">NOGO {session.summary.nogo}</span>
-                  </div>
+      )}
+
+      {setupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={() => setSetupModal(null)}>
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
+              <div>
+                <h2 className="text-xl font-black text-white">Mở phiên điểm danh</h2>
+                <p className="text-sm text-slate-500">Nhập tiêu đề hiển thị trên phiên điểm danh mới.</p>
+              </div>
+              <button onClick={() => setSetupModal(null)} className="app-button-secondary rounded-xl p-2">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <div className="space-y-2">
+                <label className="text-xs font-black uppercase tracking-wider text-slate-500">Tiêu đề phiên</label>
+                <input
+                  value={headerText}
+                  onChange={event => setHeaderText(event.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-sky-500"
+                  placeholder="Điểm danh Bang Chiến"
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setSetupModal(null)} className="app-button-secondary rounded-xl px-4 py-2 text-sm font-bold">
+                  Hủy
                 </button>
                 <button
-                  onClick={() => void deleteHistorySession(session)}
-                  disabled={deletingSessionId === session.id}
-                  className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
-                  title="Xóa lịch sử điểm danh"
+                  onClick={() => {
+                    onOpenSession(headerText);
+                    setSetupModal(null);
+                  }}
+                  disabled={actionLoading || !!attendance.activeSession || !attendance.config}
+                  className="app-button-primary inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"
                 >
-                  <Trash2 size={16} />
+                  <Play size={16} />
+                  Mở phiên
                 </button>
               </div>
-            ))}
+            </div>
           </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-8 text-center text-sm text-slate-500">
-            Chưa có lịch sử điểm danh.
-          </div>
-        )}
-      </section>
+        </div>
+      )}
 
       {(selectedHistorySession || selectedHistoryLoading || selectedHistoryError) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={() => setSelectedHistorySession(null)}>
-          <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl custom-scrollbar" onClick={event => event.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={() => setSelectedHistorySession(null)}>
+          <div className="max-h-[96vh] w-full max-w-[96vw] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl custom-scrollbar" onClick={event => event.stopPropagation()}>
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-6 py-5 backdrop-blur">
               <div>
                 <h2 className="text-xl font-black text-white">Chi tiết lịch sử điểm danh</h2>
                 <p className="text-sm text-slate-500">Xem lại kết quả và danh sách vote của phiên đã chọn.</p>
               </div>
               <button
                 onClick={() => setSelectedHistorySession(null)}
-                className="rounded-xl border border-slate-700 bg-slate-900 p-2 text-slate-400 transition-colors hover:text-slate-100"
+                className="app-button-secondary rounded-xl p-2"
               >
                 <X size={18} />
               </button>
             </div>
-            {selectedHistoryLoading ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-10 text-center text-sm text-slate-400">
-                Đang tải chi tiết...
-              </div>
-            ) : selectedHistoryError ? (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-10 text-center text-sm text-red-200">
-                {selectedHistoryError}
-              </div>
-            ) : selectedHistorySession ? (
-              <SessionDetail session={selectedHistorySession} />
-            ) : null}
+            <div className="p-5 lg:p-6">
+              {selectedHistoryLoading ? (
+                <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-10 text-center text-sm text-slate-400">
+                  Đang tải chi tiết...
+                </div>
+              ) : selectedHistoryError ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-10 text-center text-sm text-red-200">
+                  {selectedHistoryError}
+                </div>
+              ) : selectedHistorySession ? (
+                <SessionDetailsPanel session={selectedHistorySession} members={members} />
+              ) : null}
+            </div>
           </div>
         </div>
       )}

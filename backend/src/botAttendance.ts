@@ -173,21 +173,35 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
     return true;
   }
 
+  try {
+    await interaction.deferReply({ ephemeral: true });
+  } catch (err) {
+    console.warn('[Discord Bot] Attendance button defer failed:', err instanceof Error ? err.message : err);
+    return true;
+  }
+
   const result = await castAttendanceVote({
     discordGuildId: interaction.guildId,
     discordUserId: interaction.user.id,
     sessionId: parsed.sessionId,
     choice: parsed.choice,
+    discordMessageId: interaction.message.id,
   });
 
   if (result.status !== 200) {
-    await interaction.reply({ content: result.body.error || 'Không thể ghi nhận điểm danh.', ephemeral: true });
+    await interaction.editReply({ content: result.body.error || 'Không thể ghi nhận điểm danh.' }).catch(err => {
+      console.warn('[Discord Bot] Attendance button error reply failed:', err instanceof Error ? err.message : err);
+    });
     return true;
   }
 
-  await editAttendanceDiscordMessage(parsed.sessionId, result.body.session.discordChannelId, result.body.session.discordMessageId, false);
-
   const label = parsed.choice === 'GO' ? 'Tham gia' : parsed.choice === 'MAYBE' ? 'Dự bị' : 'Không tham gia';
-  await interaction.reply({ content: `Đã ghi nhận lựa chọn: ${label}.`, ephemeral: true });
+  await interaction.editReply({ content: `Đã ghi nhận lựa chọn: ${label}.` }).catch(err => {
+    console.warn('[Discord Bot] Attendance button success reply failed:', err instanceof Error ? err.message : err);
+  });
+
+  editAttendanceDiscordMessage(result.body.session.id, result.body.session.discordChannelId, result.body.session.discordMessageId, false).catch(err => {
+    console.warn('[Discord Bot] Attendance message refresh failed:', err instanceof Error ? err.message : err);
+  });
   return true;
 }

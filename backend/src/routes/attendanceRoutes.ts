@@ -34,6 +34,13 @@ function parseHistoryLimit(value: unknown) {
   return Math.min(Math.max(parsed, 1), 50);
 }
 
+function parseHistoryOffset(value: unknown) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : 0;
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(parsed, 0);
+}
+
 export function createAttendanceRoutes() {
   const router = Router();
 
@@ -76,7 +83,7 @@ export function createAttendanceRoutes() {
         return;
       }
 
-      const result = await listAttendanceSessions(access.guild.discordGuildId, parseHistoryLimit(req.query.limit));
+      const result = await listAttendanceSessions(access.guild.discordGuildId, parseHistoryLimit(req.query.limit), parseHistoryOffset(req.query.offset));
       res.status(result.status).json(result.body);
     } catch (err) {
       next(err);

@@ -936,6 +936,7 @@ export default function App() {
           {activeTab === 'attendance' && canManageLineup && (
             <AttendanceView
               attendance={attendance}
+              members={memberPool}
               actionLoading={attendanceActionLoading}
               onSetChannel={handleSetAttendanceChannel}
               onOpenSession={handleOpenAttendanceSession}

@@ -2,20 +2,17 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  type Client,
 } from 'discord.js';
 import {
   attachAttendanceMessage,
   getAttendanceRenderPayload,
+  markAttendanceRendered,
 } from './attendanceService.js';
+import { fetchDiscordChannel, setDiscordClient } from './discordClientService.js';
 
 const ATTENDANCE_BUTTON_PREFIX = 'attendance';
 
-let discordClient: Pick<Client, 'channels'> | null = null;
-
-export function setAttendanceDiscordClient(client: Pick<Client, 'channels'>) {
-  discordClient = client;
-}
+export const setAttendanceDiscordClient = setDiscordClient;
 
 export function buildAttendanceButtons(sessionId: string, disabled = false) {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -46,12 +43,12 @@ export function parseAttendanceButtonCustomId(customId: string) {
 }
 
 export async function sendAttendanceDiscordMessage(sessionId: string, channelId: string | null) {
-  if (!discordClient || !channelId) return false;
+  if (!channelId) return false;
 
   const renderResult = await getAttendanceRenderPayload(sessionId);
   if (renderResult.status !== 200) return false;
 
-  const channel = await discordClient.channels.fetch(channelId).catch(() => null);
+  const channel = await fetchDiscordChannel(channelId);
   if (!channel || !channel.isTextBased() || !('send' in channel)) return false;
 
   const message = await channel.send({
@@ -63,12 +60,12 @@ export async function sendAttendanceDiscordMessage(sessionId: string, channelId:
 }
 
 export async function editAttendanceDiscordMessage(sessionId: string, channelId: string | null, messageId: string | null, closed = false) {
-  if (!discordClient || !channelId || !messageId) return false;
+  if (!channelId || !messageId) return false;
 
   const renderResult = await getAttendanceRenderPayload(sessionId);
   if (renderResult.status !== 200) return false;
 
-  const channel = await discordClient.channels.fetch(channelId).catch(() => null);
+  const channel = await fetchDiscordChannel(channelId);
   if (!channel || !channel.isTextBased()) return false;
 
   const message = await channel.messages.fetch(messageId).catch(() => null);
@@ -78,5 +75,6 @@ export async function editAttendanceDiscordMessage(sessionId: string, channelId:
     content: renderResult.body.content,
     components: [buildAttendanceButtons(sessionId, closed)],
   });
+  await markAttendanceRendered(sessionId);
   return true;
 }
