@@ -79,7 +79,7 @@ export async function handleOAuthCallback(code: string, redirectUri: string) {
     }
   }
 
-  const sessionId = createSession({
+  const sessionId = await createSession({
     accessToken: tokenData.access_token,
     refreshToken: tokenData.refresh_token,
     expiresAt: Date.now() + (tokenData.expires_in * 1000),
@@ -96,7 +96,7 @@ export async function getAuthStatusBySessionId(sessionId: string | undefined) {
     return { authenticated: false };
   }
 
-  const session = getSession(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     return { authenticated: false };
   }

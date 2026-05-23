@@ -10,7 +10,7 @@ export async function requireAuth(req: Request, res: Response) {
     return null;
   }
 
-  const session = getSession(sessionId);
+  const session = await getSession(sessionId);
   if (!session) {
     res.status(401).json({ error: 'Session expired. Please login again.' });
     return null;

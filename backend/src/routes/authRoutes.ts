@@ -49,10 +49,10 @@ export function createAuthRoutes() {
     }
   });
 
-  router.delete('/api/discord/session', (req, res) => {
+  router.delete('/api/discord/session', async (req, res) => {
     const sessionId = req.cookies?.session_id;
     if (sessionId) {
-      deleteSession(sessionId);
+      await deleteSession(sessionId);
     }
     res.setHeader('Set-Cookie', getClearSessionCookie());
     res.json({ success: true });

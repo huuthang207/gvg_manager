@@ -14,6 +14,7 @@ import { createSettingsRoutes } from './routes/settingsRoutes.js';
 import { createAttendanceRoutes } from './routes/attendanceRoutes.js';
 import { syncAllPersistedGuilds } from './services/syncService.js';
 import { attachRealtimeGateway } from './services/realtimeGateway.js';
+import { deleteExpiredSessions } from './session.js';
 
 dotenv.config();
 
@@ -64,6 +65,16 @@ server.listen(PORT, () => {
 
   const fallbackIntervalMs = Number(process.env.DISCORD_SYNC_FALLBACK_INTERVAL_MS ?? 300000);
   console.log(`[Discord Sync] Fallback scheduler enabled: every ${fallbackIntervalMs}ms`);
+
+  void deleteExpiredSessions().catch(err => {
+    console.error('[Session] Initial cleanup failed:', err?.message || err);
+  });
+
+  setInterval(() => {
+    void deleteExpiredSessions().catch(err => {
+      console.error('[Session] Cleanup failed:', err?.message || err);
+    });
+  }, 60 * 60 * 1000);
 
   void syncAllPersistedGuilds().catch(err => {
     console.error('[Discord Sync] Initial fallback sync failed:', err?.message || err);

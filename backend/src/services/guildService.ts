@@ -9,7 +9,7 @@ export async function switchActiveGuild(userId: string, sessionId: string, guild
     return { status: 403 as const, body: { error: 'Bạn không có quyền truy cập server này.' } };
   }
 
-  updateSessionActiveGuild(sessionId, guildId);
+  await updateSessionActiveGuild(sessionId, guildId);
   const state = await getUserAppState(userId, guildId);
   return { status: 200 as const, body: state };
 }

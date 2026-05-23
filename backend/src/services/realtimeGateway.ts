@@ -107,36 +107,40 @@ function handleMessage(socket: WebSocket, raw: Buffer) {
   send(socket, { type: 'subscribed', guildId: message.guildId });
 }
 
+async function handleConnection(socket: WebSocket, request: IncomingMessage) {
+  const sessionId = parseSessionIdFromCookie(request.headers.cookie);
+  if (!sessionId) {
+    socket.close(1008, 'Missing session');
+    return;
+  }
+
+  const session = await getSession(sessionId);
+  if (!session) {
+    socket.close(1008, 'Invalid session');
+    return;
+  }
+
+  socketMeta.set(socket, {
+    userId: session.userId,
+    guildId: session.activeGuildId ?? null,
+  });
+
+  logRealtime(`[WS] Connected user=${session.userId} guild=${session.activeGuildId ?? 'none'}`);
+
+  socket.on('message', data => {
+    if (!(data instanceof Buffer)) return;
+    handleMessage(socket, data);
+  });
+
+  socket.on('close', () => {
+    socketMeta.delete(socket);
+    logRealtime('[WS] Connection closed');
+  });
+}
+
 export function attachRealtimeGateway(wss: WebSocketServer) {
   wss.on('connection', (socket: WebSocket, request: IncomingMessage) => {
-    const sessionId = parseSessionIdFromCookie(request.headers.cookie);
-    if (!sessionId) {
-      socket.close(1008, 'Missing session');
-      return;
-    }
-
-    const session = getSession(sessionId);
-    if (!session) {
-      socket.close(1008, 'Invalid session');
-      return;
-    }
-
-    socketMeta.set(socket, {
-      userId: session.userId,
-      guildId: session.activeGuildId ?? null,
-    });
-
-    logRealtime(`[WS] Connected user=${session.userId} guild=${session.activeGuildId ?? 'none'}`);
-
-    socket.on('message', data => {
-      if (!(data instanceof Buffer)) return;
-      handleMessage(socket, data);
-    });
-
-    socket.on('close', () => {
-      socketMeta.delete(socket);
-      logRealtime('[WS] Connection closed');
-    });
+    void handleConnection(socket, request);
   });
 }
 
