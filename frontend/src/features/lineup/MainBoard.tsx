@@ -4,12 +4,13 @@
  */
 
 import React from 'react';
+import { toBlob } from 'html-to-image';
 import { Member, Skill, SquadGroup } from '../../types.ts';
 import { LineupSnapshotActions, LineupSnapshotState } from '../../hooks/useLineupSnapshots.ts';
 import { DiscordUser } from '../../services/discordApi.ts';
 import { CLASSES, CLASS_COLORS, CLASS_ICONS, getClassIcon } from '../../constants.ts';
 import { TeamCard } from './TeamCard.tsx';
-import { Archive, BarChart3, ChevronDown, ClipboardList, MessageSquareText, RotateCcw, Save, Search } from 'lucide-react';
+import { Archive, BarChart3, ChevronDown, ClipboardList, ImageDown, MessageSquareText, RotateCcw, Save, Search } from 'lucide-react';
 import { SnapshotSaveModal } from './SnapshotSaveModal.tsx';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 import { getErrorMessage } from '../../lib/error.ts';
@@ -28,6 +29,7 @@ interface MainBoardProps {
   onRemoveSkillFromMember: (memberId: string, skillId: string) => void;
   onStartNewLineup: () => void;
   onRearrangeMembers: () => void;
+  onOpenAttendanceImport?: () => void;
   lineupResetActionPending?: boolean;
   onSquadGroupLeaderChange: (groupId: string, leaderMemberId: string | null) => void;
   onMemberNoteChange: (teamId: string, memberId: string, note: string) => void;
@@ -47,6 +49,7 @@ export const MainBoard: React.FC<MainBoardProps> = ({
   onRemoveSkillFromMember,
   onStartNewLineup,
   onRearrangeMembers,
+  onOpenAttendanceImport,
   lineupResetActionPending = false,
   onSquadGroupLeaderChange,
   onMemberNoteChange,
@@ -66,11 +69,13 @@ export const MainBoard: React.FC<MainBoardProps> = ({
   } = snapshotActions;
 
   const { alert } = useSystemDialog();
+  const lineupBoardRef = React.useRef<HTMLDivElement | null>(null);
   const [snapshotName, setSnapshotName] = React.useState('');
   const [saveMode, setSaveMode] = React.useState<'create' | 'overwrite'>('create');
   const [overwriteSnapshotId, setOverwriteSnapshotId] = React.useState<string>('');
   const [isSaveModalOpen, setIsSaveModalOpen] = React.useState(false);
   const [savingSnapshot, setSavingSnapshot] = React.useState(false);
+  const [exportingLineupImage, setExportingLineupImage] = React.useState(false);
   const [assignmentsOpen, setAssignmentsOpen] = React.useState(false);
   const [assignmentSearch, setAssignmentSearch] = React.useState('');
   const [draftNotes, setDraftNotes] = React.useState<Record<string, string>>({});
@@ -208,6 +213,47 @@ export const MainBoard: React.FC<MainBoardProps> = ({
       return;
     } finally {
       setSavingSnapshot(false);
+    }
+  };
+
+  const handleShareLineupImage = async () => {
+    if (!lineupBoardRef.current || exportingLineupImage) return;
+
+    setExportingLineupImage(true);
+    try {
+      const blob = await toBlob(lineupBoardRef.current, {
+        backgroundColor: '#020617',
+        cacheBust: true,
+        pixelRatio: 2,
+      });
+
+      if (!blob) {
+        throw new Error('Không thể tạo ảnh đội hình.');
+      }
+
+      const file = new File([blob], 'gvg-lineup.png', { type: 'image/png' });
+      if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'GvG Lineup' });
+          return;
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          throw err;
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'gvg-lineup.png';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      void alert({ message: getErrorMessage(err, 'Không thể tạo ảnh đội hình'), variant: 'error' });
+    } finally {
+      setExportingLineupImage(false);
     }
   };
 
@@ -429,8 +475,28 @@ Bảng phân công
                   <Archive size={12} />
                   Đã lưu
                 </button>
+                <button
+                  onClick={() => void handleShareLineupImage()}
+                  disabled={exportingLineupImage || squadGroups.length === 0}
+                  className="flex items-center gap-1.5 rounded-lg border border-fuchsia-400/25 bg-fuchsia-500/8 px-2 py-1 text-[10px] font-bold text-fuchsia-200 transition-colors hover:border-fuchsia-300/45 hover:bg-fuchsia-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Chia sẻ hoặc tải ảnh đội hình"
+                >
+                  <ImageDown size={12} />
+                  {exportingLineupImage ? 'Đang chụp...' : 'Chia sẻ ảnh'}
+                </button>
                 {!readOnly && (
                   <>
+                    {onOpenAttendanceImport ? (
+                      <button
+                        onClick={onOpenAttendanceImport}
+                        disabled={lineupResetActionPending}
+                        className="flex items-center gap-1.5 rounded-lg border border-sky-400/25 bg-sky-500/8 px-2 py-1 text-[10px] font-bold text-sky-200 transition-colors hover:border-sky-300/45 hover:bg-sky-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                        title="Nhập danh sách từ điểm danh"
+                      >
+                        <ClipboardList size={12} />
+                        Từ điểm danh
+                      </button>
+                    ) : null}
                     <button
                       onClick={onRearrangeMembers}
                       disabled={lineupResetActionPending}
@@ -460,7 +526,7 @@ Bảng phân công
         )}
 
 
-        <div className="space-y-6 pb-6">
+        <div ref={lineupBoardRef} className="space-y-6 rounded-2xl bg-slate-950 p-4 pb-6">
           {squadGroups.map((group, groupIndex) => {
             const accent = GROUP_ACCENTS[groupIndex % GROUP_ACCENTS.length];
             const leader = group.leaderMemberId ? getMemberById(group.leaderMemberId) : null;

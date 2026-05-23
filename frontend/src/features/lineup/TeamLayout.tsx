@@ -23,7 +23,7 @@ import {
 } from '@dnd-kit/sortable';
 import { Member, Skill, SquadGroup } from '../../types.ts';
 import { LineupSnapshotActions, LineupSnapshotState } from '../../hooks/useLineupSnapshots.ts';
-import { DiscordUser } from '../../services/discordApi.ts';
+import { DiscordUser, getAttendanceHistory, getAttendanceSession } from '../../services/discordApi.ts';
 import { MemberPool } from './MemberPool.tsx';
 import { SkillPool } from './SkillPool.tsx';
 import { MainBoard } from './MainBoard.tsx';
@@ -32,14 +32,176 @@ import { SquadSetupScreen } from './SquadSetupScreen.tsx';
 import { SavedLineupsView } from './SavedLineupsView.tsx';
 import { LineupEntryMenu } from './LineupEntryMenu.tsx';
 import { LineupSnapshotsModal } from './LineupSnapshotsModal.tsx';
-import { Users, Zap } from 'lucide-react';
+import { ClipboardList, Loader2, Users, X, Zap } from 'lucide-react';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
+import type { AttendanceSession } from '../../shared/types/auth.ts';
+import type { AttendanceLineupImportPayload, LineupMemberSource } from '../../shared/types/lineup.ts';
 
 type EmptyLineupMode = 'source' | 'create';
+
+function formatAttendanceDate(value: string | null) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('vi-VN');
+}
+
+function getMemberName(member: Member) {
+  return member.ingameName || member.discordDisplayName || member.name || member.discordUsername || 'Không rõ tên';
+}
+
+interface AttendanceImportModalProps {
+  sessions: AttendanceSession[];
+  selectedSession: AttendanceSession | null;
+  memberPool: Member[];
+  loading: boolean;
+  detailLoading: boolean;
+  error: string;
+  includeNotVoted: boolean;
+  hasMore: boolean;
+  onClose: () => void;
+  onSelectSession: (sessionId: string) => void;
+  onLoadMore: () => void;
+  onIncludeNotVotedChange: (value: boolean) => void;
+  onImport: (payload: AttendanceLineupImportPayload) => void;
+}
+
+function AttendanceImportModal({
+  sessions,
+  selectedSession,
+  memberPool,
+  loading,
+  detailLoading,
+  error,
+  includeNotVoted,
+  hasMore,
+  onClose,
+  onSelectSession,
+  onLoadMore,
+  onIncludeNotVotedChange,
+  onImport,
+}: AttendanceImportModalProps) {
+  const votedMemberIds = React.useMemo(() => new Set((selectedSession?.votes || []).map(vote => vote.memberId)), [selectedSession]);
+  const notVotedMembers = React.useMemo(() => (
+    selectedSession
+      ? memberPool
+        .filter(member => member.active !== false && !votedMemberIds.has(member.id))
+        .sort((a, b) => {
+          const classCompare = a.classType.localeCompare(b.classType, 'vi');
+          if (classCompare !== 0) return classCompare;
+          return getMemberName(a).localeCompare(getMemberName(b), 'vi');
+        })
+      : []
+  ), [memberPool, selectedSession, votedMemberIds]);
+  const mainMemberIds = React.useMemo(() => selectedSession?.votes.filter(vote => vote.choice === 'GO').map(vote => vote.memberId) || [], [selectedSession]);
+  const standbyMemberIds = React.useMemo(() => selectedSession?.votes.filter(vote => vote.choice === 'MAYBE').map(vote => vote.memberId) || [], [selectedSession]);
+  const reserveMemberIds = includeNotVoted ? [...standbyMemberIds, ...notVotedMembers.map(member => member.id)] : standbyMemberIds;
+  const canImport = !!selectedSession && !detailLoading && (mainMemberIds.length > 0 || reserveMemberIds.length > 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={onClose}>
+      <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl" onClick={event => event.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
+          <div>
+            <h2 className="text-xl font-black text-white">Nhập từ điểm danh</h2>
+            <p className="text-sm text-slate-500">Chọn phiên điểm danh để thêm thành viên vào slot trống của đội hình hiện tại.</p>
+          </div>
+          <button onClick={onClose} className="app-button-secondary rounded-xl p-2">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid max-h-[calc(92vh-76px)] grid-cols-1 overflow-hidden lg:grid-cols-[380px_1fr]">
+          <aside className="min-h-0 border-b border-slate-800 bg-slate-950/50 lg:border-b-0 lg:border-r">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 p-3">
+              <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-400">
+                <ClipboardList size={14} />
+                Phiên điểm danh
+              </div>
+              {loading ? <Loader2 size={15} className="animate-spin text-sky-300" /> : null}
+            </div>
+            <div className="max-h-[54vh] space-y-2 overflow-y-auto p-3 custom-scrollbar lg:max-h-[calc(92vh-145px)]">
+              {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div> : null}
+              {sessions.map(session => (
+                <button
+                  key={session.id}
+                  onClick={() => onSelectSession(session.id)}
+                  className={`w-full rounded-xl border p-3 text-left transition-colors ${selectedSession?.id === session.id ? 'border-sky-400/60 bg-sky-500/12' : 'border-slate-800 bg-slate-900/35 hover:border-slate-600 hover:bg-slate-900/70'}`}
+                >
+                  <div className="truncate text-sm font-black text-slate-100">{session.headerText || 'Điểm danh Bang Chiến'}</div>
+                  <div className="mt-1 text-xs text-slate-500">{formatAttendanceDate(session.openedAt)} - {formatAttendanceDate(session.closedAt)}</div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black">
+                    <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">Tham gia {session.summary.go}</span>
+                    <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-amber-200">Dự bị {session.summary.maybe}</span>
+                    <span className="rounded-full border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-red-200">Không {session.summary.nogo}</span>
+                  </div>
+                </button>
+              ))}
+              {!sessions.length && !loading ? <div className="rounded-xl border border-dashed border-slate-700 px-3 py-8 text-center text-sm text-slate-500">Chưa có phiên điểm danh.</div> : null}
+              {hasMore ? (
+                <button onClick={onLoadMore} disabled={loading} className="app-button-secondary w-full rounded-xl px-3 py-2 text-xs font-black">
+                  {loading ? 'Đang tải...' : 'Tải thêm'}
+                </button>
+              ) : null}
+            </div>
+          </aside>
+
+          <section className="min-h-0 overflow-y-auto p-5 custom-scrollbar">
+            {detailLoading ? (
+              <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/35 text-sm font-bold text-slate-400">
+                <Loader2 size={18} className="mr-2 animate-spin text-sky-300" />
+                Đang tải chi tiết phiên...
+              </div>
+            ) : selectedSession ? (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/35 p-4">
+                  <h3 className="text-lg font-black text-white">{selectedSession.headerText || 'Điểm danh Bang Chiến'}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{formatAttendanceDate(selectedSession.openedAt)} - {formatAttendanceDate(selectedSession.closedAt)}</p>
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3"><div className="text-xs font-black text-emerald-200">Vào chính</div><div className="text-2xl font-black text-white">{mainMemberIds.length}</div></div>
+                    <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3"><div className="text-xs font-black text-amber-200">Dự bị</div><div className="text-2xl font-black text-white">{standbyMemberIds.length}</div></div>
+                    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3"><div className="text-xs font-black text-slate-300">Chưa điểm danh</div><div className="text-2xl font-black text-white">{notVotedMembers.length}</div></div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/35 p-4">
+                  <label className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/45 px-3 py-2 text-sm font-bold text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={includeNotVoted}
+                      onChange={event => onIncludeNotVotedChange(event.target.checked)}
+                      className="h-4 w-4 accent-sky-500"
+                    />
+                    Thêm người chưa điểm danh vào dự bị ({notVotedMembers.length})
+                  </label>
+                  <p className="mt-2 text-xs text-slate-500">Người chọn “Không tham gia” sẽ không được nhập vào đội hình.</p>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button onClick={onClose} className="app-button-secondary rounded-xl px-4 py-2 text-sm font-bold">Hủy</button>
+                  <button
+                    onClick={() => onImport({ mainMemberIds, reserveMemberIds })}
+                    disabled={!canImport}
+                    className="app-button-primary rounded-xl px-4 py-2 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Nhập {mainMemberIds.length} chính / {reserveMemberIds.length} dự bị
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/25 text-center text-sm text-slate-500">
+                Chọn một phiên điểm danh để xem danh sách nhập.
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface TeamLayoutProps {
   squadGroups: SquadGroup[];
   memberPool: Member[];
+  fullMemberPool: Member[];
   skills: Skill[];
   currentUser: DiscordUser | null;
   assignedMemberIds: Set<string>;
@@ -54,6 +216,14 @@ interface TeamLayoutProps {
   canManageLineup: boolean;
   canManageSnapshots: boolean;
   canRestoreSnapshots: boolean;
+  onImportAttendanceToLineup: (payload: AttendanceLineupImportPayload) => void;
+  lineupMemberSource: LineupMemberSource;
+  lineupMemberSourceSessionId: string | null;
+  lineupMemberSourceSession: AttendanceSession | null;
+  lineupMemberSourceIncludeNotVoted: boolean;
+  onLineupMemberSourceChange: (source: LineupMemberSource) => void;
+  onLineupMemberSourceSessionChange: (session: AttendanceSession | null) => void;
+  onLineupMemberSourceIncludeNotVotedChange: (include: boolean) => void;
   snapshotState: LineupSnapshotState;
   snapshotActions: Pick<LineupSnapshotActions, 'openSnapshots' | 'closeSnapshots' | 'selectSnapshot' | 'saveSnapshot' | 'restoreSnapshot' | 'removeSnapshot' | 'refreshSnapshots'>;
 }
@@ -61,6 +231,7 @@ interface TeamLayoutProps {
 export const TeamLayout: React.FC<TeamLayoutProps> = ({
   squadGroups,
   memberPool,
+  fullMemberPool,
   skills,
   currentUser,
   assignedMemberIds,
@@ -75,6 +246,14 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   canManageLineup,
   canManageSnapshots,
   canRestoreSnapshots,
+  onImportAttendanceToLineup,
+  lineupMemberSource,
+  lineupMemberSourceSessionId,
+  lineupMemberSourceSession,
+  lineupMemberSourceIncludeNotVoted,
+  onLineupMemberSourceChange,
+  onLineupMemberSourceSessionChange,
+  onLineupMemberSourceIncludeNotVotedChange,
   snapshotState,
   snapshotActions,
 }) => {
@@ -84,6 +263,15 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   const [sidePanelTab, setSidePanelTab] = React.useState<'members' | 'skills'>('members');
   const [emptyLineupMode, setEmptyLineupMode] = React.useState<EmptyLineupMode>('source');
   const [lineupResetActionPending, setLineupResetActionPending] = React.useState(false);
+  const [attendanceImportOpen, setAttendanceImportOpen] = React.useState(false);
+  const [attendanceSessions, setAttendanceSessions] = React.useState<AttendanceSession[]>([]);
+  const [attendanceImportLoading, setAttendanceImportLoading] = React.useState(false);
+  const [attendanceImportDetailLoading, setAttendanceImportDetailLoading] = React.useState(false);
+  const [attendanceImportError, setAttendanceImportError] = React.useState('');
+  const [selectedAttendanceSession, setSelectedAttendanceSession] = React.useState<AttendanceSession | null>(null);
+  const [includeNotVoted, setIncludeNotVoted] = React.useState(false);
+  const [attendanceHistoryHasMore, setAttendanceHistoryHasMore] = React.useState(false);
+  const [attendanceHistoryNextOffset, setAttendanceHistoryNextOffset] = React.useState(0);
   const menuSnapshotsFetchedRef = React.useRef(false);
 
   const sensors = useSensors(
@@ -320,11 +508,11 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       });
     });
 
-    memberPool.forEach(member => {
+    fullMemberPool.forEach(member => {
       if (!assignedIds.has(member.id)) return;
       (member.assignedSkills || []).forEach(skillId => onRemoveSkillFromMember(member.id, skillId));
     });
-  }, [memberPool, onRemoveSkillFromMember, squadGroups]);
+  }, [fullMemberPool, onRemoveSkillFromMember, squadGroups]);
 
   const startNewLineup = useCallback(async () => {
     if (lineupResetActionPending) return;
@@ -386,6 +574,72 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     onSquadGroupsChange(groups);
     setEmptyLineupMode('source');
   }, [onSquadGroupsChange]);
+
+  const loadAttendanceSessions = useCallback((offset = 0) => {
+    setAttendanceImportLoading(true);
+    setAttendanceImportError('');
+    getAttendanceHistory(20, offset)
+      .then(result => {
+        setAttendanceSessions(prev => offset === 0
+          ? result.sessions
+          : [...prev, ...result.sessions.filter(session => !prev.some(item => item.id === session.id))]);
+        setAttendanceHistoryHasMore(!!result.hasMore);
+        setAttendanceHistoryNextOffset(result.nextOffset ?? offset + result.sessions.length);
+      })
+      .catch(() => setAttendanceImportError('Không thể tải danh sách phiên điểm danh.'))
+      .finally(() => setAttendanceImportLoading(false));
+  }, []);
+
+  const openAttendanceImport = useCallback(() => {
+    setAttendanceImportOpen(true);
+    setSelectedAttendanceSession(null);
+    setIncludeNotVoted(false);
+    loadAttendanceSessions(0);
+  }, [loadAttendanceSessions]);
+
+  const selectAttendanceSession = useCallback((sessionId: string) => {
+    const preview = attendanceSessions.find(session => session.id === sessionId) || null;
+    setSelectedAttendanceSession(preview);
+    setIncludeNotVoted(false);
+    setAttendanceImportDetailLoading(true);
+    setAttendanceImportError('');
+    getAttendanceSession(sessionId)
+      .then(result => setSelectedAttendanceSession(result.session))
+      .catch(() => setAttendanceImportError('Không thể tải chi tiết phiên điểm danh.'))
+      .finally(() => setAttendanceImportDetailLoading(false));
+  }, [attendanceSessions]);
+
+  const handleAttendanceImport = useCallback((payload: AttendanceLineupImportPayload) => {
+    if (selectedAttendanceSession) {
+      onLineupMemberSourceChange('attendance');
+      onLineupMemberSourceSessionChange(selectedAttendanceSession);
+    }
+    onImportAttendanceToLineup(payload);
+    setAttendanceImportOpen(false);
+  }, [onImportAttendanceToLineup, onLineupMemberSourceChange, onLineupMemberSourceSessionChange, selectedAttendanceSession]);
+
+  const handleSourceChange = useCallback((source: LineupMemberSource) => {
+    onLineupMemberSourceChange(source);
+    if (source === 'attendance' && attendanceSessions.length === 0 && !attendanceImportLoading) {
+      loadAttendanceSessions(0);
+    }
+  }, [attendanceImportLoading, attendanceSessions.length, loadAttendanceSessions, onLineupMemberSourceChange]);
+
+  const handleSourceSessionChange = useCallback((sessionId: string) => {
+    if (!sessionId) {
+      onLineupMemberSourceSessionChange(null);
+      return;
+    }
+
+    const preview = attendanceSessions.find(session => session.id === sessionId) || null;
+    onLineupMemberSourceSessionChange(preview);
+    setAttendanceImportLoading(true);
+    setAttendanceImportError('');
+    getAttendanceSession(sessionId)
+      .then(result => onLineupMemberSourceSessionChange(result.session))
+      .catch(() => setAttendanceImportError('Không thể tải chi tiết phiên điểm danh.'))
+      .finally(() => setAttendanceImportLoading(false));
+  }, [attendanceSessions, onLineupMemberSourceSessionChange]);
 
   React.useEffect(() => {
     if (squadGroups.length > 0 && emptyLineupMode !== 'source') {
@@ -467,12 +721,61 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
 
             <div className="flex-1 min-h-0 overflow-hidden">
               {sidePanelTab === 'members' ? (
-                <MemberPool
-                  members={memberPool}
-                  skills={skills}
-                  assignedMemberIds={assignedMemberIds}
-                  onRemoveSkillFromMember={onRemoveSkillFromMember}
-                />
+                <div className="flex h-full min-h-0 flex-col">
+                  <div className="space-y-2 border-b border-slate-800/80 bg-slate-950/35 p-2">
+                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-800 bg-slate-950/60 p-1">
+                      <button
+                        onClick={() => handleSourceChange('guild')}
+                        className={`rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${lineupMemberSource === 'guild' ? 'bg-sky-500/85 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
+                      >
+                        Tất cả guild
+                      </button>
+                      <button
+                        onClick={() => handleSourceChange('attendance')}
+                        className={`rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${lineupMemberSource === 'attendance' ? 'bg-sky-500/85 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
+                      >
+                        Theo điểm danh
+                      </button>
+                    </div>
+                    {lineupMemberSource === 'attendance' ? (
+                      <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/45 p-2">
+                        <select
+                          value={lineupMemberSourceSessionId || ''}
+                          onChange={event => handleSourceSessionChange(event.target.value)}
+                          disabled={attendanceImportLoading && attendanceSessions.length === 0}
+                          className="w-full rounded-lg border border-slate-700 bg-slate-950/80 px-2 py-1.5 text-xs font-bold text-slate-200 outline-none focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <option value="">Chọn phiên điểm danh</option>
+                          {attendanceSessions.map(session => (
+                            <option key={session.id} value={session.id}>
+                              {(session.headerText || 'Điểm danh Bang Chiến')} · {formatAttendanceDate(session.openedAt)}
+                            </option>
+                          ))}
+                        </select>
+                        <label className="flex items-center gap-2 text-[11px] font-bold text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={lineupMemberSourceIncludeNotVoted}
+                            onChange={event => onLineupMemberSourceIncludeNotVotedChange(event.target.checked)}
+                            disabled={!lineupMemberSourceSession}
+                            className="h-4 w-4 accent-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                          />
+                          Thêm người chưa điểm danh
+                        </label>
+                        {attendanceImportLoading ? <div className="text-[11px] font-bold text-sky-300">Đang tải điểm danh...</div> : null}
+                        {attendanceImportError ? <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-200">{attendanceImportError}</div> : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <MemberPool
+                      members={memberPool}
+                      skills={skills}
+                      assignedMemberIds={assignedMemberIds}
+                      onRemoveSkillFromMember={onRemoveSkillFromMember}
+                    />
+                  </div>
+                </div>
               ) : (
                 <SkillPool skills={skills} />
               )}
@@ -481,13 +784,14 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
         )}
         <MainBoard
           squadGroups={squadGroups}
-          memberPool={memberPool}
+          memberPool={fullMemberPool}
           skills={skills}
           currentUser={currentUser}
           getMemberById={getMemberById}
           onRemoveSkillFromMember={onRemoveSkillFromMember}
           onStartNewLineup={startNewLineup}
           onRearrangeMembers={handleRearrangeMembers}
+          onOpenAttendanceImport={openAttendanceImport}
           lineupResetActionPending={lineupResetActionPending}
           onSquadGroupLeaderChange={onSquadGroupLeaderChange}
           onMemberNoteChange={onMemberNoteChange}
@@ -526,6 +830,24 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
           <SquadSetupScreen onCreate={handleCreateSquadGroups} />
         )}
       </main>
+
+      {attendanceImportOpen ? (
+        <AttendanceImportModal
+          sessions={attendanceSessions}
+          selectedSession={selectedAttendanceSession}
+          memberPool={fullMemberPool}
+          loading={attendanceImportLoading}
+          detailLoading={attendanceImportDetailLoading}
+          error={attendanceImportError}
+          includeNotVoted={includeNotVoted}
+          hasMore={attendanceHistoryHasMore}
+          onClose={() => setAttendanceImportOpen(false)}
+          onSelectSession={selectAttendanceSession}
+          onLoadMore={() => loadAttendanceSessions(attendanceHistoryNextOffset)}
+          onIncludeNotVotedChange={setIncludeNotVoted}
+          onImport={handleAttendanceImport}
+        />
+      ) : null}
 
       {snapshotState.snapshotsOpen && (
         <LineupSnapshotsModal

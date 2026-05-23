@@ -18,11 +18,100 @@ import { useGuildContext } from './features/guild/useGuildContext.ts';
 import { useAuthBootstrap } from './features/auth/useAuthBootstrap.ts';
 import { useSystemDialog } from './features/app/SystemDialogProvider.tsx';
 import { API_BASE } from './services/apiBase.ts';
+import type { AttendanceSession } from './shared/types/auth.ts';
+import type { AttendanceLineupImportPayload, LineupMemberSource } from './shared/types/lineup.ts';
 
 type Tab = 'dashboard' | 'teams' | 'attendance';
 
+interface AttendanceLineupImportResult {
+  nextGroups: SquadGroup[];
+  importedMainCount: number;
+  importedReserveCount: number;
+  skippedAlreadyAssignedCount: number;
+  overflowCount: number;
+}
+
 const getActiveTabStorageKey = (userId: string, guildId: string) => `gvg_active_tab_${userId}_${guildId}`;
 const isTab = (value: string | null): value is Tab => value === 'dashboard' || value === 'teams' || value === 'attendance';
+
+function collectAssignedMemberIds(groups: SquadGroup[]) {
+  const ids = new Set<string>();
+  groups.forEach(group => {
+    group.teams.forEach(team => {
+      team.memberIds.forEach(id => id && ids.add(id));
+      team.reserveMemberIds.forEach(id => id && ids.add(id));
+    });
+  });
+  return ids;
+}
+
+function fillEmptySlots(ids: string[], assignedIds: Set<string>, fillSlot: (memberId: string) => boolean) {
+  let importedCount = 0;
+  let skippedAlreadyAssignedCount = 0;
+  let overflowCount = 0;
+
+  ids.forEach(memberId => {
+    if (!memberId) return;
+    if (assignedIds.has(memberId)) {
+      skippedAlreadyAssignedCount += 1;
+      return;
+    }
+    if (fillSlot(memberId)) {
+      assignedIds.add(memberId);
+      importedCount += 1;
+    } else {
+      overflowCount += 1;
+    }
+  });
+
+  return { importedCount, skippedAlreadyAssignedCount, overflowCount };
+}
+
+function importMembersIntoSquadGroups(groups: SquadGroup[], payload: AttendanceLineupImportPayload): AttendanceLineupImportResult {
+  const nextGroups = groups.map(group => ({
+    ...group,
+    teams: group.teams.map(team => ({
+      ...team,
+      memberIds: [...team.memberIds],
+      reserveMemberIds: [...team.reserveMemberIds],
+    })),
+  }));
+  const assignedIds = collectAssignedMemberIds(nextGroups);
+  const fillMainSlot = (memberId: string) => {
+    for (const group of nextGroups) {
+      for (const team of group.teams) {
+        const emptyIndex = team.memberIds.findIndex(id => !id);
+        if (emptyIndex !== -1) {
+          team.memberIds[emptyIndex] = memberId;
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  const fillReserveSlot = (memberId: string) => {
+    for (const group of nextGroups) {
+      for (const team of group.teams) {
+        const emptyIndex = team.reserveMemberIds.findIndex(id => !id);
+        if (emptyIndex !== -1) {
+          team.reserveMemberIds[emptyIndex] = memberId;
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  const mainResult = fillEmptySlots(payload.mainMemberIds, assignedIds, fillMainSlot);
+  const reserveResult = fillEmptySlots(payload.reserveMemberIds, assignedIds, fillReserveSlot);
+
+  return {
+    nextGroups,
+    importedMainCount: mainResult.importedCount,
+    importedReserveCount: reserveResult.importedCount,
+    skippedAlreadyAssignedCount: mainResult.skippedAlreadyAssignedCount + reserveResult.skippedAlreadyAssignedCount,
+    overflowCount: mainResult.overflowCount + reserveResult.overflowCount,
+  };
+}
 
 export default function App() {
   // Active tab state
@@ -46,6 +135,10 @@ export default function App() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [currentGuild, setCurrentGuild] = useState<AppStateResponse['guild']>(null);
   const [attendance, setAttendance] = useState<AppStateResponse['attendance']>({ config: null, activeSession: null, recentSessions: [] });
+  const [lineupMemberSource, setLineupMemberSource] = useState<LineupMemberSource>('guild');
+  const [lineupMemberSourceSessionId, setLineupMemberSourceSessionId] = useState<string | null>(null);
+  const [lineupMemberSourceSession, setLineupMemberSourceSession] = useState<AttendanceSession | null>(null);
+  const [lineupMemberSourceIncludeNotVoted, setLineupMemberSourceIncludeNotVoted] = useState(false);
   const [lineupLock, setLineupLock] = useState<AppStateResponse['lineupLock']>(null);
   const [lineupLockActionLoading, setLineupLockActionLoading] = useState(false);
   const [attendanceActionLoading, setAttendanceActionLoading] = useState(false);
@@ -89,6 +182,10 @@ export default function App() {
       localStorage.removeItem(getActiveTabStorageKey(currentUser.id, currentGuild.id));
     }
     setActiveTab('dashboard');
+    setLineupMemberSource('guild');
+    setLineupMemberSourceSessionId(null);
+    setLineupMemberSourceSession(null);
+    setLineupMemberSourceIncludeNotVoted(false);
   }, [currentGuild, currentUser]);
 
   const clearReconnectTimer = useCallback(() => {
@@ -296,16 +393,27 @@ export default function App() {
   const canSelfService = permissions.includes('view:guild');
   const lineupReadOnly = !canManageLineup || !lineupLock?.isHeldByMe;
 
-  const assignedMemberIds = useMemo(() => {
-    const ids = new Set<string>();
-    squadGroups.forEach(group => {
-      group.teams.forEach(team => {
-        team.memberIds.forEach(id => id && ids.add(id));
-        team.reserveMemberIds.forEach(id => id && ids.add(id));
+  const assignedMemberIds = useMemo(() => collectAssignedMemberIds(squadGroups), [squadGroups]);
+  const lineupVisibleMemberPool = useMemo(() => {
+    if (lineupMemberSource !== 'attendance' || !lineupMemberSourceSession) return memberPool;
+
+    const votedMemberIds = new Set(lineupMemberSourceSession.votes.map(vote => vote.memberId));
+    const visibleMemberIds = new Set(
+      lineupMemberSourceSession.votes
+        .filter(vote => vote.choice === 'GO' || vote.choice === 'MAYBE')
+        .map(vote => vote.memberId),
+    );
+
+    if (lineupMemberSourceIncludeNotVoted) {
+      memberPool.forEach(member => {
+        if (member.active !== false && !votedMemberIds.has(member.id)) {
+          visibleMemberIds.add(member.id);
+        }
       });
-    });
-    return ids;
-  }, [squadGroups]);
+    }
+
+    return memberPool.filter(member => visibleMemberIds.has(member.id));
+  }, [lineupMemberSource, lineupMemberSourceIncludeNotVoted, lineupMemberSourceSession, memberPool]);
 
   const getMemberById = useCallback((id: string) => {
     return memberPool.find(m => m.id === id) || null;
@@ -395,13 +503,7 @@ export default function App() {
       const next = typeof update === 'function' ? update(prev) : update;
 
       if (next.length === 0 && prev.length > 0) {
-        const assignedIds = new Set<string>();
-        prev.forEach(group => {
-          group.teams.forEach(team => {
-            team.memberIds.forEach(id => id && assignedIds.add(id));
-            team.reserveMemberIds.forEach(id => id && assignedIds.add(id));
-          });
-        });
+        const assignedIds = collectAssignedMemberIds(prev);
         setMemberPool(members => members.map(member => assignedIds.has(member.id) ? { ...member, assignedSkills: [] } : member));
       }
 
@@ -409,6 +511,25 @@ export default function App() {
       return next;
     });
   };
+
+  const handleImportAttendanceToLineup = useCallback((payload: AttendanceLineupImportPayload) => {
+    if (!canManageLineup || !lineupLock?.isHeldByMe) {
+      void alert({ message: 'Bạn cần giữ quyền chỉnh sửa đội hình trước khi nhập danh sách điểm danh. Hãy sang tab Xếp đội hình và bấm Bắt đầu.', variant: 'warning' });
+      return;
+    }
+    if (!squadGroups.length) {
+      void alert({ message: 'Chưa có đội hình để nhập danh sách điểm danh.', variant: 'warning' });
+      return;
+    }
+
+    const result = importMembersIntoSquadGroups(squadGroups, payload);
+    handleSquadGroupsChange(result.nextGroups);
+    updateActiveTab('teams');
+    void alert({
+      message: `Đã nhập ${result.importedMainCount} thành viên chính và ${result.importedReserveCount} dự bị. Bỏ qua ${result.skippedAlreadyAssignedCount} người đã có trong đội hình, ${result.overflowCount} người chưa có slot trống.`,
+      variant: result.importedMainCount || result.importedReserveCount ? 'success' : 'warning',
+    });
+  }, [alert, canManageLineup, handleSquadGroupsChange, lineupLock?.isHeldByMe, squadGroups, updateActiveTab]);
 
   const handleMemberNoteChange = (teamId: string, memberId: string, note: string) => {
     handleSquadGroupsChange(prev => prev.map(group => ({
@@ -891,7 +1012,8 @@ export default function App() {
           {activeTab === 'teams' && (
             <TeamLayout
               squadGroups={squadGroups}
-              memberPool={memberPool}
+              memberPool={lineupVisibleMemberPool}
+              fullMemberPool={memberPool}
               skills={skills}
               currentUser={currentUser}
               assignedMemberIds={assignedMemberIds}
@@ -902,6 +1024,17 @@ export default function App() {
               onSkillsChange={setSkills}
               onRemoveSkillFromMember={handleRemoveSkillFromMember}
               onMemberNoteChange={handleMemberNoteChange}
+              onImportAttendanceToLineup={handleImportAttendanceToLineup}
+              lineupMemberSource={lineupMemberSource}
+              lineupMemberSourceSessionId={lineupMemberSourceSessionId}
+              lineupMemberSourceSession={lineupMemberSourceSession}
+              lineupMemberSourceIncludeNotVoted={lineupMemberSourceIncludeNotVoted}
+              onLineupMemberSourceChange={setLineupMemberSource}
+              onLineupMemberSourceSessionChange={(session) => {
+                setLineupMemberSourceSession(session);
+                setLineupMemberSourceSessionId(session?.id ?? null);
+              }}
+              onLineupMemberSourceIncludeNotVotedChange={setLineupMemberSourceIncludeNotVoted}
               getMemberById={getMemberById}
               readOnly={lineupReadOnly}
               snapshotsOnly={false}

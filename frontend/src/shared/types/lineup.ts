@@ -44,6 +44,13 @@ export interface LineupSnapshotData {
   teams: Array<{ id: string; name: string; memberIds: string[]; reserveMemberIds: string[]; slotSkills?: Record<string, string[]>; memberNotes?: Record<string, string> }>;
 }
 
+export type LineupMemberSource = 'guild' | 'attendance';
+
+export interface AttendanceLineupImportPayload {
+  mainMemberIds: string[];
+  reserveMemberIds: string[];
+}
+
 export interface LineupSnapshotSummary {
   id: string;
   name: string;
