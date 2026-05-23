@@ -7,6 +7,7 @@ import React from 'react';
 import { ClipboardCheck, Users, LayoutGrid, UserCircle, LogOut } from 'lucide-react';
 import { AppStateResponse, DiscordUser } from '../../services/discordApi.ts';
 import { cn } from '../../lib/utils.ts';
+import { getDiscordGuildIconUrl } from '../../shared/utils/discordCdn.ts';
 
 type Tab = 'dashboard' | 'teams' | 'attendance';
 
@@ -27,8 +28,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentGuild,
   canManageAttendance,
 }) => {
-  const guildIconUrl = currentGuild?.icon
-    ? `https://cdn.discordapp.com/icons/${currentGuild.discordGuildId}/${currentGuild.icon}.png?size=96`
+  const guildIconUrl = currentGuild
+    ? getDiscordGuildIconUrl(currentGuild.discordGuildId, currentGuild.icon, 96)
     : null;
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [

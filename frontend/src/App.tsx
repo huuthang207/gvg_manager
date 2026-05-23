@@ -18,10 +18,14 @@ import { useGuildContext } from './features/guild/useGuildContext.ts';
 import { useAuthBootstrap } from './features/auth/useAuthBootstrap.ts';
 import { useSystemDialog } from './features/app/SystemDialogProvider.tsx';
 import { API_BASE } from './services/apiBase.ts';
+import { getDiscordGuildIconUrl } from './shared/utils/discordCdn.ts';
 import type { AttendanceSession } from './shared/types/auth.ts';
 import type { AttendanceLineupImportPayload, LineupMemberSource } from './shared/types/lineup.ts';
 
 type Tab = 'dashboard' | 'teams' | 'attendance';
+
+const DEFAULT_DOCUMENT_TITLE = 'GvG Manager';
+const DYNAMIC_GUILD_ICON_SELECTOR = 'link[rel="icon"][data-dynamic-guild-icon="true"]';
 
 interface AttendanceLineupImportResult {
   nextGroups: SquadGroup[];
@@ -156,6 +160,40 @@ export default function App() {
     if (!realtimeDebugEnabled) return;
     console.log(...args);
   }, [realtimeDebugEnabled]);
+
+  React.useEffect(() => {
+    document.title = currentGuild?.name || DEFAULT_DOCUMENT_TITLE;
+
+    return () => {
+      document.title = DEFAULT_DOCUMENT_TITLE;
+    };
+  }, [currentGuild?.name]);
+
+  React.useEffect(() => {
+    const existingIcon = document.querySelector<HTMLLinkElement>(DYNAMIC_GUILD_ICON_SELECTOR);
+    const iconUrl = currentGuild
+      ? getDiscordGuildIconUrl(currentGuild.discordGuildId, currentGuild.icon, 96)
+      : null;
+
+    if (!iconUrl) {
+      existingIcon?.remove();
+      return;
+    }
+
+    const icon = existingIcon ?? document.createElement('link');
+    icon.rel = 'icon';
+    icon.type = 'image/png';
+    icon.href = iconUrl;
+    icon.dataset.dynamicGuildIcon = 'true';
+
+    if (!existingIcon) {
+      document.head.appendChild(icon);
+    }
+
+    return () => {
+      document.querySelector<HTMLLinkElement>(DYNAMIC_GUILD_ICON_SELECTOR)?.remove();
+    };
+  }, [currentGuild?.discordGuildId, currentGuild?.icon]);
 
   React.useEffect(() => {
     if (!currentUser || !currentGuild) {

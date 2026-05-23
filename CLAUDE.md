@@ -13,7 +13,7 @@ The frontend talks to the backend through `VITE_DISCORD_API_URL` (defaults to `h
 
 ## Common commands
 
-Run commands from the relevant package directory.
+Run commands from the relevant package directory; there is no root `package.json`.
 
 ### Frontend (`frontend/`)
 
@@ -36,6 +36,7 @@ npm run dev              # tsx watch src/server.ts
 npm run build            # TypeScript compile to dist/
 npm start                # Run compiled dist/server.js
 npm test                 # Node test runner via tsx over src/**/*.test.ts
+npx tsc --noEmit         # Type-check without emitting dist/
 npm run prisma:generate  # Generate Prisma client
 npm run prisma:migrate   # Run prisma migrate dev
 npm run prisma:migrate:deploy  # Apply migrations in deploy/prod-like environments
@@ -47,7 +48,7 @@ Run one backend test file with:
 npx tsx --test src/serializers/memberSerializer.test.ts
 ```
 
-Current backend test files cover member serialization, squad serialization, and attendance rendering.
+Current backend test files cover member serialization, squad serialization, attendance rendering, and Discord sync behavior.
 
 ## Environment
 
@@ -71,9 +72,9 @@ Frontend `.env` is based on `frontend/.env.example`; `VITE_DISCORD_API_URL` poin
 ### Backend
 
 - `src/server.ts` creates the Express app, enables CORS for the local frontend, installs route modules, starts the HTTP/WebSocket server, starts the Discord bot, and schedules fallback Discord syncs.
-- Route modules live under `src/routes/` and are grouped by domain: auth, guilds, members, lineup, settings, attendance, and health.
-- Services under `src/services/` hold domain logic such as auth, guild switching, settings, member operations, attendance sessions, lineup edit locks, realtime publishing, and sync orchestration.
-- Prisma is initialized through `src/db.ts`; the schema in `prisma/schema.prisma` models users, Discord guilds, memberships/roles, members, lineup teams/slots, squad groups, skills, lineup snapshots, and attendance sessions/votes/channel config.
+- Route modules live under `src/routes/` and are grouped by domain: auth, guilds, members, lineup, settings, attendance, and health; shared request helpers live under `src/http/`.
+- Services under `src/services/` hold domain logic such as auth, guild switching, settings, member operations, attendance sessions/rendering, lineup edit locks, realtime publishing, and sync orchestration.
+- Prisma is initialized through `src/db.ts`; the schema in `prisma/schema.prisma` models users, sessions, Discord guilds, memberships/roles, members, lineup teams/slots, squad groups, skills, lineup snapshots, and attendance sessions/votes/channel config.
 - Discord integration is split between OAuth/user guild calls (`src/oauth2.ts`), bot/guild member calls (`src/discord.ts`), bot startup/events (`src/bot.ts`), attendance button handling (`src/botAttendance.ts`, `src/services/attendanceDiscordService.ts`), and sync persistence (`src/discordSync.ts`, `src/services/syncService.ts`).
 - Authorization is session-based. `src/session.ts` manages the cookie-backed session store, `src/auth.ts` resolves sessions, and `src/permissions.ts` maps guild roles/memberships to app permissions.
 - Realtime app-state/member updates are published through `src/services/realtimeGateway.ts`; clients subscribe to a guild over `/ws` and receive member patch/delta events plus app-state change notifications.
@@ -84,7 +85,7 @@ Frontend `.env` is based on `frontend/.env.example`; `VITE_DISCORD_API_URL` poin
 - `src/App.tsx` is the main state coordinator: auth bootstrap, active guild, permissions, members, skills, squad groups, attendance, and WebSocket subscription lifecycle.
 - API calls are organized in `src/services/`; `discordApi.ts` re-exports domain-specific APIs from `authApi.ts`, `guildApi.ts`, `memberApi.ts`, `lineupApi.ts`, `settingsApi.ts`, and `attendanceApi.ts`.
 - Shared API/domain types are in `src/services/apiTypes.ts`, `src/shared/types/`, and the legacy aggregate `src/types.ts`.
-- Feature UI is grouped under `src/features/`: `auth`, `app`, `guild`, `members`, `lineup`, and `attendance`.
+- Feature UI is grouped under `src/features/`: `auth`, `app`, `guild`, `members`, `lineup`, and `attendance`; shared UI primitives/helpers live under `src/components/` and `src/lib/`.
 - Lineup state includes squad groups, teams, main/reserve slots, snapshots, and drag/drop behavior via `@dnd-kit`; attendance state includes channel config, active session, recent sessions, and vote summaries.
 
 ## Current repository-specific caveats

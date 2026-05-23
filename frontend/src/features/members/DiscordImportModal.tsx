@@ -10,6 +10,7 @@ import { Member, ClassType } from '../../types.ts';
 import { CLASSES, CLASS_COLORS, CONFLICT_CLASS, UNKNOWN_CLASS, getClassColor } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
 import { getErrorMessage } from '../../lib/error.ts';
+import { getDiscordGuildIconUrl } from '../../shared/utils/discordCdn.ts';
 
 interface DiscordImportModalProps {
   onImport: (members: Member[]) => void;
@@ -192,8 +193,7 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
     setStep('done');
   };
 
-  const getGuildIconUrl = (guild: DiscordGuild) =>
-    guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=64` : null;
+  const getGuildIconUrl = (guild: DiscordGuild) => getDiscordGuildIconUrl(guild.id, guild.icon, 64);
 
   const mappedCount = Object.values(classRoleMap).filter(Boolean).length;
   const usedMappedRoles = Object.values(classRoleMap).filter(Boolean);
