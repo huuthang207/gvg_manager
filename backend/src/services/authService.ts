@@ -56,7 +56,19 @@ export async function handleOAuthCallback(code: string, redirectUri: string) {
   }
 
   const userGuilds = await getUserGuilds(tokenData.access_token);
-  const joinedFixedGuild = userGuilds.some(guild => guild.id === fixedGuildDiscordId);
+  const fixedGuildInfo = userGuilds.find(guild => guild.id === fixedGuildDiscordId);
+  const joinedFixedGuild = Boolean(fixedGuildInfo);
+
+  if (fixedGuildInfo) {
+    fixedGuild = await prisma.guild.update({
+      where: { id: fixedGuild.id },
+      data: {
+        name: fixedGuildInfo.name,
+        icon: fixedGuildInfo.icon,
+      },
+      include: { requiredRoles: true },
+    });
+  }
 
   let authBlockedReason: string | null = null;
 
