@@ -8,6 +8,22 @@ export function normalizeBattleDate(value: string | Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+export function parseGvgParticipationStatsMonth(value: string | null | undefined) {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+
+  return {
+    month: value,
+    start: new Date(Date.UTC(year, month - 1, 1)),
+    end: new Date(Date.UTC(year, month, 1)),
+  };
+}
+
 function getFullBattleNumbers(battleCount: number) {
   return Array.from({ length: Math.max(battleCount, 0) }, (_, index) => index + 1);
 }
@@ -73,14 +89,37 @@ export async function listGvgParticipationSessions(guildId: string, take = 20) {
   return { sessions: sessions.map(serializeSession) };
 }
 
-export async function getGvgParticipationStats(guildId: string) {
+export async function getGvgParticipationStats(guildId: string, options?: { month?: string | null }) {
+  const monthRange = parseGvgParticipationStatsMonth(options?.month);
   const rows = await prisma.gvgParticipationEntry.groupBy({
     by: ['memberId'],
-    where: { session: { guildId } },
+    where: {
+      session: {
+        guildId,
+        ...(monthRange ? { battleDate: { gte: monthRange.start, lt: monthRange.end } } : {}),
+      },
+    },
     _sum: { count: true },
   });
 
   return Object.fromEntries(rows.map(row => [row.memberId, row._sum.count ?? 0]));
+}
+
+export async function deleteGvgParticipationSessionsForMonth(input: { guildId: string; month: string }) {
+  const monthRange = parseGvgParticipationStatsMonth(input.month);
+  if (!monthRange) {
+    return { status: 400 as const, body: { error: 'Tháng bang chiến không hợp lệ.' } };
+  }
+
+  const result = await prisma.gvgParticipationSession.deleteMany({
+    where: {
+      guildId: input.guildId,
+      battleDate: { gte: monthRange.start, lt: monthRange.end },
+    },
+  });
+
+  publishGuildAppStateChanged({ guildId: input.guildId, reason: 'gvg_participation_updated' });
+  return { status: 200 as const, body: { deletedCount: result.count } };
 }
 
 export async function finalizeGvgParticipationSession(input: {

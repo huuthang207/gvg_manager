@@ -9,7 +9,7 @@ import { Sidebar } from './features/app/Sidebar.tsx';
 import { MemberDashboard } from './features/members/MemberDashboard.tsx';
 import { TeamLayout } from './features/lineup/TeamLayout.tsx';
 import { AttendanceView } from './features/attendance/AttendanceView.tsx';
-import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMemberClassRole, updateMyIngameName, deleteMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState, updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, acquireLineupEditLock, getLineupEditLock, heartbeatLineupEditLock, overrideLineupEditLock, releaseLineupEditLock, resetCurrentGuildData } from './services/discordApi.ts';
+import { syncDiscordMembers, acknowledgeClassChange, updateMemberIngameName, updateMemberClassRole, updateMyIngameName, deleteMember, assignMemberSkill, removeMemberSkill, updateRoleConfig, updateAccessRoles, saveSquadLayout, logoutDiscord, AppStateResponse, DiscordUser, loginWithDiscord, getAppState, getGvgParticipationStats, deleteGvgParticipationSessionsForMonth, updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, acquireLineupEditLock, getLineupEditLock, heartbeatLineupEditLock, overrideLineupEditLock, releaseLineupEditLock, resetCurrentGuildData } from './services/discordApi.ts';
 import { useLineupSnapshots } from './hooks/useLineupSnapshots.ts';
 import { Lock, LockOpen, ShieldAlert } from 'lucide-react';
 import { getErrorMessage } from './lib/error.ts';
@@ -37,6 +37,7 @@ interface AttendanceLineupImportResult {
 
 const getActiveTabStorageKey = (userId: string, guildId: string) => `gvg_active_tab_${userId}_${guildId}`;
 const isTab = (value: string | null): value is Tab => value === 'dashboard' || value === 'teams' || value === 'attendance';
+const getCurrentMonthKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
 function collectAssignedMemberIds(groups: SquadGroup[]) {
   const ids = new Set<string>();
@@ -146,6 +147,8 @@ export default function App() {
   const [lineupLock, setLineupLock] = useState<AppStateResponse['lineupLock']>(null);
   const [lineupLockActionLoading, setLineupLockActionLoading] = useState(false);
   const [attendanceActionLoading, setAttendanceActionLoading] = useState(false);
+  const [gvgParticipationMonth, setGvgParticipationMonth] = useState(getCurrentMonthKey);
+  const [gvgParticipationStats, setGvgParticipationStats] = useState<Record<string, number>>({});
   const [syncing, setSyncing] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -304,6 +307,20 @@ export default function App() {
     }
   }, [currentGuild, permissions]);
 
+  const refreshGvgParticipationStats = useCallback(async () => {
+    if (!currentGuild || !permissions.includes('view:guild')) {
+      setGvgParticipationStats({});
+      return;
+    }
+
+    try {
+      const response = await getGvgParticipationStats(gvgParticipationMonth);
+      setGvgParticipationStats(response.stats);
+    } catch {
+      setGvgParticipationStats({});
+    }
+  }, [currentGuild, gvgParticipationMonth, permissions]);
+
   const refreshAppStateFromRealtime = useCallback(async () => {
     if (appStateRefreshRef.current) return;
     appStateRefreshRef.current = true;
@@ -378,6 +395,9 @@ export default function App() {
           if (payload.reason === 'lineup_lock_changed') {
             void refreshLineupLock();
           }
+          if (payload.reason === 'gvg_participation_updated') {
+            void refreshGvgParticipationStats();
+          }
           return;
         }
 
@@ -403,7 +423,7 @@ export default function App() {
         connectWebSocket();
       }, delay);
     };
-  }, [isAuthenticated, isAuthorized, currentGuild, logRealtime, subscribeCurrentGuild, mergeMemberDelta, replaceMemberPool, refreshAppStateFromRealtime, refreshLineupLock, clearReconnectTimer]);
+  }, [isAuthenticated, isAuthorized, currentGuild, logRealtime, subscribeCurrentGuild, mergeMemberDelta, replaceMemberPool, refreshAppStateFromRealtime, refreshLineupLock, refreshGvgParticipationStats, clearReconnectTimer]);
 
   const closeWebSocket = useCallback(() => {
     clearReconnectTimer();
@@ -432,6 +452,11 @@ export default function App() {
   const lineupReadOnly = !canManageLineup || !lineupLock?.isHeldByMe;
 
   const assignedMemberIds = useMemo(() => collectAssignedMemberIds(squadGroups), [squadGroups]);
+  const dashboardMembers = useMemo(() => memberPool.map(member => ({
+    ...member,
+    gvgParticipationCount: gvgParticipationStats[member.id] ?? 0,
+  })), [gvgParticipationStats, memberPool]);
+
   const lineupVisibleMemberPool = useMemo(() => {
     if (lineupMemberSource !== 'attendance' || !lineupMemberSourceSession) return memberPool;
 
@@ -762,6 +787,18 @@ export default function App() {
     );
   };
 
+  const handleDeleteGvgParticipationMonth = async (month: string) => {
+    try {
+      const state = await deleteGvgParticipationSessionsForMonth(month);
+      await applyAppState(state);
+      await refreshGvgParticipationStats();
+      return state.gvgParticipationDeletedCount;
+    } catch (err) {
+      void alert({ message: getErrorMessage(err, 'Không thể xoá dữ liệu bang chiến tháng này'), variant: 'error' });
+      throw err;
+    }
+  };
+
   const {
     snapshots,
     snapshotsOpen,
@@ -808,6 +845,15 @@ export default function App() {
 
     void refreshLineupLock();
   }, [currentGuild, isAuthenticated, isAuthorized, permissions, refreshLineupLock]);
+
+  React.useEffect(() => {
+    if (!isAuthenticated || !isAuthorized || !currentGuild || !permissions.includes('view:guild')) {
+      setGvgParticipationStats({});
+      return;
+    }
+
+    void refreshGvgParticipationStats();
+  }, [currentGuild, isAuthenticated, isAuthorized, permissions, refreshGvgParticipationStats]);
 
   const {
     accessibleGuilds,
@@ -890,6 +936,7 @@ export default function App() {
       setCurrentRole(null);
       setPermissions([]);
       setLineupLock(null);
+      setGvgParticipationStats({});
       setSquadGroups([]);
       setAccessibleGuilds([]);
       resetSnapshots();
@@ -1028,7 +1075,9 @@ export default function App() {
         <div className="flex-1 overflow-hidden">
           {activeTab === 'dashboard' && (
             <MemberDashboard
-              members={memberPool}
+              members={dashboardMembers}
+              gvgParticipationMonth={gvgParticipationMonth}
+              onGvgParticipationMonthChange={setGvgParticipationMonth}
               onImport={handleDiscordImport}
               onDelete={handleDeleteMember}
               onAcknowledgeClassChange={handleAcknowledgeClassChange}
@@ -1111,6 +1160,7 @@ export default function App() {
               onOpenSession={handleOpenAttendanceSession}
               onCloseSession={handleCloseAttendanceSession}
               onRefreshSession={handleRefreshAttendanceSession}
+              onDeleteGvgParticipationMonth={handleDeleteGvgParticipationMonth}
             />
           )}
         </div>

@@ -1,6 +1,8 @@
 import { API_BASE, requestJson } from './apiBase.ts';
 import type { AppStateResponse } from './apiTypes.ts';
 
+export type GvgParticipationStats = Record<string, number>;
+
 export interface GvgParticipationSession {
   id: string;
   guildId: string;
@@ -23,6 +25,19 @@ export interface GvgParticipationSession {
 
 export async function getGvgParticipationSessions(limit = 20) {
   return requestJson<{ sessions: GvgParticipationSession[] }>(`${API_BASE}/api/gvg-participation/sessions?limit=${limit}`, { credentials: 'include' });
+}
+
+export async function getGvgParticipationStats(month: string) {
+  return requestJson<{ month: string; stats: GvgParticipationStats }>(`${API_BASE}/api/gvg-participation/stats?month=${encodeURIComponent(month)}`, { credentials: 'include' });
+}
+
+export async function deleteGvgParticipationSessionsForMonth(month: string) {
+  return requestJson<AppStateResponse & { gvgParticipationDeletedCount: number }>(`${API_BASE}/api/gvg-participation/sessions/month`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ month }),
+  });
 }
 
 export async function finalizeGvgParticipationSession(input: { battleDate: string; battleCount: number; participations: Array<{ memberId: string; battleNumbers: number[] }>; note?: string | null }) {

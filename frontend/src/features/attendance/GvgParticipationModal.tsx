@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarDays, Loader2, Search, ShieldCheck, Users, X } from 'lucide-react';
 import { finalizeGvgParticipationSession, getGvgParticipationSessions } from '../../services/discordApi.ts';
+import type { GvgParticipationSession } from '../../services/discordApi.ts';
 import { getErrorMessage } from '../../lib/error.ts';
 import { cn } from '../../lib/utils.ts';
 import { AppSelect } from '../../components/ui/AppSelect.tsx';
@@ -35,10 +36,13 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [historySessions, setHistorySessions] = useState<GvgParticipationSession[]>([]);
   const [selectedAttendanceSessionId, setSelectedAttendanceSessionId] = useState(() => attendanceSessions[0]?.id || '');
   const [memberSearchTerm, setMemberSearchTerm] = useState('');
   const activeMembers = members.filter(member => member.active !== false);
   const selectedAttendanceSession = attendanceSessions.find(session => session.id === selectedAttendanceSessionId) || null;
+  const existingSessionForDate = historySessions.find(session => formatInputDate(session.battleDate) === battleDate) || null;
+  const isEditingFinalizedSession = !!existingSessionForDate;
   const attendanceGoMemberIds = new Set(selectedAttendanceSession?.votes.filter(vote => vote.choice === 'GO').map(vote => vote.memberId) ?? []);
   const attendanceMaybeMemberIds = new Set(selectedAttendanceSession?.votes.filter(vote => vote.choice === 'MAYBE').map(vote => vote.memberId) ?? []);
   const selectableAttendanceGoMemberIds = activeMembers.filter(member => attendanceGoMemberIds.has(member.id)).map(member => member.id);
@@ -69,19 +73,7 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
       try {
         const history = await getGvgParticipationSessions(50);
         if (!active) return;
-        const current = history.sessions.find(session => formatInputDate(session.battleDate) === battleDate);
-        if (current) {
-          const restoredSelections: Record<string, number[]> = {};
-          current.entries.forEach(entry => {
-            const battleNumbers = entry.battleNumbers.length
-              ? entry.battleNumbers
-              : Array.from({ length: Math.min(Math.max(entry.count, 0), Math.max(current.battleCount, 0)) }, (_, index) => index + 1);
-            if (battleNumbers.length) restoredSelections[entry.memberId] = battleNumbers;
-          });
-          setSelectedBattlesByMember(restoredSelections);
-          setNote(current.note || '');
-          setBattleCount(current.battleCount === 2 ? 2 : 1);
-        }
+        setHistorySessions(history.sessions);
       } catch (err) {
         if (active) setError(getErrorMessage(err, 'Không thể cập nhật dữ liệu bang chiến.'));
       } finally {
@@ -91,6 +83,28 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
     void load();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (!existingSessionForDate) {
+      setSelectedBattlesByMember({});
+      setNote('');
+      setBattleCount(1);
+      return;
+    }
+
+    const restoredSelections: Record<string, number[]> = {};
+    existingSessionForDate.entries.forEach(entry => {
+      const battleNumbers = entry.battleNumbers.length
+        ? entry.battleNumbers
+        : Array.from({ length: Math.min(Math.max(entry.count, 0), Math.max(existingSessionForDate.battleCount, 0)) }, (_, index) => index + 1);
+      if (battleNumbers.length) restoredSelections[entry.memberId] = battleNumbers;
+    });
+    setSelectedBattlesByMember(restoredSelections);
+    setNote(existingSessionForDate.note || '');
+    setBattleCount(existingSessionForDate.battleCount === 2 ? 2 : 1);
+  }, [battleDate, existingSessionForDate, loading]);
 
   const toggleMember = (memberId: string) => {
     setSelectedBattlesByMember(current => {
@@ -158,7 +172,7 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
         <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-900/80 px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
             <ShieldCheck size={17} className="shrink-0 text-violet-300" />
-            <h3 id="gvg-participation-title" className="truncate text-base font-black text-white">Chốt tham gia bang chiến</h3>
+            <h3 id="gvg-participation-title" className="truncate text-base font-black text-white">{isEditingFinalizedSession ? 'Sửa phiên bang chiến đã chốt' : 'Chốt tham gia bang chiến'}</h3>
           </div>
           <button
             type="button"
@@ -173,6 +187,12 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
         <div className="min-h-0 flex-1 overflow-y-auto p-2.5 custom-scrollbar lg:p-3">
           <div className="space-y-2.5">
             {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200">{error}</div>}
+            {isEditingFinalizedSession && (
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                <div className="font-black">Đang sửa phiên đã chốt</div>
+                <div className="mt-1 text-xs font-bold text-amber-200/85">Lưu lại sẽ thay thế số trận và danh sách T1/T2 của ngày này.</div>
+              </div>
+            )}
             {loading && (
               <div className="flex items-center gap-2 rounded-2xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm font-bold text-sky-100">
                 <Loader2 size={16} className="animate-spin" />
@@ -189,6 +209,11 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
                   </div>
                   <div className="space-y-2">
                     <input aria-label="Ngày bang chiến" type="date" value={battleDate} onChange={event => setBattleDate(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm text-slate-100 outline-none transition-colors focus:border-violet-500" />
+                    {isEditingFinalizedSession && (
+                      <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wider text-amber-200">
+                        Đang sửa phiên đã chốt
+                      </div>
+                    )}
                     <AppSelect value={battleCount} onChange={event => {
                       const nextBattleCount = Number(event.target.value) === 2 ? 2 : 1;
                       setBattleCount(nextBattleCount);
@@ -203,6 +228,9 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
                       <option value={1}>1 trận</option>
                       <option value={2}>2 trận</option>
                     </AppSelect>
+                    <p className="text-[11px] font-bold leading-4 text-slate-500">
+                      Đổi từ 2 trận về 1 trận sẽ chỉ giữ lựa chọn T1; các lựa chọn chỉ có T2 sẽ không còn được tính.
+                    </p>
                   </div>
                 </section>
 
@@ -333,11 +361,13 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
           <div className="text-xs font-bold text-slate-500">
             <span className="text-slate-300">{selectedSummary}</span>
             <span className="mx-2 text-slate-700">•</span>
+            <span>{isEditingFinalizedSession ? 'Cập nhật phiên đã chốt' : 'Tạo phiên mới'}</span>
+            <span className="mx-2 text-slate-700">•</span>
             <span>{effectiveBattleCount === 2 ? `T1: ${battleOneCount} · T2: ${battleTwoCount}` : `Ngày ${battleDate || '—'} · ${battleCount ?? '—'} trận`}</span>
           </div>
           <div className="flex justify-end gap-3">
             <button type="button" onClick={onClose} className="app-button-secondary rounded-xl px-3 py-1.5 text-sm font-bold">Hủy</button>
-            <button type="button" disabled={saving || loading} onClick={handleFinalize} className="app-button-primary rounded-xl px-3 py-1.5 text-sm font-bold disabled:opacity-50">{saving ? 'Đang lưu...' : 'Chốt tham gia'}</button>
+            <button type="button" disabled={saving || loading} onClick={handleFinalize} className="app-button-primary rounded-xl px-3 py-1.5 text-sm font-bold disabled:opacity-50">{saving ? 'Đang lưu...' : isEditingFinalizedSession ? 'Cập nhật phiên đã chốt' : 'Chốt tham gia'}</button>
           </div>
         </div>
       </div>

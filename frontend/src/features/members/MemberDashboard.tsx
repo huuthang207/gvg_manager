@@ -15,6 +15,8 @@ import { AppSelect } from '../../components/ui/AppSelect.tsx';
 
 interface MemberDashboardProps {
   members: Member[];
+  gvgParticipationMonth: string;
+  onGvgParticipationMonthChange: (month: string) => void;
   onImport: (members: Member[]) => void;
   onDelete: (memberId: string) => void | Promise<void>;
   onAcknowledgeClassChange: (memberId: string) => void;
@@ -71,6 +73,8 @@ const sortDate = (a?: string | null, b?: string | null) => {
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   members,
+  gvgParticipationMonth,
+  onGvgParticipationMonthChange,
   onImport,
   onDelete,
   onAcknowledgeClassChange,
@@ -333,7 +337,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 Bộ lọc
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(220px,1fr)_auto] gap-3 items-end">
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(220px,1fr)_170px_auto] gap-3 items-end">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
                     Tìm kiếm
@@ -348,6 +352,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-400/70"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                    Tháng bang chiến
+                  </label>
+                  <input
+                    type="month"
+                    value={gvgParticipationMonth}
+                    onChange={event => {
+                      if (event.target.value) onGvgParticipationMonthChange(event.target.value);
+                    }}
+                    className="w-full rounded-lg border border-violet-400/25 bg-slate-800/70 px-3 py-2 text-xs font-bold text-violet-100 focus:border-violet-300/70 focus:outline-none"
+                  />
                 </div>
 
                 {(filterClass !== 'all' || filterClassStatus !== 'all' || searchQuery) && (
@@ -478,19 +496,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         )}
                       </div>
                     </th>
-                    <th className="w-[140px] px-4 py-3 text-left">
-                      <SortableHeader label="Ngày tham gia" field="joinedAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                    <th className="w-[140px] px-4 py-3 text-center">
+                      <SortableHeader label="Ngày tham gia" field="joinedAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} align="center" />
                     </th>
-                    <th className="w-[130px] px-4 py-3 text-right">
-                      <SortableHeader label="Bang chiến" field="gvgParticipationCount" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                    <th className="w-[130px] px-4 py-3 text-center">
+                      <SortableHeader label="Bang chiến tháng" field="gvgParticipationCount" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} align="center" />
                     </th>
-                    <th className="w-24 px-4 py-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredMembers.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-16 text-center text-slate-500">
+                      <td colSpan={7} className="px-4 py-16 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center">
                           <UserCircle size={48} className="mb-3 opacity-50" />
                           <p className="text-sm font-medium">Không có thành viên thỏa điều kiện lọc</p>
@@ -565,24 +582,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           {classStatus.label}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-xs text-slate-400">
+                      <td className="py-3 px-4 text-center text-xs text-slate-400">
                         {formatJoinedDays(member.joinedAt)}
                       </td>
-                      <td className="py-3 px-4 text-right text-sm font-black text-violet-200">
-                        {member.gvgParticipationCount ?? 0}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        {allowMemberManagement && (
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              confirmDeleteMember(member);
-                            }}
-                            className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
+                      <td className="py-3 px-4 text-center text-sm font-black text-violet-200">
+                        {member.gvgParticipationCount ?? 0} trận
                       </td>
                     </tr>
                     );
@@ -637,9 +641,10 @@ interface SortableHeaderProps {
   sortField: SortField;
   sortDirection: SortDirection;
   onSort: (field: SortField) => void;
+  align?: 'left' | 'center' | 'right';
 }
 
-const SortableHeader: React.FC<SortableHeaderProps> = ({ label, field, sortField, sortDirection, onSort }) => {
+const SortableHeader: React.FC<SortableHeaderProps> = ({ label, field, sortField, sortDirection, onSort, align = 'left' }) => {
   const active = sortField === field;
   const Icon = active ? (sortDirection === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
 
@@ -648,7 +653,10 @@ const SortableHeader: React.FC<SortableHeaderProps> = ({ label, field, sortField
       type="button"
       onClick={() => onSort(field)}
       className={cn(
-        'inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[10px] font-black uppercase tracking-wider transition-colors',
+        'inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-black uppercase tracking-wider transition-colors',
+        align === 'left' && '-ml-1.5',
+        align === 'center' && 'mx-auto justify-center text-center',
+        align === 'right' && '-mr-1.5 ml-auto justify-end text-right',
         active ? 'bg-sky-500/15 text-sky-200' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100',
       )}
     >

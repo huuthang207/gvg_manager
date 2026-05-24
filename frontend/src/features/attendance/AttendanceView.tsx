@@ -20,6 +20,10 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleString('vi-VN');
 }
 
+function getCurrentMonthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function getVoteName(vote: AttendanceVote) {
   return vote.snapshotIngameName || vote.member.ingameName || vote.member.displayName || vote.member.username;
 }
@@ -360,6 +364,7 @@ export function AttendanceView({
   onOpenSession,
   onCloseSession,
   onRefreshSession,
+  onDeleteGvgParticipationMonth,
 }: {
   attendance: AttendanceState;
   members: Member[];
@@ -368,6 +373,7 @@ export function AttendanceView({
   onOpenSession: (headerText: string) => void;
   onCloseSession: () => void;
   onRefreshSession: () => void;
+  onDeleteGvgParticipationMonth: (month: string) => Promise<number>;
 }) {
   const { confirm } = useSystemDialog();
   const [historySessions, setHistorySessions] = useState<AttendanceSession[]>(attendance.recentSessions);
@@ -388,6 +394,8 @@ export function AttendanceView({
   const [headerText, setHeaderText] = useState('');
   const [setupModal, setSetupModal] = useState<'open' | null>(null);
   const [isGvgModalOpen, setIsGvgModalOpen] = useState(false);
+  const [deleteGvgMonth, setDeleteGvgMonth] = useState(getCurrentMonthKey);
+  const [deletingGvgMonth, setDeletingGvgMonth] = useState(false);
   const historyList = historySessions.filter(session => session.id !== attendance.activeSession?.id);
   const recentHistoryList = historyList.slice(0, 5);
   const gvgParticipationSourceSessions = attendance.activeSession ? [attendance.activeSession, ...historyList] : historyList;
@@ -519,6 +527,30 @@ export function AttendanceView({
     await deleteHistoryIds(historyListIds, `Xóa tất cả ${historyListIds.length} lịch sử điểm danh đang hiển thị?`);
   };
 
+  const deleteGvgParticipationMonth = async () => {
+    if (!deleteGvgMonth) return;
+
+    const confirmed = await confirm({
+      title: 'Xoá dữ liệu bang chiến theo tháng',
+      message: `Xoá toàn bộ dữ liệu chốt tham gia bang chiến trong tháng ${deleteGvgMonth}? Thao tác này không xoá thành viên, điểm danh hoặc đội hình và không thể hoàn tác.`,
+      variant: 'danger',
+      confirmLabel: 'Xoá dữ liệu tháng',
+    });
+    if (!confirmed) return;
+
+    setDeletingGvgMonth(true);
+    try {
+      const deletedCount = await onDeleteGvgParticipationMonth(deleteGvgMonth);
+      await confirm({
+        title: 'Đã xoá dữ liệu bang chiến',
+        message: `Đã xoá ${deletedCount} phiên chốt tham gia bang chiến trong tháng ${deleteGvgMonth}.`,
+        confirmLabel: 'Đã hiểu',
+      });
+    } finally {
+      setDeletingGvgMonth(false);
+    }
+  };
+
   return (
     <main className="flex-1 space-y-5 overflow-auto p-5 custom-scrollbar lg:p-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -562,7 +594,7 @@ export function AttendanceView({
             <button
               onClick={() => setSetupModal('open')}
               disabled={actionLoading || !!attendance.activeSession || !attendance.config}
-              className="app-button-primary inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/35 bg-emerald-950/80 px-4 py-2 text-sm font-bold text-emerald-100 shadow-lg shadow-emerald-950/30 transition-all hover:border-emerald-300/60 hover:bg-emerald-900/90 hover:shadow-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play size={16} />
               Mở điểm danh
@@ -570,10 +602,10 @@ export function AttendanceView({
             <button
               onClick={onCloseSession}
               disabled={actionLoading || !attendance.activeSession}
-              className="app-button-danger inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/35 bg-red-950/80 px-4 py-2 text-sm font-bold text-red-100 shadow-lg shadow-red-950/30 transition-all hover:border-red-300/60 hover:bg-red-900/90 hover:shadow-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Square size={16} />
-              Đóng phiên
+              Đóng điểm danh
             </button>
           </div>
 
@@ -592,6 +624,32 @@ export function AttendanceView({
               <ShieldCheck size={16} />
               Chốt tham gia
             </button>
+            <div className="mt-3 rounded-xl border border-red-400/20 bg-red-500/10 p-2.5">
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-red-200">
+                <Trash2 size={12} />
+                Xoá dữ liệu theo tháng
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <input
+                  type="month"
+                  value={deleteGvgMonth}
+                  onChange={event => {
+                    if (event.target.value) setDeleteGvgMonth(event.target.value);
+                  }}
+                  className="w-full rounded-lg border border-red-400/25 bg-slate-950/60 px-2.5 py-1.5 text-xs font-bold text-red-100 outline-none transition-colors focus:border-red-300/70"
+                />
+                <button
+                  type="button"
+                  onClick={() => void deleteGvgParticipationMonth()}
+                  disabled={deletingGvgMonth || !deleteGvgMonth}
+                  className="app-button-danger inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-black disabled:opacity-50"
+                >
+                  <Trash2 size={13} />
+                  {deletingGvgMonth ? 'Đang xoá...' : 'Xoá'}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] font-bold leading-4 text-red-100/70">Chỉ xoá dữ liệu chốt tham gia bang chiến của tháng đã chọn.</p>
+            </div>
           </div>
         </section>
 
