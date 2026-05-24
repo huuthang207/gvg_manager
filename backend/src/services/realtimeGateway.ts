@@ -20,6 +20,7 @@ export type GuildAppStateChangeReason =
   | 'lineup_updated'
   | 'lineup_lock_changed'
   | 'attendance_updated'
+  | 'gvg_participation_updated'
   | 'snapshot_saved'
   | 'snapshot_restored'
   | 'snapshot_deleted';

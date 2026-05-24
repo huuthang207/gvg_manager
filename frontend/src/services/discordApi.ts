@@ -37,3 +37,5 @@ export {
 export { saveSquadLayout, getLineupEditLock, acquireLineupEditLock, heartbeatLineupEditLock, releaseLineupEditLock, overrideLineupEditLock, getLineupSnapshots, createLineupSnapshot, updateLineupSnapshot, getLineupSnapshot, restoreLineupSnapshot, deleteLineupSnapshot } from './lineupApi.ts';
 export { resetCurrentGuildData, updateAccessRoles, updateRoleConfig } from './settingsApi.ts';
 export { updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, getAttendanceHistory, getAttendanceSession, deleteAttendanceHistorySession } from './attendanceApi.ts';
+export { getGvgParticipationSessions, finalizeGvgParticipationSession } from './gvgParticipationApi.ts';
+export type { GvgParticipationSession } from './gvgParticipationApi.ts';

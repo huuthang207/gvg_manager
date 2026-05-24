@@ -3,6 +3,7 @@ import { getAccessibleGuildForUser } from './permissions.js';
 import { serializeMembers } from './serializers/memberSerializer.js';
 import { serializeDivisions, serializeSquadGroups } from './serializers/squadSerializer.js';
 import { getAttendanceStateForGuild } from './services/attendanceService.js';
+import { getGvgParticipationStats } from './services/gvgParticipationService.js';
 import { getLineupEditLock } from './services/lineupEditLockService.js';
 
 export interface AppStateGuildContext {
@@ -72,7 +73,14 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
     };
   }
 
-  const attendance = await getAttendanceStateForGuild(guild.id);
+  const [attendance, gvgParticipationStats] = await Promise.all([
+    getAttendanceStateForGuild(guild.id),
+    getGvgParticipationStats(guild.id),
+  ]);
+  const members = guild.members.map(member => ({
+    ...member,
+    gvgParticipationCount: gvgParticipationStats[member.id] ?? 0,
+  }));
 
   return {
     user: serializeUser(user),
@@ -82,7 +90,7 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
       name: guild.name,
       icon: guild.icon,
     },
-    members: serializeMembers(guild.members),
+    members: serializeMembers(members),
     divisions: serializeDivisions(guild.teams),
     squadGroups: serializeSquadGroups(guild.squadGroups),
     skills: guild.skills.map(skill => ({

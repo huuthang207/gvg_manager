@@ -34,4 +34,5 @@ export interface Member {
   discordUsername?: string;
   discordRoles?: string[];
   avatar?: string | null;
+  gvgParticipationCount?: number;
 }

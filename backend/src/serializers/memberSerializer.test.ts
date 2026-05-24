@@ -36,6 +36,7 @@ test('serializeMember maps member row to API shape', () => {
     discordRoles: ['r1', 'r2'],
     avatar: 'avatar1',
     active: true,
+    gvgParticipationCount: 0,
   });
 });
 

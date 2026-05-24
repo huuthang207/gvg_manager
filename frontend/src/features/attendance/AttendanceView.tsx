@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, CircleHelp, ClipboardCheck, Hash, Play, Save, Search, Square, Trash2, X, XCircle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, CircleHelp, ClipboardCheck, Hash, Play, Save, Search, ShieldCheck, Square, Trash2, X, XCircle } from 'lucide-react';
 import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
 import { deleteAttendanceHistorySession, getAttendanceHistory, getAttendanceSession } from '../../services/discordApi.ts';
@@ -7,6 +7,7 @@ import type { AttendanceChoice, AttendanceSession, AttendanceState, AttendanceVo
 import type { Member } from '../../shared/types/member.ts';
 import type { ClassType } from '../../types.ts';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
+import { GvgParticipationModal } from './GvgParticipationModal.tsx';
 
 const choiceMeta: Record<AttendanceChoice, { label: string; shortLabel: string; icon: React.ReactNode; className: string }> = {
   GO: { label: 'Tham gia', shortLabel: 'Tham gia', icon: <CheckCircle2 size={16} />, className: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25' },
@@ -386,8 +387,10 @@ export function AttendanceView({
   const [channelId, setChannelId] = useState(attendance.config?.discordChannelId || '');
   const [headerText, setHeaderText] = useState('');
   const [setupModal, setSetupModal] = useState<'open' | null>(null);
+  const [isGvgModalOpen, setIsGvgModalOpen] = useState(false);
   const historyList = historySessions.filter(session => session.id !== attendance.activeSession?.id);
   const recentHistoryList = historyList.slice(0, 5);
+  const gvgParticipationSourceSessions = attendance.activeSession ? [attendance.activeSession, ...historyList] : historyList;
   const historyListIds = useMemo(() => historyList.map(session => session.id), [historyList]);
   const selectedHistoryCount = historyListIds.filter(id => selectedHistoryIds.has(id)).length;
   const allVisibleHistorySelected = historyListIds.length > 0 && selectedHistoryCount === historyListIds.length;
@@ -571,6 +574,23 @@ export function AttendanceView({
             >
               <Square size={16} />
               Đóng phiên
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-violet-400/20 bg-violet-500/10 p-3">
+            <div className="mb-3 flex items-start gap-3">
+              <ShieldCheck size={18} className="mt-0.5 shrink-0 text-violet-300" />
+              <div>
+                <h3 className="text-sm font-black text-white">Chốt tham gia bang chiến</h3>
+                <p className="mt-1 text-xs text-slate-400">Ghi nhận thành viên thực sự tham gia sau trận; không tự động lấy từ vote điểm danh.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsGvgModalOpen(true)}
+              className="app-button-primary inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"
+            >
+              <ShieldCheck size={16} />
+              Chốt tham gia
             </button>
           </div>
         </section>
@@ -796,6 +816,15 @@ export function AttendanceView({
             </div>
           </div>
         </div>
+      )}
+
+      {isGvgModalOpen && (
+        <GvgParticipationModal
+          members={members}
+          attendanceSessions={gvgParticipationSourceSessions}
+          onClose={() => setIsGvgModalOpen(false)}
+          onSaved={() => setIsGvgModalOpen(false)}
+        />
       )}
 
       {setupModal && (

@@ -97,6 +97,8 @@ export async function resetCurrentGuildData(userId: string, activeGuildId: strin
     await tx.attendanceSession.deleteMany({ where: { guildId } });
     await tx.attendanceChannelConfig.deleteMany({ where: { guildId } });
 
+    await tx.gvgParticipationSession.deleteMany({ where: { guildId } });
+
     await tx.lineupSnapshot.deleteMany({ where: { guildId } });
     await tx.squadGroup.deleteMany({ where: { guildId } });
     await tx.team.deleteMany({ where: { guildId } });

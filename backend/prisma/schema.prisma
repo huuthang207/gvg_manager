@@ -81,8 +81,9 @@ model Guild {
   requiredRoles           GuildRequiredRole[]
   accessRoles             GuildAccessRole[]
   memberships             GuildMembership[]
-  attendanceChannelConfig AttendanceChannelConfig?
-  attendanceSessions      AttendanceSession[]
+  attendanceChannelConfig  AttendanceChannelConfig?
+  attendanceSessions       AttendanceSession[]
+  gvgParticipationSessions GvgParticipationSession[]
 }
 
 model GuildAccessRole {
@@ -97,6 +98,43 @@ model GuildAccessRole {
 
   @@unique([guildId, roleName, appRole])
   @@index([guildId, appRole])
+}
+
+model GvgParticipationSession {
+  id                       String   @id @default(cuid())
+  guildId                  String
+  battleDate               DateTime
+  battleCount              Int
+  finalizedByDiscordUserId String?
+  finalizedAt              DateTime @default(now())
+  note                     String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  guild   Guild                   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  entries GvgParticipationEntry[]
+
+  @@unique([guildId, battleDate])
+  @@index([guildId, battleDate])
+}
+
+model GvgParticipationEntry {
+  id                 String   @id @default(cuid())
+  sessionId          String
+  memberId           String
+  count              Int
+  battleNumbers      Int[]    @default([])
+  snapshotIngameName String?
+  snapshotClassType  String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  session GvgParticipationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  member  Member                  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, memberId])
+  @@index([memberId])
+  @@index([sessionId])
 }
 
 model AttendanceChannelConfig {
@@ -213,6 +251,7 @@ model Member {
   lineupSnapshotSlots     LineupSnapshotSlot[]  @relation("LineupSnapshotSlotMember")
   memberSkills            MemberSkill[]
   attendanceVotes         AttendanceVote[]
+  gvgParticipationEntries GvgParticipationEntry[]
 
   @@unique([guildId, discordUserId])
   @@index([guildId, active])

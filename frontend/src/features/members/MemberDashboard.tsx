@@ -32,7 +32,7 @@ interface MemberDashboardProps {
   lastSyncedAt?: string | null;
 }
 
-type SortField = 'discordUsername' | 'ingameName' | 'classType' | 'classStatus' | 'joinedAt';
+type SortField = 'discordUsername' | 'ingameName' | 'classType' | 'classStatus' | 'joinedAt' | 'gvgParticipationCount';
 type SortDirection = 'asc' | 'desc';
 type ClassStatusFilter = 'all' | 'Bình thường' | 'Thiếu role phái' | 'Trùng role phái' | 'Đã đổi phái';
 
@@ -200,6 +200,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         comparison = sortText(a.classType, b.classType);
       } else if (sortField === 'classStatus') {
         comparison = sortText(getClassStatus(a).label, getClassStatus(b).label);
+      } else if (sortField === 'gvgParticipationCount') {
+        comparison = (a.gvgParticipationCount ?? 0) - (b.gvgParticipationCount ?? 0);
       } else {
         comparison = sortDate(a.joinedAt, b.joinedAt);
       }
@@ -479,13 +481,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     <th className="w-[140px] px-4 py-3 text-left">
                       <SortableHeader label="Ngày tham gia" field="joinedAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
                     </th>
+                    <th className="w-[130px] px-4 py-3 text-right">
+                      <SortableHeader label="Bang chiến" field="gvgParticipationCount" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                    </th>
                     <th className="w-24 px-4 py-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredMembers.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-16 text-center text-slate-500">
+                      <td colSpan={8} className="px-4 py-16 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center">
                           <UserCircle size={48} className="mb-3 opacity-50" />
                           <p className="text-sm font-medium">Không có thành viên thỏa điều kiện lọc</p>
@@ -562,6 +567,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       </td>
                       <td className="py-3 px-4 text-xs text-slate-400">
                         {formatJoinedDays(member.joinedAt)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-sm font-black text-violet-200">
+                        {member.gvgParticipationCount ?? 0}
                       </td>
                       <td className="py-3 px-4 text-right">
                         {allowMemberManagement && (

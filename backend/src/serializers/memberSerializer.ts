@@ -12,6 +12,7 @@ type MemberRow = {
   roles: Array<{ roleName: string }>;
   avatar: string | null;
   active: boolean;
+  gvgParticipationCount?: number;
 };
 
 export function serializeMember(member: MemberRow) {
@@ -30,6 +31,7 @@ export function serializeMember(member: MemberRow) {
     discordRoles: member.roles.map(role => role.roleName),
     avatar: member.avatar,
     active: member.active,
+    gvgParticipationCount: member.gvgParticipationCount ?? 0,
   };
 }
 
