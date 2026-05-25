@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { requireAuth } from '../auth.js';
 import { getUserAppState } from '../appState.js';
-import { requireAccessibleGuild } from '../permissions.js';
+import { requireGuildAccess } from '../http/requireGuildAccess.js';
 import {
   deleteGvgParticipationSessionsForMonth,
   finalizeGvgParticipationSession,
@@ -22,19 +21,11 @@ export function createGvgParticipationRoutes() {
 
   router.get('/api/gvg-participation/sessions', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'view:guild', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền xem lịch sử bang chiến.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'view:guild', {
+        forbidden: 'Bạn không có quyền xem lịch sử bang chiến.',
+      });
+      if (!context) return;
+      const { access } = context;
 
       res.json(await listGvgParticipationSessions(access.guild.id, parseLimit(req.query.limit)));
     } catch (err) {
@@ -44,19 +35,11 @@ export function createGvgParticipationRoutes() {
 
   router.post('/api/gvg-participation/sessions/finalize', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền chốt tham gia bang chiến.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+        forbidden: 'Bạn không có quyền chốt tham gia bang chiến.',
+      });
+      if (!context) return;
+      const { auth, access } = context;
 
       const result = await finalizeGvgParticipationSession({
         guildId: access.guild.id,
@@ -82,19 +65,11 @@ export function createGvgParticipationRoutes() {
 
   router.delete('/api/gvg-participation/sessions/month', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền xoá dữ liệu bang chiến.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+        forbidden: 'Bạn không có quyền xoá dữ liệu bang chiến.',
+      });
+      if (!context) return;
+      const { auth, access } = context;
 
       const result = await deleteGvgParticipationSessionsForMonth({
         guildId: access.guild.id,
@@ -115,19 +90,11 @@ export function createGvgParticipationRoutes() {
 
   router.get('/api/gvg-participation/stats', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'view:guild', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền xem thống kê bang chiến.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'view:guild', {
+        forbidden: 'Bạn không có quyền xem thống kê bang chiến.',
+      });
+      if (!context) return;
+      const { access } = context;
 
       const rawMonth = Array.isArray(req.query.month) ? req.query.month[0] : req.query.month;
       const month = typeof rawMonth === 'string' && rawMonth.trim() ? rawMonth.trim() : null;

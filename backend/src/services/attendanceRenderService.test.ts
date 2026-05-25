@@ -63,15 +63,48 @@ describe('attendanceRenderService', () => {
     assert.match(content, /1\. Nguoi Bon - Thiết Y/);
   });
 
+  it('renders open sessions with no votes', () => {
+    const content = renderAttendancePublicContent({ ...baseSession, headerText: '  ' }, []);
+
+    assert.match(content, /## Điểm danh Bang Chiến/);
+    assert.match(content, /🟢 \*\*Đang mở điểm danh\*\*/);
+    assert.match(content, /Tổng vote: 0/);
+    assert.match(content, /✅ Tham gia: 0/);
+    assert.match(content, /❔ Dự bị: 0/);
+    assert.match(content, /❌ Không tham gia: 0/);
+    assert.match(content, /Theo phái: \(chưa có\)/);
+    assert.match(content, /Chưa có ai đăng ký\./);
+  });
+
   it('renders empty lists and default header for closed sessions', () => {
     const content = renderAttendancePublicContent({ ...baseSession, headerText: null, status: 'CLOSED' }, []);
 
     assert.match(content, /## Điểm danh Bang Chiến/);
     assert.match(content, /🔒 \*\*Đã đóng điểm danh\*\*/);
+    assert.doesNotMatch(content, /🟢 \*\*Đang mở điểm danh\*\*/);
     assert.match(content, /Tổng vote: 0/);
     assert.match(content, /Theo phái: \(chưa có\)/);
     assert.match(content, /Chưa có ai đăng ký\./);
     assert.match(content, /Chưa có ai chọn 'Dự bị'\./);
     assert.match(content, /Chưa có ai chọn 'Không tham gia'\./);
+  });
+
+  it('uses member fallback data when vote snapshots are missing', () => {
+    const content = renderAttendancePublicContent(baseSession, [
+      {
+        choice: 'GO',
+        snapshotIngameName: null,
+        snapshotClassType: null,
+        updatedAt: new Date('2026-05-17T12:04:00.000Z'),
+        member: {
+          displayName: 'Discord Name',
+          ingameName: 'Ingame Name',
+          classType: 'Long Ngâm',
+        },
+      },
+    ]);
+
+    assert.match(content, /Long Ngâm \(1\)\n1\. Ingame Name/);
+    assert.match(content, /⚔️ Theo phái: Long Ngâm:1/);
   });
 });

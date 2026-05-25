@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import type { AttendanceChoice } from '@prisma/client';
-import { requireAuth } from '../auth.js';
 import { getUserAppState } from '../appState.js';
-import { requireAccessibleGuild } from '../permissions.js';
+import { requireGuildAccess } from '../http/requireGuildAccess.js';
 import {
   castAttendanceVote,
   closeAttendanceSession,
@@ -46,19 +45,11 @@ export function createAttendanceRoutes() {
 
   router.get('/api/attendance', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'view:guild', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền xem điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'view:guild', {
+        forbidden: 'Bạn không có quyền xem điểm danh.',
+      });
+      if (!context) return;
+      const { access } = context;
 
       const attendance = await getAttendanceStateForGuild(access.guild.id);
       res.json(attendance);
@@ -69,19 +60,11 @@ export function createAttendanceRoutes() {
 
   router.get('/api/attendance/history', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'view:guild', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền xem điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'view:guild', {
+        forbidden: 'Bạn không có quyền xem điểm danh.',
+      });
+      if (!context) return;
+      const { access } = context;
 
       const result = await listAttendanceSessions(access.guild.discordGuildId, parseHistoryLimit(req.query.limit), parseHistoryOffset(req.query.offset));
       res.status(result.status).json(result.body);
@@ -92,19 +75,11 @@ export function createAttendanceRoutes() {
 
   router.get('/api/attendance/history/:sessionId', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'view:guild', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền xem điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'view:guild', {
+        forbidden: 'Bạn không có quyền xem điểm danh.',
+      });
+      if (!context) return;
+      const { access } = context;
 
       const result = await getAttendanceSessionById(access.guild.discordGuildId, req.params.sessionId);
       res.status(result.status).json(result.body);
@@ -115,19 +90,11 @@ export function createAttendanceRoutes() {
 
   router.delete('/api/attendance/history/:sessionId', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền xóa lịch sử điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+        forbidden: 'Bạn không có quyền xóa lịch sử điểm danh.',
+      });
+      if (!context) return;
+      const { access } = context;
 
       const result = await deleteAttendanceSession(access.guild.discordGuildId, req.params.sessionId);
       res.status(result.status).json(result.body);
@@ -138,19 +105,11 @@ export function createAttendanceRoutes() {
 
   router.put('/api/attendance/config/channel', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền cấu hình điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+        forbidden: 'Bạn không có quyền cấu hình điểm danh.',
+      });
+      if (!context) return;
+      const { auth, access } = context;
 
       const discordChannelId = typeof req.body?.discordChannelId === 'string' ? req.body.discordChannelId.trim() : '';
       if (!isDiscordSnowflake(discordChannelId)) {
@@ -173,19 +132,11 @@ export function createAttendanceRoutes() {
 
   router.post('/api/attendance/sessions/open', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền mở điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+        forbidden: 'Bạn không có quyền mở điểm danh.',
+      });
+      if (!context) return;
+      const { auth, access } = context;
 
       const headerText = typeof req.body?.headerText === 'string' ? req.body.headerText : null;
       const result = await openAttendanceSession({
@@ -210,19 +161,11 @@ export function createAttendanceRoutes() {
 
   router.post('/api/attendance/sessions/active/close', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền đóng điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+        forbidden: 'Bạn không có quyền đóng điểm danh.',
+      });
+      if (!context) return;
+      const { auth, access } = context;
 
       const result = await closeAttendanceSession({
         discordGuildId: access.guild.discordGuildId,
@@ -245,19 +188,11 @@ export function createAttendanceRoutes() {
 
   router.post('/api/attendance/sessions/active/refresh', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'manage:lineup', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền refresh điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+        forbidden: 'Bạn không có quyền refresh điểm danh.',
+      });
+      if (!context) return;
+      const { auth, access } = context;
 
       const result = await refreshAttendanceSession(access.guild.discordGuildId);
       if (result.status !== 200) {
@@ -276,19 +211,11 @@ export function createAttendanceRoutes() {
 
   router.post('/api/attendance/sessions/:sessionId/votes', async (req, res, next) => {
     try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const access = await requireAccessibleGuild(auth.user.id, 'view:guild', auth.session.activeGuildId);
-      if (!access) {
-        res.status(404).json({ error: 'Chưa có server nào được import.' });
-        return;
-      }
-
-      if (access.forbidden) {
-        res.status(403).json({ error: 'Bạn không có quyền điểm danh.' });
-        return;
-      }
+      const context = await requireGuildAccess(req, res, 'view:guild', {
+        forbidden: 'Bạn không có quyền điểm danh.',
+      });
+      if (!context) return;
+      const { auth, access } = context;
 
       const choice = parseAttendanceChoice(req.body?.choice);
       if (!choice) {
