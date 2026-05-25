@@ -16,6 +16,13 @@ function parseLimit(value: unknown) {
   return Math.min(Math.max(parsed, 1), 50);
 }
 
+function parseOffset(value: unknown) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : 0;
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(parsed, 0);
+}
+
 export function createGvgParticipationRoutes() {
   const router = Router();
 
@@ -27,7 +34,10 @@ export function createGvgParticipationRoutes() {
       if (!context) return;
       const { access } = context;
 
-      res.json(await listGvgParticipationSessions(access.guild.id, parseLimit(req.query.limit)));
+      res.json(await listGvgParticipationSessions(access.guild.id, {
+        limit: parseLimit(req.query.limit),
+        offset: parseOffset(req.query.offset),
+      }));
     } catch (err) {
       next(err);
     }

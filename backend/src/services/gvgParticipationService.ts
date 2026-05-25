@@ -78,15 +78,24 @@ function serializeSession(session: {
   };
 }
 
-export async function listGvgParticipationSessions(guildId: string, take = 20) {
+export async function listGvgParticipationSessions(guildId: string, options: { limit?: number; offset?: number } = {}) {
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
+  const offset = Math.max(options.offset ?? 0, 0);
   const sessions = await prisma.gvgParticipationSession.findMany({
     where: { guildId },
     include: { entries: true },
     orderBy: { battleDate: 'desc' },
-    take: Math.min(Math.max(take, 1), 50),
+    skip: offset,
+    take: limit + 1,
   });
+  const pageSessions = sessions.slice(0, limit);
+  const hasMore = sessions.length > limit;
 
-  return { sessions: sessions.map(serializeSession) };
+  return {
+    sessions: pageSessions.map(serializeSession),
+    hasMore,
+    nextOffset: hasMore ? offset + pageSessions.length : null,
+  };
 }
 
 export async function getGvgParticipationStats(guildId: string, options?: { month?: string | null }) {

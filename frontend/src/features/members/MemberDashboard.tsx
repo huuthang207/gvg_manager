@@ -11,6 +11,7 @@ import { CLASSES, CLASS_COLORS, CLASS_ICONS, UNKNOWN_CLASS, CONFLICT_CLASS } fro
 import { cn } from '../../lib/utils.ts';
 import { getErrorMessage } from '../../lib/error.ts';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
+import { AppMonthPickerPanel } from '../../components/ui/AppMonthPicker.tsx';
 import { AppSelect } from '../../components/ui/AppSelect.tsx';
 
 interface MemberDashboardProps {
@@ -73,9 +74,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 }) => {
   const { confirm } = useSystemDialog();
   const classFilterRef = useRef<HTMLDivElement | null>(null);
+  const gvgMonthFilterRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterClass, setFilterClass] = useState<ClassType | 'all'>('all');
   const [classFilterOpen, setClassFilterOpen] = useState(false);
+  const [gvgMonthFilterOpen, setGvgMonthFilterOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>('discordUsername');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -98,17 +101,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   }, [selfMember]);
 
   useEffect(() => {
-    if (!classFilterOpen) return;
+    if (!classFilterOpen && !gvgMonthFilterOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (classFilterRef.current?.contains(target)) return;
+      if (gvgMonthFilterRef.current?.contains(target)) return;
       setClassFilterOpen(false);
+      setGvgMonthFilterOpen(false);
     };
 
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [classFilterOpen]);
+  }, [classFilterOpen, gvgMonthFilterOpen]);
 
   const myTrimmedName = myIngameName.trim();
   const canSaveMyIngameName = !!selfMember && myTrimmedName.length > 0 && myTrimmedName !== (selfMember.ingameName || selfMember.name);
@@ -306,7 +311,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 Bộ lọc
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(220px,1fr)_170px_auto] gap-3 items-end">
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(220px,1fr)_auto] gap-3 items-end">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
                     Tìm kiếm
@@ -321,20 +326,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 py-2 pl-9 pr-3 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-400/70"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-                    Tháng bang chiến
-                  </label>
-                  <input
-                    type="month"
-                    value={gvgParticipationMonth}
-                    onChange={event => {
-                      if (event.target.value) onGvgParticipationMonthChange(event.target.value);
-                    }}
-                    className="w-full rounded-lg border border-violet-400/25 bg-slate-800/70 px-3 py-2 text-xs font-bold text-violet-100 focus:border-violet-300/70 focus:outline-none"
-                  />
                 </div>
 
                 {(filterClass !== 'all' || searchQuery) && (
@@ -418,7 +409,44 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       <SortableHeader label="Ngày tham gia" field="joinedAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} align="center" />
                     </th>
                     <th className="w-[15%] px-3 py-3 text-center">
-                      <SortableHeader label="Bang chiến tháng" field="gvgParticipationCount" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} align="center" />
+                      <div ref={gvgMonthFilterRef} className="relative inline-flex max-w-full items-center justify-center gap-1.5">
+                        <SortableHeader label="Bang chiến tháng" field="gvgParticipationCount" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} align="center" />
+                        <button
+                          type="button"
+                          onClick={event => {
+                            event.stopPropagation();
+                            setGvgMonthFilterOpen(open => !open);
+                          }}
+                          className={cn(
+                            'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors',
+                            gvgMonthFilterOpen
+                              ? 'border-sky-400/45 bg-sky-500/20 text-sky-200'
+                              : 'border-slate-700/80 bg-slate-900/80 text-slate-400 hover:border-slate-500 hover:text-slate-100',
+                          )}
+                          title={`Lọc tháng bang chiến: ${gvgParticipationMonth}`}
+                        >
+                          <Filter size={12} />
+                        </button>
+                        {gvgMonthFilterOpen && (
+                          <div
+                            className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-700/80 bg-slate-950/98 p-3 shadow-2xl shadow-slate-950/50 normal-case tracking-normal"
+                            onClick={event => event.stopPropagation()}
+                          >
+                            <div className="mb-3">
+                              <div className="text-xs font-black text-slate-100">Chọn tháng bang chiến</div>
+                              <div className="mt-0.5 text-[11px] font-bold text-slate-500">Chọn tháng rồi bấm Áp dụng.</div>
+                            </div>
+                            <AppMonthPickerPanel
+                              value={gvgParticipationMonth}
+                              onChange={value => {
+                                onGvgParticipationMonthChange(value);
+                                setGvgMonthFilterOpen(false);
+                              }}
+                              onCancel={() => setGvgMonthFilterOpen(false)}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </th>
                   </tr>
                 </thead>

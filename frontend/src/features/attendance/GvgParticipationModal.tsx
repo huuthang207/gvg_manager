@@ -4,6 +4,7 @@ import { finalizeGvgParticipationSession, getGvgParticipationSessions } from '..
 import type { GvgParticipationSession } from '../../services/discordApi.ts';
 import { getErrorMessage } from '../../lib/error.ts';
 import { cn } from '../../lib/utils.ts';
+import { AppDatePicker } from '../../components/ui/AppDatePicker.tsx';
 import { AppSelect } from '../../components/ui/AppSelect.tsx';
 import type { AttendanceSession } from '../../shared/types/auth.ts';
 import type { Member } from '../../shared/types/member.ts';
@@ -213,7 +214,7 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
                     <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">Ngày chốt</h4>
                   </div>
                   <div className="space-y-2">
-                    <input aria-label="Ngày bang chiến" type="date" value={battleDate} onChange={event => setBattleDate(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400/70" />
+                    <AppDatePicker label="Ngày bang chiến" value={battleDate} onChange={setBattleDate} />
                     {isEditingFinalizedSession && (
                       <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wider text-amber-200">
                         Đang sửa phiên đã chốt

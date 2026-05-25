@@ -23,8 +23,8 @@ export interface GvgParticipationSession {
   }>;
 }
 
-export async function getGvgParticipationSessions(limit = 20) {
-  return requestJson<{ sessions: GvgParticipationSession[] }>(`${API_BASE}/api/gvg-participation/sessions?limit=${limit}`, { credentials: 'include' });
+export async function getGvgParticipationSessions(limit = 20, offset = 0) {
+  return requestJson<{ sessions: GvgParticipationSession[]; hasMore?: boolean; nextOffset?: number | null }>(`${API_BASE}/api/gvg-participation/sessions?limit=${limit}&offset=${offset}`, { credentials: 'include' });
 }
 
 export async function getGvgParticipationStats(month: string) {

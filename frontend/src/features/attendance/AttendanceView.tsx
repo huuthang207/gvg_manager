@@ -2,11 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, CheckCircle2, CircleHelp, ClipboardCheck, Hash, Play, RefreshCw, Save, Search, ShieldCheck, Square, Trash2, X, XCircle } from 'lucide-react';
 import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
-import { deleteAttendanceHistorySession, getAttendanceHistory, getAttendanceSession } from '../../services/discordApi.ts';
+import { deleteAttendanceHistorySession, getAttendanceHistory, getAttendanceSession, getGvgParticipationSessions } from '../../services/discordApi.ts';
+import type { GvgParticipationSession } from '../../services/discordApi.ts';
 import type { AttendanceChoice, AttendanceSession, AttendanceState, AttendanceVote } from '../../shared/types/auth.ts';
 import type { Member } from '../../shared/types/member.ts';
 import type { ClassType } from '../../types.ts';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
+import { AppMonthPicker } from '../../components/ui/AppMonthPicker.tsx';
 import { GvgParticipationModal } from './GvgParticipationModal.tsx';
 
 const choiceMeta: Record<AttendanceChoice, { label: string; shortLabel: string; icon: React.ReactNode; className: string }> = {
@@ -196,6 +198,133 @@ function VoteTable({ votes, totalVotes }: { votes: AttendanceVote[]; totalVotes:
         </div>
       )}
     </section>
+  );
+}
+
+function getGvgBattleCounts(session: GvgParticipationSession) {
+  return {
+    battleOne: session.entries.filter(entry => entry.battleNumbers.includes(1)).length,
+    battleTwo: session.entries.filter(entry => entry.battleNumbers.includes(2)).length,
+  };
+}
+
+function getGvgEntryMember(entry: GvgParticipationSession['entries'][number], members: Member[]) {
+  return members.find(member => member.id === entry.memberId) || null;
+}
+
+function getGvgEntryName(entry: GvgParticipationSession['entries'][number], members: Member[]) {
+  const member = getGvgEntryMember(entry, members);
+  return entry.snapshotIngameName || (member ? getMemberName(member) : 'Không rõ tên');
+}
+
+function getGvgEntryClass(entry: GvgParticipationSession['entries'][number], members: Member[]) {
+  const member = getGvgEntryMember(entry, members);
+  return entry.snapshotClassType || member?.classType || 'Unknown';
+}
+
+const GvgHistoryRow: React.FC<{ session: GvgParticipationSession; onOpen: () => void }> = ({ session, onOpen }) => {
+  const { battleOne, battleTwo } = getGvgBattleCounts(session);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full rounded-xl border border-slate-800/80 bg-slate-950/35 p-2 text-left transition-colors hover:bg-slate-900/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-xs font-black text-slate-100">Bang chiến {formatDate(session.battleDate)}</div>
+          <div className="mt-1 text-[11px] font-bold text-slate-500">
+            {session.battleCount} trận · {session.entries.length} thành viên · Chốt {formatDate(session.finalizedAt)}
+          </div>
+        </div>
+        {session.battleCount === 2 ? (
+          <span className="shrink-0 rounded-full border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-black text-sky-200">
+            T1 {battleOne} · T2 {battleTwo}
+          </span>
+        ) : null}
+      </div>
+      {session.note ? <div className="mt-1 truncate text-[11px] font-bold text-amber-200/85">{session.note}</div> : null}
+    </button>
+  );
+};
+
+function GvgHistoryDetailsPanel({ session, members }: { session: GvgParticipationSession; members: Member[] }) {
+  const sortedEntries = useMemo(() => [...session.entries].sort((a, b) => {
+    const classCompare = getGvgEntryClass(a, members).localeCompare(getGvgEntryClass(b, members), 'vi');
+    if (classCompare !== 0) return classCompare;
+    return getGvgEntryName(a, members).localeCompare(getGvgEntryName(b, members), 'vi');
+  }), [members, session.entries]);
+  const { battleOne, battleTwo } = getGvgBattleCounts(session);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/35 p-3">
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Ngày</div>
+          <div className="mt-1 text-sm font-black text-slate-100">{formatDate(session.battleDate)}</div>
+        </div>
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/35 p-3">
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Số trận</div>
+          <div className="mt-1 text-sm font-black text-slate-100">{session.battleCount} trận</div>
+        </div>
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/35 p-3">
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Thành viên</div>
+          <div className="mt-1 text-sm font-black text-slate-100">{session.entries.length} người</div>
+        </div>
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/35 p-3">
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Chốt lúc</div>
+          <div className="mt-1 text-sm font-black text-slate-100">{formatDate(session.finalizedAt)}</div>
+        </div>
+      </div>
+      {session.battleCount === 2 ? (
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full border border-sky-400/25 bg-sky-500/10 px-3 py-1 text-xs font-black text-sky-200">T1: {battleOne}</span>
+          <span className="rounded-full border border-indigo-400/25 bg-indigo-500/10 px-3 py-1 text-xs font-black text-indigo-200">T2: {battleTwo}</span>
+        </div>
+      ) : null}
+      <section className="rounded-2xl border border-slate-800/80 bg-slate-950/35 p-3">
+        <h3 className="text-sm font-black text-slate-100">Ghi chú</h3>
+        <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-300">{session.note || 'Không có ghi chú.'}</p>
+      </section>
+      <section className="rounded-2xl border border-slate-800/80 bg-slate-950/35 p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-black text-slate-100">Danh sách tham gia</h3>
+          <span className="rounded-full border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-xs font-black text-slate-300">{sortedEntries.length} người</span>
+        </div>
+        {sortedEntries.length ? (
+          <div className="max-h-[520px] overflow-auto rounded-xl border border-slate-800/80 custom-scrollbar">
+            <table className="min-w-full divide-y divide-slate-800/80 text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-950/95 text-xs uppercase tracking-wider text-slate-500 backdrop-blur">
+                <tr>
+                  <th className="w-16 px-3 py-3 font-black">#</th>
+                  <th className="min-w-[220px] px-3 py-3 font-black">Thành viên</th>
+                  <th className="min-w-[140px] px-3 py-3 font-black">Phái</th>
+                  <th className="min-w-[140px] px-3 py-3 font-black">Trận</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 bg-slate-950/25">
+                {sortedEntries.map((entry, index) => (
+                  <tr key={entry.id} className="transition-colors hover:bg-slate-900/70">
+                    <td className="px-3 py-3 font-mono text-xs font-black text-slate-500">#{index + 1}</td>
+                    <td className="px-3 py-3 font-bold text-slate-100">{getGvgEntryName(entry, members)}</td>
+                    <td className="px-3 py-3"><ClassBadge classType={getGvgEntryClass(entry, members)} /></td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {entry.battleNumbers.map(battleNumber => (
+                          <span key={battleNumber} className="rounded-full border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-xs font-black text-sky-200">T{battleNumber}</span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-8 text-center text-sm text-slate-500">Chưa có thành viên nào trong phiên chốt này.</div>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -424,6 +553,14 @@ export function AttendanceView({
   const [headerText, setHeaderText] = useState('');
   const [setupModal, setSetupModal] = useState<'open' | null>(null);
   const [isGvgModalOpen, setIsGvgModalOpen] = useState(false);
+  const [gvgHistorySessions, setGvgHistorySessions] = useState<GvgParticipationSession[]>([]);
+  const [gvgHistoryLoading, setGvgHistoryLoading] = useState(false);
+  const [gvgHistoryError, setGvgHistoryError] = useState('');
+  const [gvgHistoryHasMore, setGvgHistoryHasMore] = useState(false);
+  const [gvgHistoryNextOffset, setGvgHistoryNextOffset] = useState(0);
+  const [gvgHistoryModalOpen, setGvgHistoryModalOpen] = useState(false);
+  const [selectedGvgHistorySession, setSelectedGvgHistorySession] = useState<GvgParticipationSession | null>(null);
+  const [deleteGvgModalOpen, setDeleteGvgModalOpen] = useState(false);
   const [deleteGvgMonth, setDeleteGvgMonth] = useState(getCurrentMonthKey);
   const [deletingGvgMonth, setDeletingGvgMonth] = useState(false);
   const historyList = historySessions.filter(session => session.id !== attendance.activeSession?.id);
@@ -451,6 +588,28 @@ export function AttendanceView({
       .catch(() => setHistoryError('Không thể tải lịch sử điểm danh.'))
       .finally(() => setHistoryLoading(false));
   }, [attendance.recentSessions]);
+
+  const loadGvgHistory = async (reset = false) => {
+    const offset = reset ? 0 : gvgHistoryNextOffset;
+    setGvgHistoryLoading(true);
+    setGvgHistoryError('');
+    try {
+      const result = await getGvgParticipationSessions(20, offset);
+      setGvgHistorySessions(prev => reset
+        ? result.sessions
+        : [...prev, ...result.sessions.filter(session => !prev.some(item => item.id === session.id))]);
+      setGvgHistoryHasMore(!!result.hasMore);
+      setGvgHistoryNextOffset(result.nextOffset ?? offset + result.sessions.length);
+    } catch {
+      setGvgHistoryError(reset ? 'Không thể tải lịch sử chốt bang chiến.' : 'Không thể tải thêm lịch sử chốt bang chiến.');
+    } finally {
+      setGvgHistoryLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    void loadGvgHistory(true);
+  }, []);
 
   React.useEffect(() => {
     const validIds = new Set(historyListIds);
@@ -571,6 +730,8 @@ export function AttendanceView({
     setDeletingGvgMonth(true);
     try {
       const deletedCount = await onDeleteGvgParticipationMonth(deleteGvgMonth);
+      await loadGvgHistory(true);
+      setDeleteGvgModalOpen(false);
       await confirm({
         title: 'Đã xoá dữ liệu bang chiến',
         message: `Đã xoá ${deletedCount} phiên chốt tham gia bang chiến trong tháng ${deleteGvgMonth}.`,
@@ -684,39 +845,34 @@ export function AttendanceView({
               </div>
               <p className="mt-1 text-xs font-bold leading-5 text-slate-400">Chốt người tham gia thực tế và quản lý dữ liệu theo tháng.</p>
             </div>
-            <button
-              onClick={() => setIsGvgModalOpen(true)}
-              className="app-button-primary inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider"
-            >
-              <ShieldCheck size={14} />
-              Chốt tham gia
-            </button>
-            <div className="mt-3 rounded-xl border border-slate-800/80 bg-slate-950/45 p-2.5">
-              <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                <Trash2 size={12} className="text-red-300" />
-                Xoá dữ liệu tháng
-              </div>
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <input
-                  type="month"
-                  value={deleteGvgMonth}
-                  onChange={event => {
-                    if (event.target.value) setDeleteGvgMonth(event.target.value);
-                  }}
-                  className="w-full rounded-lg border border-slate-700/80 bg-slate-950/60 px-2.5 py-1.5 text-xs font-bold text-slate-100 outline-none transition-colors focus:border-sky-400/70"
-                />
-                <button
-                  type="button"
-                  onClick={() => void deleteGvgParticipationMonth()}
-                  disabled={deletingGvgMonth || !deleteGvgMonth}
-                  className="app-button-danger inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-black disabled:opacity-50"
-                >
-                  <Trash2 size={13} />
-                  {deletingGvgMonth ? 'Đang xoá...' : 'Xoá'}
-                </button>
-              </div>
-              <p className="mt-2 text-[11px] font-bold leading-4 text-slate-500">Chỉ xoá dữ liệu chốt tham gia bang chiến của tháng đã chọn.</p>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={() => setIsGvgModalOpen(true)}
+                className="app-button-primary inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider"
+              >
+                <ShieldCheck size={14} />
+                Chốt tham gia
+              </button>
+              <button
+                type="button"
+                onClick={() => setGvgHistoryModalOpen(true)}
+                className="app-button-secondary inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider"
+              >
+                <CalendarDays size={14} />
+                Lịch sử
+              </button>
             </div>
+            {gvgHistoryError ? (
+              <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200">{gvgHistoryError}</div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setDeleteGvgModalOpen(true)}
+              className="app-button-danger mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider"
+            >
+              <Trash2 size={14} />
+              Xóa dữ liệu
+            </button>
           </section>
         </aside>
 
@@ -931,6 +1087,96 @@ export function AttendanceView({
         </div>
       )}
 
+      {deleteGvgModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={() => setDeleteGvgModalOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
+              <div>
+                <h2 className="text-xl font-black text-white">Xóa dữ liệu chốt bang chiến</h2>
+                <p className="text-sm text-slate-500">Chọn tháng cần xóa dữ liệu đã chốt.</p>
+              </div>
+              <button onClick={() => setDeleteGvgModalOpen(false)} className="app-button-secondary rounded-xl p-2">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <AppMonthPicker label="Tháng cần xóa" value={deleteGvgMonth} onChange={setDeleteGvgMonth} />
+              <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs font-bold leading-5 text-red-200">
+                Thao tác này chỉ xóa dữ liệu chốt tham gia bang chiến của tháng đã chọn, không xóa thành viên, điểm danh hoặc đội hình.
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setDeleteGvgModalOpen(false)} className="app-button-secondary rounded-xl px-3 py-2 text-sm font-bold">Hủy</button>
+                <button
+                  type="button"
+                  onClick={() => void deleteGvgParticipationMonth()}
+                  disabled={deletingGvgMonth || !deleteGvgMonth}
+                  className="app-button-danger inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-black disabled:opacity-50"
+                >
+                  <Trash2 size={15} />
+                  {deletingGvgMonth ? 'Đang xóa...' : 'Xóa dữ liệu'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gvgHistoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={() => setGvgHistoryModalOpen(false)}>
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl custom-scrollbar" onClick={event => event.stopPropagation()}>
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-6 py-5 backdrop-blur">
+              <div>
+                <h2 className="text-xl font-black text-white">Tất cả lịch sử chốt tham gia</h2>
+                <p className="text-sm text-slate-500">Hiển thị theo từng trang, chỉ tải thêm khi cần.</p>
+              </div>
+              <button onClick={() => setGvgHistoryModalOpen(false)} className="app-button-secondary rounded-xl p-2">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-3 p-5">
+              {gvgHistoryError ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{gvgHistoryError}</div>
+              ) : null}
+              {gvgHistorySessions.length ? gvgHistorySessions.map(session => (
+                <GvgHistoryRow key={session.id} session={session} onOpen={() => setSelectedGvgHistorySession(session)} />
+              )) : (
+                <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-8 text-center text-sm text-slate-500">
+                  {gvgHistoryLoading ? 'Đang tải lịch sử chốt...' : 'Chưa có lịch sử chốt.'}
+                </div>
+              )}
+              {gvgHistoryHasMore ? (
+                <button
+                  onClick={() => void loadGvgHistory(false)}
+                  disabled={gvgHistoryLoading}
+                  className="app-button-secondary w-full rounded-xl px-4 py-2 text-sm font-black"
+                >
+                  {gvgHistoryLoading ? 'Đang tải...' : 'Tải thêm lịch sử'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedGvgHistorySession && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={() => setSelectedGvgHistorySession(null)}>
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl custom-scrollbar" onClick={event => event.stopPropagation()}>
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-6 py-5 backdrop-blur">
+              <div className="min-w-0">
+                <h2 className="truncate text-xl font-black text-white">Bang chiến {formatDate(selectedGvgHistorySession.battleDate)}</h2>
+                <p className="text-sm text-slate-500">Chi tiết danh sách đã chốt và ghi chú.</p>
+              </div>
+              <button onClick={() => setSelectedGvgHistorySession(null)} className="app-button-secondary rounded-xl p-2">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 lg:p-6">
+              <GvgHistoryDetailsPanel session={selectedGvgHistorySession} members={members} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeDetailsOpen && attendance.activeSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={() => setActiveDetailsOpen(false)}>
           <div className="max-h-[96vh] w-full max-w-[96vw] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl custom-scrollbar" onClick={event => event.stopPropagation()}>
@@ -955,7 +1201,10 @@ export function AttendanceView({
           members={members}
           attendanceSessions={gvgParticipationSourceSessions}
           onClose={() => setIsGvgModalOpen(false)}
-          onSaved={() => setIsGvgModalOpen(false)}
+          onSaved={() => {
+            setIsGvgModalOpen(false);
+            void loadGvgHistory(true);
+          }}
         />
       )}
 
