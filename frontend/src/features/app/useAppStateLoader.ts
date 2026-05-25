@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Member, Skill, SquadGroup } from '../../types.ts';
 import { AppStateResponse, getAppState } from '../../services/discordApi.ts';
+import { replaceMemberPoolPreservingSkills } from '../members/memberPoolUtils.ts';
 
 interface UseAppStateLoaderParams {
   setMemberPool: Dispatch<SetStateAction<Member[]>>;
@@ -63,16 +64,7 @@ export function useAppStateLoader(params: UseAppStateLoaderParams) {
   }, [loadDefaultSkills]);
 
   const applyAppState = useCallback(async (state: Awaited<ReturnType<typeof getAppState>>) => {
-    setMemberPool(prev => {
-      const previousSkillsByMemberId = new Map(prev.map(member => [member.id, member.assignedSkills || []]));
-
-      return state.members.map(member => ({
-        ...member,
-        assignedSkills: member.assignedSkills ?? previousSkillsByMemberId.get(member.id) ?? [],
-        classType: member.classType as Member['classType'],
-        previousClassType: member.previousClassType as Member['classType'] | null | undefined,
-      }));
-    });
+    setMemberPool(prev => replaceMemberPoolPreservingSkills(prev, state.members));
     setSkills(await resolveSkills(state.skills));
     setLastSyncedAt(state.lastSyncedAt);
     setRoleConfig(state.roleConfig);
