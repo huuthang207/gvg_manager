@@ -30,6 +30,7 @@ export {
   deleteMember,
   assignMemberSkill,
   removeMemberSkill,
+  clearMemberSkills,
   syncDiscordMembers,
   fetchDiscordRoles,
   fetchCurrentDiscordRoles,

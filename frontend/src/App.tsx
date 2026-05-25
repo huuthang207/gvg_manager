@@ -81,6 +81,7 @@ export default function App() {
     handleReleaseLineupLock,
     handleOverrideLineupLock,
     handleSquadGroupsChange,
+    handleResetSquadGroups,
     handleSquadGroupLeaderChange,
     handleMemberNoteChange,
     handleImportAttendanceToLineup,
@@ -386,6 +387,7 @@ export default function App() {
               currentUser={currentUser}
               assignedMemberIds={assignedMemberIds}
               onSquadGroupsChange={handleSquadGroupsChange}
+              onResetSquadGroups={handleResetSquadGroups}
               onSquadGroupLeaderChange={handleSquadGroupLeaderChange}
               onMemberPoolChange={setMemberPool}
               onAssignSkillToMember={handleAssignSkillToMember}

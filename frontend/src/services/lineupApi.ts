@@ -28,12 +28,12 @@ export async function overrideLineupEditLock(): Promise<LineupEditLock | null> {
   return data.lock;
 }
 
-export async function saveSquadLayout(groups: AppStateResponse['squadGroups']): Promise<AppStateResponse> {
+export async function saveSquadLayout(groups: AppStateResponse['squadGroups'], options?: { clearSkillMemberIds?: string[] }): Promise<AppStateResponse> {
   return requestJson(`${API_BASE}/api/squad-layout`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ groups }),
+    body: JSON.stringify({ groups, clearSkillMemberIds: options?.clearSkillMemberIds }),
   });
 }
 

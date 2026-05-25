@@ -371,6 +371,43 @@ export async function removeSkillFromMember(userId: string, activeGuildId: strin
   return { status: 200 as const, body: state };
 }
 
+export async function clearSkillsFromMembers(userId: string, activeGuildId: string | null | undefined, memberIds: string[]) {
+  const access = await requireAccessibleGuild(userId, 'manage:lineup', activeGuildId);
+
+  if (!access) {
+    return { status: 404 as const, body: { error: 'Chưa có server nào được import.' } };
+  }
+
+  if (access.forbidden) {
+    return { status: 403 as const, body: { error: 'Bạn không có quyền chỉnh sửa đội hình.' } };
+  }
+
+  const uniqueMemberIds = [...new Set(memberIds.filter(id => typeof id === 'string' && id.trim()))];
+  if (uniqueMemberIds.length === 0) {
+    const state = await getUserAppState(userId, activeGuildId);
+    return { status: 200 as const, body: state };
+  }
+
+  const members = await prisma.member.findMany({
+    where: {
+      id: { in: uniqueMemberIds },
+      guildId: access.guild.id,
+    },
+    select: { id: true },
+  });
+
+  if (members.length !== uniqueMemberIds.length) {
+    return { status: 404 as const, body: { error: 'Không tìm thấy một hoặc nhiều thành viên.' } };
+  }
+
+  await prisma.memberSkill.deleteMany({ where: { memberId: { in: uniqueMemberIds } } });
+
+  publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'member_updated' });
+
+  const state = await getUserAppState(userId, activeGuildId);
+  return { status: 200 as const, body: state };
+}
+
 export async function acknowledgeMemberClassChange(userId: string, activeGuildId: string | null | undefined, memberId: string) {
   const access = await requireAccessibleGuild(userId, 'manage:members', activeGuildId);
 

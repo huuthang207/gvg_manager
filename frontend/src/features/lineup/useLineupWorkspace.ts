@@ -88,10 +88,10 @@ export function useLineupWorkspace({
     }
   }, [currentGuild, permissions]);
 
-  const persistSquadGroups = React.useCallback((groups: SquadGroup[], applySavedState = false) => {
+  const persistSquadGroups = React.useCallback((groups: SquadGroup[], applySavedState = false, options?: { clearSkillMemberIds?: string[] }) => {
     const saveTask = squadLayoutSaveRef.current.then(async () => {
       try {
-        const state = await saveSquadLayout(groups);
+        const state = await saveSquadLayout(groups, options);
         if (applySavedState) {
           setSquadGroups(state.squadGroups || []);
         }
@@ -119,6 +119,16 @@ export function useLineupWorkspace({
       }
 
       void persistSquadGroups(next, prev.length === 0);
+      return next;
+    });
+  }, [persistSquadGroups, setMemberPool, setSquadGroups]);
+
+  const handleResetSquadGroups = React.useCallback((update: React.SetStateAction<SquadGroup[]>, clearSkillMemberIds: string[]) => {
+    const targetIds = new Set(clearSkillMemberIds);
+    setMemberPool(members => members.map(member => targetIds.has(member.id) ? { ...member, assignedSkills: [] } : member));
+    setSquadGroups(prev => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      void persistSquadGroups(next, prev.length === 0, { clearSkillMemberIds: [...targetIds] });
       return next;
     });
   }, [persistSquadGroups, setMemberPool, setSquadGroups]);
@@ -257,6 +267,7 @@ export function useLineupWorkspace({
     handleReleaseLineupLock,
     handleOverrideLineupLock,
     handleSquadGroupsChange,
+    handleResetSquadGroups,
     handleSquadGroupLeaderChange,
     handleMemberNoteChange,
     handleImportAttendanceToLineup,

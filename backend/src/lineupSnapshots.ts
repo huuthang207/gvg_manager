@@ -93,7 +93,7 @@ function collectSnapshotMemberSkills(groups: ReturnType<typeof serializeSnapshot
   return skillsByMemberId;
 }
 
-export async function persistSquadGroupsForGuild(guildId: string, groups: PersistedSquadGroupInput) {
+export async function persistSquadGroupsForGuild(guildId: string, groups: PersistedSquadGroupInput, options?: { clearSkillMemberIds?: string[] }) {
   const memberIds = [...new Set(groups.flatMap(group => [
     ...(group.leaderMemberId ? [group.leaderMemberId] : []),
     ...(group.teams ?? []).flatMap(team => [
@@ -111,8 +111,19 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
     validMembers.forEach(member => validMemberIds.add(member.id));
   }
 
+  const clearSkillMemberIds = [...new Set((options?.clearSkillMemberIds ?? []).filter(id => typeof id === 'string' && id.trim()))];
+
   await runExclusiveSquadLayoutSave(guildId, async () => {
     await prisma.$transaction(async tx => {
+      if (clearSkillMemberIds.length > 0) {
+        await tx.memberSkill.deleteMany({
+          where: {
+            memberId: { in: clearSkillMemberIds },
+            member: { guildId },
+          },
+        });
+      }
+
       const existingGroups = await tx.squadGroup.findMany({
         where: { guildId },
         include: {

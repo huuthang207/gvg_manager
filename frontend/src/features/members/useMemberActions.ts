@@ -4,6 +4,7 @@ import type { AppStateResponse } from '../../services/apiTypes.ts';
 import {
   acknowledgeClassChange,
   assignMemberSkill,
+  clearMemberSkills,
   deleteMember,
   removeMemberSkill,
   resetCurrentGuildData,
@@ -70,6 +71,17 @@ export function useMemberActions({
       void loadAppState();
     });
   }, [alert, applyAppState, loadAppState, setMemberPool]);
+
+  const handleClearSkillsFromMembers = React.useCallback((memberIds: string[]) => {
+    const targetIds = new Set(memberIds);
+    if (targetIds.size === 0) return;
+
+    setMemberPool(prev => prev.map(member => targetIds.has(member.id) ? { ...member, assignedSkills: [] } : member));
+    void clearMemberSkills([...targetIds]).catch(err => {
+      void alert({ message: getErrorMessage(err, 'Không thể gỡ kỹ năng khỏi đội hình'), variant: 'error' });
+      void loadAppState();
+    });
+  }, [alert, loadAppState, setMemberPool]);
 
   const handleAddSkills = React.useCallback((skillsData: Omit<Skill, 'id'>[]) => {
     const newSkills = skillsData.map(data => ({
@@ -176,6 +188,7 @@ export function useMemberActions({
   return {
     handleAssignSkillToMember,
     handleRemoveSkillFromMember,
+    handleClearSkillsFromMembers,
     handleAddSkills,
     handleDeleteSkill,
     handleDeleteMember,

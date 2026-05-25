@@ -231,17 +231,6 @@ export const MainBoard: React.FC<MainBoardProps> = ({
         throw new Error('Không thể tạo ảnh đội hình.');
       }
 
-      const file = new File([blob], 'gvg-lineup.png', { type: 'image/png' });
-      if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: 'GvG Lineup' });
-          return;
-        } catch (err) {
-          if (err instanceof DOMException && err.name === 'AbortError') return;
-          throw err;
-        }
-      }
-
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -482,7 +471,7 @@ Bảng phân công
                   title="Chia sẻ hoặc tải ảnh đội hình"
                 >
                   <ImageDown size={12} />
-                  {exportingLineupImage ? 'Đang chụp...' : 'Chia sẻ ảnh'}
+                  {exportingLineupImage ? 'Đang chụp...' : 'Tải ảnh'}
                 </button>
                 {!readOnly && (
                   <>

@@ -70,6 +70,15 @@ export async function removeMemberSkill(memberId: string, skillId: string): Prom
   return requestJson(`${API_BASE}/api/members/${memberId}/skills/${skillId}`, { method: 'DELETE', credentials: 'include' });
 }
 
+export async function clearMemberSkills(memberIds: string[]): Promise<AppStateResponse> {
+  return requestJson(`${API_BASE}/api/members/skills/clear`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ memberIds }),
+  });
+}
+
 export async function syncDiscordMembers(): Promise<AppStateResponse> {
   return requestJson(`${API_BASE}/api/discord/sync`, { method: 'POST', credentials: 'include' });
 }

@@ -5,6 +5,7 @@ import { validateIngameName } from '../http/validators.js';
 import {
   acknowledgeMemberClassChange,
   assignSkillToMember,
+  clearSkillsFromMembers,
   deleteInactiveMemberFromDatabase,
   deleteInactiveMembersFromDatabase,
   removeBangVienRoleFromMember,
@@ -170,6 +171,19 @@ export function createMemberRoutes() {
 
       const { memberId, skillId } = req.params;
       const result = await removeSkillFromMember(auth.user.id, auth.session.activeGuildId, memberId, skillId);
+      res.status(result.status).json(result.body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/api/members/skills/clear', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const memberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds : [];
+      const result = await clearSkillsFromMembers(auth.user.id, auth.session.activeGuildId, memberIds);
       res.status(result.status).json(result.body);
     } catch (err) {
       next(err);

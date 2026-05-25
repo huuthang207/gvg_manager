@@ -206,6 +206,7 @@ interface TeamLayoutProps {
   currentUser: DiscordUser | null;
   assignedMemberIds: Set<string>;
   onSquadGroupsChange: React.Dispatch<React.SetStateAction<SquadGroup[]>>;
+  onResetSquadGroups: (update: React.SetStateAction<SquadGroup[]>, clearSkillMemberIds: string[]) => void;
   onSquadGroupLeaderChange: (groupId: string, leaderMemberId: string | null) => void;
   onAssignSkillToMember: (memberId: string, skill: Skill) => void;
   onRemoveSkillFromMember: (memberId: string, skillId: string) => void;
@@ -236,6 +237,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   currentUser,
   assignedMemberIds,
   onSquadGroupsChange,
+  onResetSquadGroups,
   onSquadGroupLeaderChange,
   onAssignSkillToMember,
   onRemoveSkillFromMember,
@@ -499,7 +501,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     }
   };
 
-  const clearAssignedLineupSkills = useCallback(() => {
+  const getAssignedLineupMemberIdsWithSkills = useCallback(() => {
     const assignedIds = new Set<string>();
     squadGroups.forEach(group => {
       group.teams.forEach(team => {
@@ -508,11 +510,10 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       });
     });
 
-    fullMemberPool.forEach(member => {
-      if (!assignedIds.has(member.id)) return;
-      (member.assignedSkills || []).forEach(skillId => onRemoveSkillFromMember(member.id, skillId));
-    });
-  }, [fullMemberPool, onRemoveSkillFromMember, squadGroups]);
+    return fullMemberPool
+      .filter(member => assignedIds.has(member.id) && (member.assignedSkills || []).length > 0)
+      .map(member => member.id);
+  }, [fullMemberPool, squadGroups]);
 
   const startNewLineup = useCallback(async () => {
     if (lineupResetActionPending) return;
@@ -526,13 +527,12 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       });
       if (!confirmed) return;
 
-      clearAssignedLineupSkills();
-      onSquadGroupsChange([]);
+      onResetSquadGroups([], getAssignedLineupMemberIdsWithSkills());
       setEmptyLineupMode('source');
     } finally {
       setLineupResetActionPending(false);
     }
-  }, [clearAssignedLineupSkills, confirm, lineupResetActionPending, onSquadGroupsChange]);
+  }, [confirm, getAssignedLineupMemberIdsWithSkills, lineupResetActionPending, onResetSquadGroups]);
 
   const handleRearrangeMembers = useCallback(async () => {
     if (lineupResetActionPending) return;
@@ -546,8 +546,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       });
       if (!confirmed) return;
 
-      clearAssignedLineupSkills();
-      onSquadGroupsChange(prev => prev.map(group => ({
+      onResetSquadGroups(prev => prev.map(group => ({
         ...group,
         teams: group.teams.map(team => ({
           ...team,
@@ -556,11 +555,11 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
           slotSkills: {},
           memberNotes: {},
         })),
-      })));
+      })), getAssignedLineupMemberIdsWithSkills());
     } finally {
       setLineupResetActionPending(false);
     }
-  }, [clearAssignedLineupSkills, confirm, lineupResetActionPending, onSquadGroupsChange]);
+  }, [confirm, getAssignedLineupMemberIdsWithSkills, lineupResetActionPending, onResetSquadGroups]);
 
   const handleCreateNewLineup = useCallback(() => {
     setEmptyLineupMode('create');

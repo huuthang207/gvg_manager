@@ -176,7 +176,7 @@ export function createLineupRoutes() {
       const auth = await requireAuth(req, res);
       if (!auth) return;
 
-      const { groups } = req.body as {
+      const { groups, clearSkillMemberIds } = req.body as {
         groups?: Array<{
           id?: string;
           name?: string;
@@ -189,6 +189,7 @@ export function createLineupRoutes() {
             memberNotes?: Record<string, string>;
           }>;
         }>;
+        clearSkillMemberIds?: string[];
       };
       if (!Array.isArray(groups) || groups.length > 10) {
         res.status(400).json({ error: 'Cấu hình đội hình không hợp lệ.' });
@@ -233,7 +234,9 @@ export function createLineupRoutes() {
         throw err;
       }
 
-      await persistSquadGroupsForGuild(access.guild.id, groups);
+      await persistSquadGroupsForGuild(access.guild.id, groups, {
+        clearSkillMemberIds: Array.isArray(clearSkillMemberIds) ? clearSkillMemberIds : [],
+      });
       publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'lineup_updated' });
 
       const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
