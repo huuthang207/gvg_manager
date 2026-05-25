@@ -338,7 +338,6 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
                         <TeamCard
                           key={team.id}
                           team={team}
-                          index={groupIndex * 10 + teamIndex}
                           accent={accent}
                           skills={skills}
                           getMemberById={getMemberById}

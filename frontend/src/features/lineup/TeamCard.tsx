@@ -10,7 +10,6 @@ import { MemberSlot } from './MemberSlot.tsx';
 interface TeamCardProps {
   team: SquadTeam;
   skills: Skill[];
-  index: number;
   accent: string;
   getMemberById: (id: string) => Member | null;
   onRemoveSkillFromMember: (memberId: string, skillId: string) => void;
@@ -18,22 +17,22 @@ interface TeamCardProps {
   hideSkills?: boolean;
 }
 
-export const TeamCard: React.FC<TeamCardProps> = ({ team, skills, index, getMemberById, onRemoveSkillFromMember, readOnly = false, hideSkills = false }) => {
+export const TeamCard: React.FC<TeamCardProps> = ({ team, skills, accent, getMemberById, onRemoveSkillFromMember, readOnly = false, hideSkills = false }) => {
   return (
-    <div className="squad-card p-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between pb-1 border-b border-slate-700/60 mb-1">
-        <div className="w-8 text-[11px] text-slate-600 font-mono">#{index + 1}</div>
-        <h3 className="truncate px-2 text-center text-base font-bold uppercase tracking-widest text-slate-100">
+    <div className="flex flex-col gap-2.5 rounded-2xl border border-slate-800/80 bg-slate-900/45 p-3 shadow-sm shadow-slate-950/15 transition-colors hover:border-slate-700/90 hover:bg-slate-900/60">
+      <div className="mb-1 flex items-center justify-between gap-2 rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: accent }} />
+        </div>
+        <h3 className="truncate px-2 text-center text-sm font-black uppercase tracking-widest text-slate-100">
           {team.name}
         </h3>
-        <div className="w-8 flex justify-end">
-          <span className="text-[12px] text-slate-500 font-mono">
-            {team.memberIds.filter(Boolean).length}/6
-          </span>
-        </div>
+        <span className="shrink-0 rounded-full border border-slate-700/70 bg-slate-800/55 px-2 py-0.5 text-[10px] font-black text-slate-400">
+          {team.memberIds.filter(Boolean).length}/6
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-1">
+      <div className="grid grid-cols-1 gap-1.5">
         {team.memberIds.map((memberId, idx) => (
           <MemberSlot
             key={`${team.id}-slot-${idx}`}
@@ -49,14 +48,14 @@ export const TeamCard: React.FC<TeamCardProps> = ({ team, skills, index, getMemb
         ))}
       </div>
 
-      <div className="mt-1 border-t border-slate-700/60 pt-2">
-        <div className="flex items-center justify-between mb-1 px-1">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Dự bị</p>
-          <span className="text-[11px] text-slate-600 font-mono">
+      <div className="mt-1 rounded-xl border border-slate-800/70 bg-slate-950/20 p-2">
+        <div className="flex items-center justify-between mb-1.5 px-1">
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dự bị</p>
+          <span className="rounded-full border border-slate-700/70 bg-slate-800/45 px-2 py-0.5 text-[10px] font-black text-slate-500">
             {team.reserveMemberIds.filter(Boolean).length}/3
           </span>
         </div>
-        <div className="grid grid-cols-1 gap-1">
+        <div className="grid grid-cols-1 gap-1.5">
           {team.reserveMemberIds.map((memberId, idx) => (
             <MemberSlot
               key={`${team.id}-reserve-${idx}`}

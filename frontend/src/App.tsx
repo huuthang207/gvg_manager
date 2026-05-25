@@ -56,6 +56,13 @@ export default function App() {
     currentGuild,
     permissions,
   });
+  const [teamsTabMounted, setTeamsTabMounted] = useState(activeTab === 'teams');
+
+  React.useEffect(() => {
+    if (activeTab === 'teams') {
+      setTeamsTabMounted(true);
+    }
+  }, [activeTab]);
 
   const mergeMemberDelta = useCallback((upsertMembers: Member[], removedMemberIds: string[]) => {
     setMemberPool(prev => mergeMemberDeltaIntoPool(prev, upsertMembers, removedMemberIds));
@@ -378,57 +385,59 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'teams' && (
-            <TeamLayout
-              squadGroups={squadGroups}
-              memberPool={lineupVisibleMemberPool}
-              fullMemberPool={memberPool}
-              skills={skills}
-              currentUser={currentUser}
-              assignedMemberIds={assignedMemberIds}
-              onSquadGroupsChange={handleSquadGroupsChange}
-              onResetSquadGroups={handleResetSquadGroups}
-              onSquadGroupLeaderChange={handleSquadGroupLeaderChange}
-              onMemberPoolChange={setMemberPool}
-              onAssignSkillToMember={handleAssignSkillToMember}
-              onSkillsChange={setSkills}
-              onRemoveSkillFromMember={handleRemoveSkillFromMember}
-              onMemberNoteChange={handleMemberNoteChange}
-              onImportAttendanceToLineup={handleImportAttendanceToLineup}
-              lineupMemberSource={lineupMemberSource}
-              lineupMemberSourceSessionId={lineupMemberSourceSessionId}
-              lineupMemberSourceSession={lineupMemberSourceSession}
-              lineupMemberSourceIncludeNotVoted={lineupMemberSourceIncludeNotVoted}
-              onLineupMemberSourceChange={setLineupMemberSource}
-              onLineupMemberSourceSessionChange={setLineupMemberSourceSession}
-              onLineupMemberSourceIncludeNotVotedChange={setLineupMemberSourceIncludeNotVoted}
-              getMemberById={getMemberById}
-              readOnly={lineupReadOnly}
-              snapshotsOnly={false}
-              canManageLineup={canManageLineup}
-              canManageSnapshots={canManageSnapshots}
-              canRestoreSnapshots={canRestoreSnapshots}
-              snapshotState={{
-                snapshots,
-                snapshotsOpen,
-                snapshotsLoading,
-                snapshotDetailLoading,
-                snapshotActionLoading,
-                selectedSnapshotId,
-                pendingSnapshotId,
-                selectedSnapshot,
-                recentSnapshotAction,
-              }}
-              snapshotActions={{
-                openSnapshots,
-                closeSnapshots,
-                selectSnapshot,
-                saveSnapshot,
-                restoreSnapshot,
-                removeSnapshot,
-                refreshSnapshots,
-              }}
-            />
+          {teamsTabMounted && (
+            <div className={activeTab === 'teams' ? 'h-full' : 'hidden'}>
+              <TeamLayout
+                squadGroups={squadGroups}
+                memberPool={lineupVisibleMemberPool}
+                fullMemberPool={memberPool}
+                skills={skills}
+                currentUser={currentUser}
+                assignedMemberIds={assignedMemberIds}
+                onSquadGroupsChange={handleSquadGroupsChange}
+                onResetSquadGroups={handleResetSquadGroups}
+                onSquadGroupLeaderChange={handleSquadGroupLeaderChange}
+                onMemberPoolChange={setMemberPool}
+                onAssignSkillToMember={handleAssignSkillToMember}
+                onSkillsChange={setSkills}
+                onRemoveSkillFromMember={handleRemoveSkillFromMember}
+                onMemberNoteChange={handleMemberNoteChange}
+                onImportAttendanceToLineup={handleImportAttendanceToLineup}
+                lineupMemberSource={lineupMemberSource}
+                lineupMemberSourceSessionId={lineupMemberSourceSessionId}
+                lineupMemberSourceSession={lineupMemberSourceSession}
+                lineupMemberSourceIncludeNotVoted={lineupMemberSourceIncludeNotVoted}
+                onLineupMemberSourceChange={setLineupMemberSource}
+                onLineupMemberSourceSessionChange={setLineupMemberSourceSession}
+                onLineupMemberSourceIncludeNotVotedChange={setLineupMemberSourceIncludeNotVoted}
+                getMemberById={getMemberById}
+                readOnly={lineupReadOnly}
+                snapshotsOnly={false}
+                canManageLineup={canManageLineup}
+                canManageSnapshots={canManageSnapshots}
+                canRestoreSnapshots={canRestoreSnapshots}
+                snapshotState={{
+                  snapshots,
+                  snapshotsOpen,
+                  snapshotsLoading,
+                  snapshotDetailLoading,
+                  snapshotActionLoading,
+                  selectedSnapshotId,
+                  pendingSnapshotId,
+                  selectedSnapshot,
+                  recentSnapshotAction,
+                }}
+                snapshotActions={{
+                  openSnapshots,
+                  closeSnapshots,
+                  selectSnapshot,
+                  saveSnapshot,
+                  restoreSnapshot,
+                  removeSnapshot,
+                  refreshSnapshots,
+                }}
+              />
+            </div>
           )}
 
           {activeTab === 'attendance' && canManageLineup && (

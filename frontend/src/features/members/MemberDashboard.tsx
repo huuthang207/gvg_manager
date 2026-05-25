@@ -34,30 +34,10 @@ interface MemberDashboardProps {
   lastSyncedAt?: string | null;
 }
 
-type SortField = 'discordUsername' | 'ingameName' | 'classType' | 'classStatus' | 'joinedAt' | 'gvgParticipationCount';
+type SortField = 'discordUsername' | 'ingameName' | 'classType' | 'joinedAt' | 'gvgParticipationCount';
 type SortDirection = 'asc' | 'desc';
-type ClassStatusFilter = 'all' | 'Bình thường' | 'Thiếu role phái' | 'Trùng role phái' | 'Đã đổi phái';
-
-type ClassStatus = {
-  label: Exclude<ClassStatusFilter, 'all'>;
-  className: string;
-};
 
 const CLASS_FILTER_OPTIONS: Array<ClassType | 'all'> = ['all', ...CLASSES, UNKNOWN_CLASS, CONFLICT_CLASS];
-const CLASS_STATUS_FILTER_OPTIONS: ClassStatusFilter[] = ['all', 'Bình thường', 'Thiếu role phái', 'Trùng role phái', 'Đã đổi phái'];
-
-const getClassStatus = (member: Member): ClassStatus => {
-  if (member.classType === UNKNOWN_CLASS) {
-    return { label: 'Thiếu role phái', className: 'border-slate-500/30 bg-slate-500/10 text-slate-300' };
-  }
-  if (member.classType === CONFLICT_CLASS) {
-    return { label: 'Trùng role phái', className: 'border-orange-500/30 bg-orange-500/10 text-orange-300' };
-  }
-  if (member.previousClassType && member.previousClassType !== member.classType) {
-    return { label: 'Đã đổi phái', className: 'border-amber-500/30 bg-amber-500/10 text-amber-300' };
-  }
-  return { label: 'Bình thường', className: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' };
-};
 
 const sortText = (a: string | null | undefined, b: string | null | undefined) => {
   const left = a?.trim() || '~~~~';
@@ -93,12 +73,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 }) => {
   const { confirm } = useSystemDialog();
   const classFilterRef = useRef<HTMLDivElement | null>(null);
-  const classStatusFilterRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterClass, setFilterClass] = useState<ClassType | 'all'>('all');
-  const [filterClassStatus, setFilterClassStatus] = useState<ClassStatusFilter>('all');
   const [classFilterOpen, setClassFilterOpen] = useState(false);
-  const [classStatusFilterOpen, setClassStatusFilterOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>('discordUsername');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -121,18 +98,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   }, [selfMember]);
 
   useEffect(() => {
-    if (!classFilterOpen && !classStatusFilterOpen) return;
+    if (!classFilterOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (classFilterRef.current?.contains(target) || classStatusFilterRef.current?.contains(target)) return;
+      if (classFilterRef.current?.contains(target)) return;
       setClassFilterOpen(false);
-      setClassStatusFilterOpen(false);
     };
 
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [classFilterOpen, classStatusFilterOpen]);
+  }, [classFilterOpen]);
 
   const myTrimmedName = myIngameName.trim();
   const canSaveMyIngameName = !!selfMember && myTrimmedName.length > 0 && myTrimmedName !== (selfMember.ingameName || selfMember.name);
@@ -188,11 +164,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       result = result.filter(m => m.classType === filterClass);
     }
 
-    // Filter by class status
-    if (filterClassStatus !== 'all') {
-      result = result.filter(m => getClassStatus(m).label === filterClassStatus);
-    }
-
     // Sort
     result.sort((a, b) => {
       let comparison = 0;
@@ -202,8 +173,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         comparison = sortText(a.ingameName, b.ingameName);
       } else if (sortField === 'classType') {
         comparison = sortText(a.classType, b.classType);
-      } else if (sortField === 'classStatus') {
-        comparison = sortText(getClassStatus(a).label, getClassStatus(b).label);
       } else if (sortField === 'gvgParticipationCount') {
         comparison = (a.gvgParticipationCount ?? 0) - (b.gvgParticipationCount ?? 0);
       } else {
@@ -214,7 +183,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     });
 
     return result;
-  }, [members, searchQuery, filterClass, filterClassStatus, sortField, sortDirection]);
+  }, [members, searchQuery, filterClass, sortField, sortDirection]);
 
   const getMemberAvatar = (member: Member) => {
     if (member.avatar) {
@@ -368,12 +337,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   />
                 </div>
 
-                {(filterClass !== 'all' || filterClassStatus !== 'all' || searchQuery) && (
+                {(filterClass !== 'all' || searchQuery) && (
                   <button
                     onClick={() => {
                       setSearchQuery('');
                       setFilterClass('all');
-                      setFilterClassStatus('all');
                     }}
                     className="flex items-center justify-center gap-1 rounded-lg border border-slate-700/80 bg-slate-800/70 px-3 py-2 text-[11px] font-bold text-slate-300 transition-colors hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-300"
                   >
@@ -389,14 +357,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               <table className="w-full table-fixed">
                 <thead className="sticky top-0 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-sm">
                   <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="w-14 px-4 py-3 text-center">STT</th>
-                    <th className="w-[180px] px-4 py-3 text-left">
+                    <th className="w-12 px-3 py-3 text-center">STT</th>
+                    <th className="w-[22%] px-3 py-3 text-left">
                       <SortableHeader label="Thành viên" field="discordUsername" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
                     </th>
-                    <th className="w-[180px] px-4 py-3 text-left">
+                    <th className="w-[26%] px-3 py-3 text-left">
                       <SortableHeader label="Tên ingame" field="ingameName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
                     </th>
-                    <th className="w-[150px] px-4 py-3 text-left">
+                    <th className="w-[18%] px-3 py-3 text-left">
                       <div ref={classFilterRef} className="relative inline-flex max-w-full items-center gap-1.5">
                         <SortableHeader label="Phái" field="classType" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
                         <button
@@ -446,60 +414,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         )}
                       </div>
                     </th>
-                    <th className="w-[170px] px-4 py-3 text-left">
-                      <div ref={classStatusFilterRef} className="relative inline-flex max-w-full items-center gap-1.5">
-                        <SortableHeader label="Trạng thái phái" field="classStatus" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
-                        <button
-                          type="button"
-                          onClick={event => {
-                            event.stopPropagation();
-                            setClassStatusFilterOpen(open => !open);
-                          }}
-                          className={cn(
-                            'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors',
-                            filterClassStatus !== 'all'
-                              ? 'border-sky-400/45 bg-sky-500/20 text-sky-200'
-                              : 'border-slate-700/80 bg-slate-900/80 text-slate-400 hover:border-slate-500 hover:text-slate-100',
-                          )}
-                          title="Lọc trạng thái phái"
-                        >
-                          <Filter size={12} />
-                        </button>
-                        {classStatusFilterOpen && (
-                          <div
-                            className="absolute left-0 top-full z-30 mt-2 w-52 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/98 p-1.5 shadow-2xl shadow-slate-950/50 normal-case tracking-normal"
-                            onClick={event => event.stopPropagation()}
-                          >
-                            {CLASS_STATUS_FILTER_OPTIONS.map(option => {
-                              const active = filterClassStatus === option;
-                              return (
-                                <button
-                                  key={option}
-                                  type="button"
-                                  onClick={() => {
-                                    setFilterClassStatus(option);
-                                    setClassStatusFilterOpen(false);
-                                  }}
-                                  className={cn(
-                                    'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold transition-colors',
-                                    active
-                                      ? 'bg-sky-500/20 text-sky-100'
-                                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white',
-                                  )}
-                                >
-                                  <span className="truncate">{option === 'all' ? 'Tất cả trạng thái' : option}</span>
-                                  {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-300" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </th>
-                    <th className="w-[140px] px-4 py-3 text-center">
+                    <th className="w-[15%] px-3 py-3 text-center">
                       <SortableHeader label="Ngày tham gia" field="joinedAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} align="center" />
                     </th>
-                    <th className="w-[130px] px-4 py-3 text-center">
+                    <th className="w-[15%] px-3 py-3 text-center">
                       <SortableHeader label="Bang chiến tháng" field="gvgParticipationCount" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} align="center" />
                     </th>
                   </tr>
@@ -507,7 +425,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 <tbody>
                   {filteredMembers.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-16 text-center text-slate-500">
+                      <td colSpan={6} className="px-4 py-16 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center">
                           <UserCircle size={48} className="mb-3 opacity-50" />
                           <p className="text-sm font-medium">Không có thành viên thỏa điều kiện lọc</p>
@@ -516,9 +434,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       </td>
                     </tr>
                   )}
-                  {filteredMembers.map((member, index) => {
-                    const classStatus = getClassStatus(member);
-                    return (
+                  {filteredMembers.map((member, index) => (
                     <tr
                       key={member.id}
                       onClick={() => {
@@ -526,11 +442,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       }}
                       className="border-b border-slate-800/55 hover:bg-slate-800/45 cursor-pointer transition-colors"
                     >
-                      <td className="py-3 px-4 text-center text-xs font-bold text-slate-500">
+                      <td className="px-3 py-3 text-center text-xs font-bold text-slate-500">
                         {index + 1}
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="flex min-w-0 items-center gap-3">
+                      <td className="px-3 py-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
                           <div className="w-9 h-9 rounded-full bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
                             {getMemberAvatar(member) ? (
                               <img
@@ -547,7 +463,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           </div>
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-2">
-                              <p className="truncate text-xs font-bold text-slate-200">{member.discordUsername ? `@${member.discordUsername}` : member.name}</p>
+                              <p className="truncate text-xs font-semibold text-slate-400">{member.discordUsername ? `@${member.discordUsername}` : member.name}</p>
                               {member.previousClassType && member.previousClassType !== member.classType && (
                                 <span
                                   className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded"
@@ -561,12 +477,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-3 py-3">
                         <span className={cn('block truncate text-xs font-bold', member.ingameName ? 'text-slate-200' : 'text-slate-500')}>
                           {member.ingameName || 'Chưa cập nhật'}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-3 py-3">
                         <span
                           className="inline-block max-w-full truncate rounded px-2 py-1 text-[11px] font-bold"
                           style={{
@@ -577,20 +493,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           {member.classType}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className={cn('inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider', classStatus.className)}>
-                          {classStatus.label}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center text-xs text-slate-400">
+                      <td className="px-3 py-3 text-center text-xs text-slate-400">
                         {formatJoinedDays(member.joinedAt)}
                       </td>
-                      <td className="py-3 px-4 text-center text-sm font-black text-violet-200">
+                      <td className="px-3 py-3 text-center text-sm font-black text-violet-200">
                         {member.gvgParticipationCount ?? 0} trận
                       </td>
                     </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
           </div>

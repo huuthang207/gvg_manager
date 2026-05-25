@@ -20,6 +20,13 @@ const GROUP_ACCENTS = [
   '#22D3EE', '#F472B6', '#FBBF24', '#4ADE80', '#60A5FA',
 ];
 
+const AssignmentInfo: React.FC<{ label: string; value: string; strong?: boolean }> = ({ label, value, strong = false }) => (
+  <div className="min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/45 px-3 py-2">
+    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</div>
+    <div className={`mt-1 truncate text-xs ${strong ? 'font-black text-slate-100' : 'font-bold text-slate-200'}`}>{value}</div>
+  </div>
+);
+
 interface MainBoardProps {
   squadGroups: SquadGroup[];
   memberPool: Member[];
@@ -263,82 +270,76 @@ export const MainBoard: React.FC<MainBoardProps> = ({
 
   return (
     <>
-      <div className="flex-1 min-h-0 p-4 overflow-y-auto space-y-6 bg-slate-950/15 border-l border-slate-800/80 custom-scrollbar">
-        <div className="relative mb-4 overflow-visible rounded-xl border border-emerald-400/20 bg-slate-950/35 shadow-sm shadow-slate-950/20">
-          <div className="absolute -top-3.5 left-3 z-10 flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-slate-950 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-200 shadow-sm shadow-slate-950/40">
-            <ClipboardList size={14} className="text-emerald-300" />
-Bảng phân công
-          </div>
-          <div className="flex flex-col gap-2 border-b border-slate-800/70 bg-slate-950/35 px-2.5 pb-2.5 pt-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-xs">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-5 border-l border-slate-800/80 bg-slate-950/15 p-4 custom-scrollbar">
+        <div className="overflow-hidden rounded-2xl border border-emerald-400/20 bg-gradient-to-br from-emerald-500/10 via-slate-950/45 to-sky-500/8 shadow-xl shadow-slate-950/15">
+          <div className="flex flex-col gap-4 border-b border-slate-800/80 p-4 xl:flex-row xl:items-stretch xl:justify-between">
+            <section className="min-w-0 flex-1 rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-emerald-100">
+                  <ClipboardList size={16} className="text-emerald-300" />
+                  Phân công của bạn
+                </h2>
+                <span className="rounded-full border border-emerald-400/25 bg-emerald-500/12 px-2.5 py-1 text-[10px] font-black text-emerald-200">
+                  {selfAssignment ? selfLineupType : 'Chưa xếp'}
+                </span>
+              </div>
               {selfMember ? selfAssignment ? (
-                <>
-                  <span className="rounded-lg border border-emerald-400/20 bg-emerald-500/8 px-2 py-1 font-black text-emerald-100">
-                    Phân công của bạn
-                  </span>
-                  <span className="rounded-lg border border-slate-700/70 bg-slate-950/45 px-2 py-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Tên</span>
-                    <span className="ml-1 font-black text-slate-100">{selfMember.name}</span>
-                  </span>
-                  <span className="rounded-lg border border-slate-700/70 bg-slate-950/45 px-2 py-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Môn phái</span>
-                    <span className="ml-1 font-bold text-slate-200">{selfMember.classType}</span>
-                  </span>
-                  <span className="rounded-lg border border-slate-700/70 bg-slate-950/45 px-2 py-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Vị trí</span>
-                    <span className="ml-1 font-bold text-slate-200">{selfAssignment.groupName} - {selfAssignment.teamName}</span>
-                  </span>
-                  <span className="rounded-lg border border-emerald-400/20 bg-emerald-500/8 px-2 py-1 font-black text-emerald-100">
-                    {selfLineupType}
-                  </span>
-                  <span className="flex items-center gap-1 rounded-lg border border-slate-700/70 bg-slate-950/45 px-2 py-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Kĩ năng</span>
-                    {selfAssignment.skills.length > 0 ? selfAssignment.skills.map(skill => (
-                      <img key={skill.id} src={skill.logo} alt={skill.name} title={skill.name} className="h-5 w-5 rounded border border-slate-700 bg-slate-950 object-cover" />
-                    )) : <span className="font-bold text-slate-500">Chưa có</span>}
-                  </span>
-                  <span className="min-w-0 rounded-lg border border-slate-700/70 bg-slate-950/45 px-2 py-1" title={selfAssignment.note || 'Không có ghi chú'}>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Ghi chú</span>
-                    <span className="ml-1 font-bold text-slate-200">{selfAssignment.note || 'Không có ghi chú'}</span>
-                  </span>
-                </>
+                <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-4">
+                  <AssignmentInfo label="Tên" value={selfMember.name} strong />
+                  <AssignmentInfo label="Phái" value={selfMember.classType} />
+                  <AssignmentInfo label="Vị trí" value={`${selfAssignment.groupName} - ${selfAssignment.teamName}`} />
+                  <div className="min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/45 px-3 py-2">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Kỹ năng</div>
+                    <div className="mt-1 flex min-h-6 items-center gap-1">
+                      {selfAssignment.skills.length > 0 ? selfAssignment.skills.map(skill => (
+                        <img key={skill.id} src={skill.logo} alt={skill.name} title={skill.name} className="h-6 w-6 rounded border border-slate-700 bg-slate-950 object-cover" />
+                      )) : <span className="text-xs font-bold text-slate-500">Chưa có</span>}
+                    </div>
+                  </div>
+                  <div className="min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/45 px-3 py-2 lg:col-span-2 2xl:col-span-4" title={selfAssignment.note || 'Không có ghi chú'}>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Ghi chú</div>
+                    <div className="mt-1 truncate text-xs font-bold text-slate-200">{selfAssignment.note || 'Không có ghi chú'}</div>
+                  </div>
+                </div>
               ) : (
-                <span className="rounded-lg border border-dashed border-slate-700/80 bg-slate-950/35 px-2 py-1 font-bold text-slate-500">
+                <div className="rounded-xl border border-dashed border-slate-700/80 bg-slate-950/35 px-3 py-5 text-center text-sm font-bold text-slate-500">
                   Bạn chưa được xếp vào đội hình hiện tại.
-                </span>
+                </div>
               ) : (
-                <span className="rounded-lg border border-dashed border-slate-700/80 bg-slate-950/35 px-2 py-1 font-bold text-slate-500">
+                <div className="rounded-xl border border-dashed border-slate-700/80 bg-slate-950/35 px-3 py-5 text-center text-sm font-bold text-slate-500">
                   Không tìm thấy thông tin thành viên của bạn.
-                </span>
+                </div>
               )}
-            </div>
+            </section>
 
-            <div className="flex min-w-0 flex-col justify-center gap-2 lg:flex-row lg:items-center">
+            <section className="flex w-full flex-col justify-between gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 xl:w-72">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Danh sách phân công</div>
+                <div className="mt-1 text-2xl font-black text-slate-100">{assignedRows.length}</div>
+                <div className="text-xs font-bold text-slate-500">thành viên đã có vị trí</div>
+              </div>
               <button
                 onClick={() => setAssignmentsOpen(open => !open)}
-                className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-emerald-400/20 bg-slate-950/35 px-3 py-2 text-left transition-colors hover:bg-slate-900/50"
+                className="flex items-center justify-between gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2 text-left transition-colors hover:border-emerald-300/45 hover:bg-emerald-500/15"
               >
-                <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-100">
+                <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-emerald-100">
                   <ClipboardList size={15} className="text-emerald-300" />
                   {assignmentsOpen ? 'Ẩn danh sách' : 'Xem tất cả'}
-                  <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200">
-                    {assignedRows.length} người
-                  </span>
                 </span>
-                <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${assignmentsOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={16} className={`shrink-0 text-emerald-200 transition-transform ${assignmentsOpen ? 'rotate-180' : ''}`} />
               </button>
-            </div>
+            </section>
           </div>
 
           {assignmentsOpen && (
-            <div className="space-y-2 p-2">
+            <div className="space-y-3 bg-slate-950/20 p-4">
               <div className="relative max-w-md">
-                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
                   value={assignmentSearch}
                   onChange={event => setAssignmentSearch(event.target.value)}
                   placeholder="Tìm thành viên, đoàn, đội, phái, skill..."
-                  className="w-full rounded-lg border border-slate-700/70 bg-slate-950/55 py-2 pl-8 pr-3 text-xs font-bold text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-400/60"
+                  className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 py-2 pl-9 pr-3 text-xs font-bold text-slate-100 placeholder:text-slate-500 focus:border-emerald-400/60 focus:outline-none"
                 />
               </div>
               {assignedRows.length === 0 ? (
@@ -351,35 +352,35 @@ Bảng phân công
                 </div>
               ) : (
                 <div className="overflow-x-auto custom-scrollbar">
-                  <table className="w-full min-w-[780px] border-separate border-spacing-y-1 text-left text-xs">
+                  <table className="w-full min-w-[820px] table-fixed border-separate border-spacing-y-1 text-left text-xs">
                     <thead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
                       <tr>
-                        <th className="px-2 py-1.5">Thành viên</th>
-                        <th className="px-2 py-1.5">Đoàn</th>
-                        <th className="px-2 py-1.5">Đội</th>
-                        <th className="px-2 py-1.5">Vị trí</th>
-                        <th className="px-2 py-1.5">Skill</th>
-                        <th className="px-2 py-1.5">Ghi chú</th>
+                        <th className="w-[22%] px-3 py-2">Thành viên</th>
+                        <th className="w-[14%] px-3 py-2">Đoàn</th>
+                        <th className="w-[14%] px-3 py-2">Đội</th>
+                        <th className="w-[13%] px-3 py-2">Vị trí</th>
+                        <th className="w-[13%] px-3 py-2">Skill</th>
+                        <th className="w-[24%] px-3 py-2">Ghi chú</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredAssignedRows.map(row => (
-                        <tr key={row.key} className="bg-slate-900/45 text-slate-200">
-                          <td className="rounded-l-lg px-2 py-1.5">
-                            <div className="flex min-w-0 items-center gap-2">
+                        <tr key={row.key} className="bg-slate-900/45 text-slate-200 transition-colors hover:bg-slate-800/55">
+                          <td className="rounded-l-xl px-3 py-2">
+                            <div className="flex min-w-0 items-center gap-2.5">
                               {getClassIcon(row.member.classType) ? (
-                                <img src={getClassIcon(row.member.classType)!} alt="" className="h-6 w-6 shrink-0 object-contain" />
+                                <img src={getClassIcon(row.member.classType)!} alt="" className="h-7 w-7 shrink-0 object-contain" />
                               ) : (
-                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950/50 text-[9px] font-black text-slate-300">?</div>
+                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950/50 text-[9px] font-black text-slate-300">?</div>
                               )}
-                              <span className="truncate font-bold text-slate-100">{row.member.name}</span>
+                              <span className="truncate font-semibold text-slate-300">{row.member.name}</span>
                               {row.note && <MessageSquareText size={13} className="shrink-0 text-emerald-300" />}
                             </div>
                           </td>
-                          <td className="px-2 py-1.5 text-slate-400">{row.groupName}</td>
-                          <td className="px-2 py-1.5 text-slate-300">{row.teamName}</td>
-                          <td className="px-2 py-1.5 text-slate-400">{row.position}</td>
-                          <td className="px-2 py-1.5">
+                          <td className="px-3 py-2 text-slate-400"><span className="block truncate">{row.groupName}</span></td>
+                          <td className="px-3 py-2 text-slate-300"><span className="block truncate">{row.teamName}</span></td>
+                          <td className="px-3 py-2 text-slate-400"><span className="block truncate">{row.position}</span></td>
+                          <td className="px-3 py-2">
                             {row.skills.length > 0 ? (
                               <div className="flex items-center gap-1">
                                 {row.skills.map(skill => (
@@ -390,14 +391,14 @@ Bảng phân công
                               <span className="text-slate-600">—</span>
                             )}
                           </td>
-                          <td className="rounded-r-lg px-2 py-1.5">
+                          <td className="rounded-r-xl px-3 py-2">
                             <input
                               value={draftNotes[row.key] ?? row.note}
                               onChange={event => handleNoteDraftChange(row.key, event.target.value)}
                               onBlur={() => handleNoteBlur(row)}
                               disabled={readOnly}
                               placeholder={readOnly ? 'Không có ghi chú' : 'Nhập nhiệm vụ...'}
-                              className="w-full rounded-lg border border-slate-700/70 bg-slate-950/55 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-emerald-400/60 disabled:cursor-not-allowed disabled:opacity-70"
+                              className="w-full rounded-lg border border-slate-700/80 bg-slate-950/55 px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-600 focus:border-emerald-400/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
                             />
                           </td>
                         </tr>
@@ -411,45 +412,20 @@ Bảng phân công
         </div>
 
         {canManageLineup && (
-          <div className="mb-4 rounded-xl border border-slate-800/80 bg-slate-950/35 p-2.5 shadow-sm shadow-slate-950/20">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="mr-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                <BarChart3 size={13} className="text-blue-400" />
-                Phái
-              </div>
-              <span className="rounded-full border border-slate-700 bg-slate-800/55 px-2 py-0.5 text-[10px] font-black text-slate-400">
-                {squadGroups.length} đoàn · {totalTeams}/10 đội
-              </span>
-              <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-black text-blue-300">
-                {totalAssigned} đã xếp
-              </span>
-
-              <div className="mx-1 h-5 w-px bg-slate-800" />
-
-              <div className="flex flex-wrap items-center gap-1.5">
-                {CLASSES.map(cls => (
-                  <div
-                    key={cls}
-                    className="flex items-center gap-1 rounded-lg border bg-slate-900/45 px-1.5 py-1"
-                    style={{ borderColor: `${CLASS_COLORS[cls]}35` }}
-                    title={cls}
-                  >
-                    <img src={CLASS_ICONS[cls]} alt="" className="h-5 w-5 shrink-0 object-contain" />
-                    <span
-                      className="min-w-5 rounded-md px-1 text-center text-[10px] font-black leading-5"
-                      style={{ color: CLASS_COLORS[cls], backgroundColor: `${CLASS_COLORS[cls]}12` }}
-                    >
-                      {classStats[cls]}
-                    </span>
-                  </div>
-                ))}
+          <div className="rounded-2xl border border-slate-800/80 bg-slate-950/35 p-3 shadow-sm shadow-slate-950/20">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 text-sm font-black text-slate-200">
+                  <BarChart3 size={16} className="text-blue-400" />
+                  <span>{squadGroups.length} đoàn · {totalTeams}/10 đội · {totalAssigned} người</span>
+                </div>
               </div>
 
-              <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
                 {canManageSnapshots && !readOnly && (
                   <button
                     onClick={handleOpenSaveModal}
-                    className="flex items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-500/8 px-2 py-1 text-[10px] font-bold text-emerald-200 transition-colors hover:border-emerald-300/45 hover:bg-emerald-500/14"
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-500/8 px-2.5 py-1.5 text-[10px] font-bold text-emerald-200 transition-colors hover:border-emerald-300/45 hover:bg-emerald-500/14"
                     title="Lưu đội hình"
                   >
                     <Save size={12} />
@@ -458,8 +434,8 @@ Bảng phân công
                 )}
                 <button
                   onClick={() => void openSnapshots()}
-                  className="flex items-center gap-1.5 rounded-lg border border-sky-400/25 bg-sky-500/8 px-2 py-1 text-[10px] font-bold text-sky-200 transition-colors hover:border-sky-300/45 hover:bg-sky-500/14"
-                  title="Đội hình đã lưu"
+                  className="flex items-center gap-1.5 rounded-lg border border-sky-400/25 bg-sky-500/8 px-2.5 py-1.5 text-[10px] font-bold text-sky-200 transition-colors hover:border-sky-300/45 hover:bg-sky-500/14"
+                  title={`Đội hình đã lưu (${snapshots.length} bản lưu)`}
                 >
                   <Archive size={12} />
                   Đã lưu
@@ -467,7 +443,7 @@ Bảng phân công
                 <button
                   onClick={() => void handleShareLineupImage()}
                   disabled={exportingLineupImage || squadGroups.length === 0}
-                  className="flex items-center gap-1.5 rounded-lg border border-fuchsia-400/25 bg-fuchsia-500/8 px-2 py-1 text-[10px] font-bold text-fuchsia-200 transition-colors hover:border-fuchsia-300/45 hover:bg-fuchsia-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg border border-fuchsia-400/25 bg-fuchsia-500/8 px-2.5 py-1.5 text-[10px] font-bold text-fuchsia-200 transition-colors hover:border-fuchsia-300/45 hover:bg-fuchsia-500/14 disabled:cursor-not-allowed disabled:opacity-50"
                   title="Chia sẻ hoặc tải ảnh đội hình"
                 >
                   <ImageDown size={12} />
@@ -475,30 +451,19 @@ Bảng phân công
                 </button>
                 {!readOnly && (
                   <>
-                    {onOpenAttendanceImport ? (
-                      <button
-                        onClick={onOpenAttendanceImport}
-                        disabled={lineupResetActionPending}
-                        className="flex items-center gap-1.5 rounded-lg border border-sky-400/25 bg-sky-500/8 px-2 py-1 text-[10px] font-bold text-sky-200 transition-colors hover:border-sky-300/45 hover:bg-sky-500/14 disabled:cursor-not-allowed disabled:opacity-50"
-                        title="Nhập danh sách từ điểm danh"
-                      >
-                        <ClipboardList size={12} />
-                        Từ điểm danh
-                      </button>
-                    ) : null}
                     <button
                       onClick={onRearrangeMembers}
                       disabled={lineupResetActionPending}
-                      className="flex items-center gap-1.5 rounded-lg border border-indigo-400/25 bg-indigo-500/8 px-2 py-1 text-[10px] font-bold text-indigo-200 transition-colors hover:border-indigo-300/45 hover:bg-indigo-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex items-center gap-1.5 rounded-lg border border-indigo-400/25 bg-indigo-500/8 px-2.5 py-1.5 text-[10px] font-bold text-indigo-200 transition-colors hover:border-indigo-300/45 hover:bg-indigo-500/14 disabled:cursor-not-allowed disabled:opacity-50"
                       title="Sắp xếp lại thành viên"
                     >
                       <RotateCcw size={12} />
-                      Sắp xếp lại
+                      Xếp lại
                     </button>
                     <button
                       onClick={onStartNewLineup}
                       disabled={lineupResetActionPending}
-                      className="flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-500/8 px-2 py-1 text-[10px] font-bold text-amber-200 transition-colors hover:border-amber-300/45 hover:bg-amber-500/14 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-500/8 px-2.5 py-1.5 text-[10px] font-bold text-amber-200 transition-colors hover:border-amber-300/45 hover:bg-amber-500/14 disabled:cursor-not-allowed disabled:opacity-50"
                       title="Tạo mới đội hình"
                     >
                       <RotateCcw size={12} />
@@ -506,16 +471,32 @@ Bảng phân công
                     </button>
                   </>
                 )}
-                <span className="rounded-full border border-slate-700 bg-slate-800/55 px-2 py-0.5 text-[10px] font-black text-slate-500">
-                  {snapshots.length} bản lưu
-                </span>
               </div>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {CLASSES.map(cls => (
+                <div
+                  key={cls}
+                  className="flex items-center gap-1.5 rounded-lg border bg-slate-900/35 px-2 py-1"
+                  style={{ borderColor: `${CLASS_COLORS[cls]}35` }}
+                  title={cls}
+                >
+                  <img src={CLASS_ICONS[cls]} alt="" className="h-6 w-6 shrink-0 object-contain" />
+                  <span
+                    className="min-w-5 text-center text-xs font-black leading-5"
+                    style={{ color: CLASS_COLORS[cls] }}
+                  >
+                    {classStats[cls]}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
 
-        <div ref={lineupBoardRef} className="space-y-6 rounded-2xl bg-slate-950 p-4 pb-6">
+        <div ref={lineupBoardRef} className="space-y-6 rounded-2xl border border-slate-800/70 bg-slate-950 p-4 pb-6 shadow-xl shadow-slate-950/15">
           {squadGroups.map((group, groupIndex) => {
             const accent = GROUP_ACCENTS[groupIndex % GROUP_ACCENTS.length];
             const leader = group.leaderMemberId ? getMemberById(group.leaderMemberId) : null;
@@ -532,10 +513,14 @@ Bảng phân công
 
             return (
               <section key={group.id} className="space-y-3">
-                <div className="rounded-xl border border-slate-700/60 bg-slate-900/55 px-3 py-2.5 shadow-sm shadow-slate-950/10">
-                  <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="min-w-0 space-y-1">
+                <div
+                  className="overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900/55 shadow-sm shadow-slate-950/10"
+                  style={{ borderTopColor: `${accent}88` }}
+                >
+                  <div className="flex flex-col gap-3 bg-gradient-to-r from-slate-900/90 via-slate-900/55 to-slate-950/20 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="min-w-0 space-y-1.5">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_16px_currentColor]" style={{ color: accent, backgroundColor: accent }} />
                         <h2 className="truncate text-lg font-extrabold uppercase tracking-widest text-slate-100">
                           {group.name}
                         </h2>
@@ -557,7 +542,7 @@ Bảng phân công
                       <select
                         value={group.leaderMemberId ?? ''}
                         onChange={event => onSquadGroupLeaderChange(group.id, event.target.value || null)}
-                        className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-400/70 xl:w-60"
+                        className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 px-3 py-2 text-xs font-bold text-slate-100 focus:border-sky-400/70 focus:outline-none xl:w-64"
                       >
                         <option value="">Chưa chọn leader</option>
                         {availableLeaders.map(member => (
@@ -574,7 +559,6 @@ Bảng phân công
                     <TeamCard
                       key={team.id}
                       team={team}
-                      index={groupIndex * 10 + teamIndex}
                       accent={accent}
                       skills={skills}
                       getMemberById={getMemberById}

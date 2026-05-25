@@ -31,12 +31,12 @@ export const MemberCard = React.forwardRef<HTMLDivElement, MemberCardProps>(
       <div
         ref={ref}
         className={cn(
-          "flex items-center gap-1.5 rounded-md text-[12px] transition-all select-none w-full min-w-0 transition-colors",
-          isOverlay 
+          "flex items-center gap-2 rounded-lg text-[12px] transition-all select-none w-full min-w-0 transition-colors",
+          isOverlay
             ? "opacity-90 scale-105 shadow-2xl rotate-1 bg-slate-800 p-2 border border-slate-600/80"
             : inSlot
-              ? "border border-transparent hover:bg-slate-700/25 px-1 py-0.5"
-              : "bg-slate-800/55 border border-slate-700/60 hover:bg-slate-800/90 hover:border-slate-600/90 p-1.5",
+              ? "border border-transparent hover:bg-slate-700/25 px-1.5 py-1"
+              : "bg-slate-800/55 border border-slate-700/60 hover:bg-slate-800/90 hover:border-slate-600/90 p-2",
           className
         )}
         style={inSlot ? { 
@@ -57,7 +57,7 @@ export const MemberCard = React.forwardRef<HTMLDivElement, MemberCardProps>(
         )}
         
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
-          <p className="font-bold truncate text-slate-100">{member.name}</p>
+          <p className="font-semibold truncate text-slate-200">{member.name}</p>
           {member.previousClassType && member.previousClassType !== member.classType && (
             <LucideIcons.AlertTriangle
               size={11}
@@ -70,9 +70,9 @@ export const MemberCard = React.forwardRef<HTMLDivElement, MemberCardProps>(
           {skills.length > 0 && (
             <div className="flex items-center gap-1 ml-auto shrink-0 rounded-md border border-slate-600/35 bg-slate-950/45 p-0.5">
               {skills.map(skill => (
-                <div 
-                  key={skill.id} 
-                  className="group/skill relative w-8 h-8 rounded overflow-hidden border border-slate-700 shadow-sm transition-all hover:scale-110 hover:z-10 cursor-default bg-slate-900"
+                <div
+                  key={skill.id}
+                  className="group/skill relative w-7 h-7 rounded-md overflow-hidden border border-slate-700 shadow-sm transition-all hover:scale-110 hover:z-10 cursor-default bg-slate-900"
                   title={skill.name}
                 >
                   <img src={skill.logo} alt={skill.name} className="w-full h-full object-cover" />

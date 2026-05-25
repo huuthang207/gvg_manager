@@ -698,83 +698,46 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     >
       <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         {squadGroups.length > 0 ? (
-          <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-hidden bg-slate-950/10">
         {!readOnly && (
-          <aside className="w-80 h-full min-h-0 shrink-0 border-r border-slate-800/80 bg-slate-950/35 flex flex-col overflow-hidden backdrop-blur-sm">
-            <div className="grid grid-cols-2 gap-1 border-b border-slate-800/80 bg-slate-950/35 p-2 backdrop-blur-md">
-              <button
-                onClick={() => setSidePanelTab('members')}
-                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${sidePanelTab === 'members' ? 'bg-sky-500/85 text-white shadow-lg shadow-sky-950/25' : 'text-slate-400 hover:bg-slate-800/75 hover:text-slate-100'}`}
-              >
-                <Users size={14} />
-                Thành viên
-              </button>
-              <button
-                onClick={() => setSidePanelTab('skills')}
-                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-colors ${sidePanelTab === 'skills' ? 'bg-amber-500/85 text-white shadow-lg shadow-amber-950/25' : 'text-slate-400 hover:bg-slate-800/75 hover:text-slate-100'}`}
-              >
-                <Zap size={14} />
-                Kỹ năng
-              </button>
+          <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-r border-slate-800/80 bg-slate-950/35 backdrop-blur-sm">
+            <div className="border-b border-slate-800/80 p-4">
+              <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-800 bg-slate-950/65 p-1 shadow-inner shadow-black/10">
+                <button
+                  onClick={() => setSidePanelTab('members')}
+                  className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-wider transition-colors ${sidePanelTab === 'members' ? 'bg-sky-500/85 text-white shadow-lg shadow-sky-950/25' : 'text-slate-400 hover:bg-slate-800/75 hover:text-slate-100'}`}
+                >
+                  <Users size={14} />
+                  Thành viên
+                </button>
+                <button
+                  onClick={() => setSidePanelTab('skills')}
+                  className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-wider transition-colors ${sidePanelTab === 'skills' ? 'bg-amber-500/85 text-white shadow-lg shadow-amber-950/25' : 'text-slate-400 hover:bg-slate-800/75 hover:text-slate-100'}`}
+                >
+                  <Zap size={14} />
+                  Kỹ năng
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-hidden">
               {sidePanelTab === 'members' ? (
-                <div className="flex h-full min-h-0 flex-col">
-                  <div className="space-y-2 border-b border-slate-800/80 bg-slate-950/35 p-2">
-                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-800 bg-slate-950/60 p-1">
-                      <button
-                        onClick={() => handleSourceChange('guild')}
-                        className={`rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${lineupMemberSource === 'guild' ? 'bg-sky-500/85 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
-                      >
-                        Tất cả guild
-                      </button>
-                      <button
-                        onClick={() => handleSourceChange('attendance')}
-                        className={`rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors ${lineupMemberSource === 'attendance' ? 'bg-sky-500/85 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
-                      >
-                        Theo điểm danh
-                      </button>
-                    </div>
-                    {lineupMemberSource === 'attendance' ? (
-                      <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/45 p-2">
-                        <select
-                          value={lineupMemberSourceSessionId || ''}
-                          onChange={event => handleSourceSessionChange(event.target.value)}
-                          disabled={attendanceImportLoading && attendanceSessions.length === 0}
-                          className="w-full rounded-lg border border-slate-700 bg-slate-950/80 px-2 py-1.5 text-xs font-bold text-slate-200 outline-none focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <option value="">Chọn phiên điểm danh</option>
-                          {attendanceSessions.map(session => (
-                            <option key={session.id} value={session.id}>
-                              {(session.headerText || 'Điểm danh Bang Chiến')} · {formatAttendanceDate(session.openedAt)}
-                            </option>
-                          ))}
-                        </select>
-                        <label className="flex items-center gap-2 text-[11px] font-bold text-slate-300">
-                          <input
-                            type="checkbox"
-                            checked={lineupMemberSourceIncludeNotVoted}
-                            onChange={event => onLineupMemberSourceIncludeNotVotedChange(event.target.checked)}
-                            disabled={!lineupMemberSourceSession}
-                            className="h-4 w-4 accent-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
-                          />
-                          Thêm người chưa điểm danh
-                        </label>
-                        {attendanceImportLoading ? <div className="text-[11px] font-bold text-sky-300">Đang tải điểm danh...</div> : null}
-                        {attendanceImportError ? <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-200">{attendanceImportError}</div> : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-hidden">
-                    <MemberPool
-                      members={memberPool}
-                      skills={skills}
-                      assignedMemberIds={assignedMemberIds}
-                      onRemoveSkillFromMember={onRemoveSkillFromMember}
-                    />
-                  </div>
-                </div>
+                <MemberPool
+                  members={memberPool}
+                  skills={skills}
+                  assignedMemberIds={assignedMemberIds}
+                  onRemoveSkillFromMember={onRemoveSkillFromMember}
+                  lineupMemberSource={lineupMemberSource}
+                  lineupMemberSourceSessionId={lineupMemberSourceSessionId}
+                  lineupMemberSourceSession={lineupMemberSourceSession}
+                  lineupMemberSourceIncludeNotVoted={lineupMemberSourceIncludeNotVoted}
+                  attendanceSessions={attendanceSessions}
+                  attendanceImportLoading={attendanceImportLoading}
+                  attendanceImportError={attendanceImportError}
+                  onSourceChange={handleSourceChange}
+                  onSourceSessionChange={handleSourceSessionChange}
+                  onIncludeNotVotedChange={onLineupMemberSourceIncludeNotVotedChange}
+                />
               ) : (
                 <SkillPool skills={skills} />
               )}

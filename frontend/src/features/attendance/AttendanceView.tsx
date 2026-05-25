@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, CircleHelp, ClipboardCheck, Hash, Play, Save, Search, ShieldCheck, Square, Trash2, X, XCircle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, CircleHelp, ClipboardCheck, Hash, Play, RefreshCw, Save, Search, ShieldCheck, Square, Trash2, X, XCircle } from 'lucide-react';
 import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
 import { deleteAttendanceHistorySession, getAttendanceHistory, getAttendanceSession } from '../../services/discordApi.ts';
@@ -74,13 +74,13 @@ function ClassBadge({ classType }: { classType: string }) {
 function ChoiceSummaryCard({ choice, count }: { choice: AttendanceChoice; count: number }) {
   const meta = choiceMeta[choice];
   return (
-    <div className={cn('rounded-2xl border px-3 py-2.5 shadow-sm shadow-slate-950/20', meta.className)}>
+    <div className={cn('rounded-xl border px-3 py-2 shadow-sm shadow-slate-950/20', meta.className)}>
       <div className="flex items-center justify-between gap-2">
-        <div className="inline-flex min-w-0 items-center gap-2 text-xs font-black">
+        <div className="inline-flex min-w-0 items-center gap-2 text-[11px] font-black uppercase tracking-wider">
           {meta.icon}
-          <span className="truncate">{meta.label}</span>
+          <span className="truncate">{meta.shortLabel}</span>
         </div>
-        <div className="text-2xl font-black text-white tabular-nums">{count}</div>
+        <div className="text-xl font-black text-white tabular-nums">{count}</div>
       </div>
     </div>
   );
@@ -107,7 +107,7 @@ function ClassSummary({ votes }: { votes: AttendanceVote[] }) {
   const maxCount = Math.max(...classCounts.map(([, count]) => count), 1);
 
   return (
-    <section className="app-surface rounded-2xl p-4">
+    <section className="app-surface rounded-2xl p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-black text-slate-100">Cơ cấu phái</h3>
@@ -118,11 +118,11 @@ function ClassSummary({ votes }: { votes: AttendanceVote[] }) {
         </span>
       </div>
       {classCounts.length ? (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {classCounts.map(([classType, count]) => {
             const color = getClassColor(classType);
             return (
-              <div key={classType} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-2.5">
+              <div key={classType} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-2">
                 <div className="flex items-center justify-between gap-3">
                   <ClassBadge classType={classType} />
                   <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs font-black text-white tabular-nums">{count}</span>
@@ -244,39 +244,69 @@ function NotVotedTable({ members }: { members: Member[] }) {
   );
 }
 
-function SessionSummaryCard({ session, channelName, onOpenDetails }: { session: AttendanceSession; channelName?: string | null; onOpenDetails: () => void }) {
+function SessionSummaryCard({
+  session,
+  channelName,
+  actionLoading,
+  onOpenDetails,
+  onRefresh,
+  onClose,
+}: {
+  session: AttendanceSession;
+  channelName?: string | null;
+  actionLoading: boolean;
+  onOpenDetails: () => void;
+  onRefresh: () => void;
+  onClose: () => void;
+}) {
+  const totalVotes = session.summary.go + session.summary.maybe + session.summary.nogo;
+
   return (
-    <button
-      type="button"
-      onClick={onOpenDetails}
-      className="w-full rounded-2xl border border-sky-400/20 bg-gradient-to-br from-sky-500/10 via-slate-900/75 to-indigo-500/10 p-4 text-left shadow-lg shadow-slate-950/25 backdrop-blur-sm transition-colors hover:border-sky-300/35 hover:from-sky-500/15"
-    >
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <section className="rounded-2xl border border-sky-400/20 bg-gradient-to-br from-sky-500/10 via-slate-900/75 to-indigo-500/10 p-4 shadow-lg shadow-slate-950/25 backdrop-blur-sm">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
-          <div className={cn(
-            'mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black',
-            session.status === 'OPEN'
-              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
-              : 'border-slate-600/60 bg-slate-800/60 text-slate-300',
-          )}>
-            <ClipboardCheck size={14} />
-            {session.status === 'OPEN' ? 'Đang mở' : 'Đã đóng'}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className={cn(
+              'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider',
+              session.status === 'OPEN'
+                ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                : 'border-slate-600/60 bg-slate-800/60 text-slate-300',
+            )}>
+              <ClipboardCheck size={14} />
+              {session.status === 'OPEN' ? 'Đang mở' : 'Đã đóng'}
+            </span>
+            <span className="rounded-full border border-slate-700/80 bg-slate-950/55 px-3 py-1 text-xs font-black text-slate-300">
+              {totalVotes} lượt vote
+            </span>
           </div>
           <h2 className="truncate text-2xl font-black text-white">{session.headerText || 'Điểm danh Bang Chiến'}</h2>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-slate-400">
             <span>Mở: {formatDate(session.openedAt)}</span>
             <span>Cập nhật: {formatDate(session.lastVoteAt || session.updatedAt)}</span>
             {session.discordChannelId ? <span>Kênh: {channelName || session.discordChannelId}</span> : null}
-            <span className="font-bold text-sky-200">Click để mở chi tiết</span>
           </div>
         </div>
-        <div className="grid min-w-full grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[440px]">
+        <div className="grid min-w-full grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[430px]">
           <ChoiceSummaryCard choice="GO" count={session.summary.go} />
           <ChoiceSummaryCard choice="MAYBE" count={session.summary.maybe} />
           <ChoiceSummaryCard choice="NOGO" count={session.summary.nogo} />
         </div>
       </div>
-    </button>
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800/70 pt-3">
+        <button type="button" onClick={onOpenDetails} className="app-button-primary inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black">
+          <ClipboardCheck size={14} />
+          Chi tiết
+        </button>
+        <button type="button" onClick={onRefresh} disabled={actionLoading} className="app-button-secondary inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50">
+          <RefreshCw size={14} />
+          Làm mới
+        </button>
+        <button type="button" onClick={onClose} disabled={actionLoading || session.status !== 'OPEN'} className="app-button-danger inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50">
+          <Square size={14} />
+          Đóng phiên
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -315,44 +345,44 @@ function SessionDetailsPanel({ session, members }: { session: AttendanceSession;
   }, [choiceFilter, classFilter, searchTerm, sortedVotesByClass]);
 
   return (
-    <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[360px_1fr]">
-        <ClassSummary votes={sortedVotesByClass} />
-        <div className="space-y-3">
-          <section className="app-surface rounded-2xl p-4">
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_auto_auto]">
-              <div className="relative">
-                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  value={searchTerm}
-                  onChange={event => setSearchTerm(event.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/60 py-2 pl-9 pr-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-500"
-                  placeholder="Tìm theo tên ingame hoặc Discord..."
-                />
-              </div>
-              <select
-                value={choiceFilter}
-                onChange={event => setChoiceFilter(event.target.value as AttendanceChoice | 'ALL')}
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-500"
-              >
-                <option value="ALL">Tất cả lựa chọn</option>
-                <option value="GO">Tham gia</option>
-                <option value="MAYBE">Dự bị</option>
-                <option value="NOGO">Không tham gia</option>
-              </select>
-              <select
-                value={classFilter}
-                onChange={event => setClassFilter(event.target.value)}
-                className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-500"
-              >
-                <option value="ALL">Tất cả phái</option>
-                {classOptions.map(([classType]) => <option key={classType} value={classType}>{classType}</option>)}
-              </select>
-            </div>
-          </section>
-          <VoteTable votes={filteredVotes} totalVotes={session.votes.length} />
-          <NotVotedTable members={notVotedMembers} />
+    <div className="space-y-4">
+      <ClassSummary votes={sortedVotesByClass} />
+      <section className="app-surface rounded-2xl p-3">
+        <div className="grid grid-cols-1 gap-2 xl:grid-cols-[1fr_170px_170px]">
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              className="w-full rounded-xl border border-slate-700/80 bg-slate-950/60 py-2 pl-9 pr-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-400/70"
+              placeholder="Tìm theo tên ingame hoặc Discord..."
+            />
+          </div>
+          <select
+            value={choiceFilter}
+            onChange={event => setChoiceFilter(event.target.value as AttendanceChoice | 'ALL')}
+            className="rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-400/70"
+          >
+            <option value="ALL">Tất cả lựa chọn</option>
+            <option value="GO">Tham gia</option>
+            <option value="MAYBE">Dự bị</option>
+            <option value="NOGO">Không tham gia</option>
+          </select>
+          <select
+            value={classFilter}
+            onChange={event => setClassFilter(event.target.value)}
+            className="rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-400/70"
+          >
+            <option value="ALL">Tất cả phái</option>
+            {classOptions.map(([classType]) => <option key={classType} value={classType}>{classType}</option>)}
+          </select>
         </div>
+      </section>
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_360px]">
+        <VoteTable votes={filteredVotes} totalVotes={session.votes.length} />
+        <NotVotedTable members={notVotedMembers} />
       </div>
+    </div>
   );
 }
 
@@ -552,82 +582,119 @@ export function AttendanceView({
   };
 
   return (
-    <main className="flex-1 space-y-5 overflow-auto p-5 custom-scrollbar lg:p-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-black text-white">Điểm danh Bang Chiến</h1>
-          <p className="mt-1 text-sm text-slate-400">Theo dõi phiên điểm danh từ web, Discord bot và lịch sử gần đây.</p>
+    <main className="flex-1 space-y-4 overflow-auto bg-slate-950/20 p-4 custom-scrollbar lg:p-5">
+      <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/80 to-slate-950/60 px-5 py-4 shadow-lg shadow-slate-950/20">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-black text-white">Điểm danh Bang Chiến</h1>
+              <span className={cn(
+                'rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider',
+                attendance.activeSession
+                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                  : 'border-slate-700/80 bg-slate-900/70 text-slate-400',
+              )}>
+                {attendance.activeSession ? 'Đang có phiên mở' : 'Chưa mở phiên'}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-400">Theo dõi vote Discord, lịch sử điểm danh và chốt tham gia bang chiến.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-400">
+            <span className="rounded-full border border-slate-700/80 bg-slate-950/50 px-3 py-1.5">
+              Kênh: {attendance.config ? (attendance.config.discordChannelName || attendance.config.discordChannelId) : 'Chưa cấu hình'}
+            </span>
+            <span className="rounded-full border border-slate-700/80 bg-slate-950/50 px-3 py-1.5">
+              {historyList.length} lịch sử
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
-        <section className="app-surface h-fit rounded-2xl p-4">
-          <div className="mb-4">
-            <h2 className="text-lg font-black text-white">Quản lý điểm danh</h2>
-            <p className="mt-1 text-sm text-slate-500">Cấu hình kênh, mở phiên và điều khiển phiên đang chạy.</p>
-          </div>
-          <div className="mb-4 rounded-2xl border border-slate-800/80 bg-slate-950/35 p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-500">
-              <Hash size={14} />
-              Kênh điểm danh
-            </div>
-            <div className="mb-2 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-sm font-bold text-sky-100">
-              {attendance.config ? (attendance.config.discordChannelName || attendance.config.discordChannelId) : 'Chưa cấu hình'}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_1fr]">
+        <aside className="h-fit space-y-3 rounded-2xl border border-slate-800/90 bg-slate-950/45 p-3 shadow-2xl shadow-slate-950/20">
+          <section className="rounded-2xl border border-slate-800/80 bg-slate-900/35 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  <Hash size={13} />
+                  Kênh điểm danh
+                </div>
+                <p className="mt-1 truncate text-sm font-black text-sky-100">
+                  {attendance.config ? (attendance.config.discordChannelName || attendance.config.discordChannelId) : 'Chưa cấu hình'}
+                </p>
+              </div>
             </div>
             <div className="flex gap-2">
               <input
                 value={channelId}
                 onChange={event => setChannelId(event.target.value)}
-                className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-sky-500"
+                className="min-w-0 flex-1 rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-xs font-bold text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-400/70"
                 placeholder="Discord channel id"
               />
               <button
                 onClick={() => onSetChannel(channelId)}
                 disabled={actionLoading || !channelId.trim()}
-                className="app-button-primary inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold"
+                className="app-button-primary inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50"
+                title="Lưu kênh điểm danh"
               >
-                <Save size={16} />
+                <Save size={14} />
+                Lưu
               </button>
             </div>
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            <button
-              onClick={() => setSetupModal('open')}
-              disabled={actionLoading || !!attendance.activeSession || !attendance.config}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/35 bg-emerald-950/80 px-4 py-2 text-sm font-bold text-emerald-100 shadow-lg shadow-emerald-950/30 transition-all hover:border-emerald-300/60 hover:bg-emerald-900/90 hover:shadow-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Play size={16} />
-              Mở điểm danh
-            </button>
-            <button
-              onClick={onCloseSession}
-              disabled={actionLoading || !attendance.activeSession}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/35 bg-red-950/80 px-4 py-2 text-sm font-bold text-red-100 shadow-lg shadow-red-950/30 transition-all hover:border-red-300/60 hover:bg-red-900/90 hover:shadow-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Square size={16} />
-              Đóng điểm danh
-            </button>
-          </div>
+          </section>
 
-          <div className="mt-4 rounded-2xl border border-violet-400/20 bg-violet-500/10 p-3">
-            <div className="mb-3 flex items-start gap-3">
-              <ShieldCheck size={18} className="mt-0.5 shrink-0 text-violet-300" />
-              <div>
-                <h3 className="text-sm font-black text-white">Chốt tham gia bang chiến</h3>
-                <p className="mt-1 text-xs text-slate-400">Ghi nhận thành viên thực sự tham gia sau trận; không tự động lấy từ vote điểm danh.</p>
+          <section className="rounded-2xl border border-slate-800/80 bg-slate-900/35 p-3">
+            <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              <ClipboardCheck size={13} />
+              Điều khiển phiên
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={() => setSetupModal('open')}
+                disabled={actionLoading || !!attendance.activeSession || !attendance.config}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/35 bg-emerald-500/15 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-100 shadow-lg shadow-emerald-950/20 transition-all hover:border-emerald-300/60 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Play size={14} />
+                Mở điểm danh
+              </button>
+              <button
+                onClick={onRefreshSession}
+                disabled={actionLoading || !attendance.activeSession}
+                className="app-button-secondary inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw size={14} />
+                Làm mới
+              </button>
+              <button
+                onClick={onCloseSession}
+                disabled={actionLoading || !attendance.activeSession}
+                className="app-button-danger inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Square size={14} />
+                Đóng điểm danh
+              </button>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-800/80 bg-slate-900/35 p-3">
+            <div className="mb-3">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                <ShieldCheck size={13} />
+                Bang Chiến
               </div>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-400">Chốt người tham gia thực tế và quản lý dữ liệu theo tháng.</p>
             </div>
             <button
               onClick={() => setIsGvgModalOpen(true)}
-              className="app-button-primary inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold"
+              className="app-button-primary inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider"
             >
-              <ShieldCheck size={16} />
+              <ShieldCheck size={14} />
               Chốt tham gia
             </button>
-            <div className="mt-3 rounded-xl border border-red-400/20 bg-red-500/10 p-2.5">
-              <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-red-200">
-                <Trash2 size={12} />
-                Xoá dữ liệu theo tháng
+            <div className="mt-3 rounded-xl border border-slate-800/80 bg-slate-950/45 p-2.5">
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                <Trash2 size={12} className="text-red-300" />
+                Xoá dữ liệu tháng
               </div>
               <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                 <input
@@ -636,7 +703,7 @@ export function AttendanceView({
                   onChange={event => {
                     if (event.target.value) setDeleteGvgMonth(event.target.value);
                   }}
-                  className="w-full rounded-lg border border-red-400/25 bg-slate-950/60 px-2.5 py-1.5 text-xs font-bold text-red-100 outline-none transition-colors focus:border-red-300/70"
+                  className="w-full rounded-lg border border-slate-700/80 bg-slate-950/60 px-2.5 py-1.5 text-xs font-bold text-slate-100 outline-none transition-colors focus:border-sky-400/70"
                 />
                 <button
                   type="button"
@@ -648,14 +715,21 @@ export function AttendanceView({
                   {deletingGvgMonth ? 'Đang xoá...' : 'Xoá'}
                 </button>
               </div>
-              <p className="mt-2 text-[11px] font-bold leading-4 text-red-100/70">Chỉ xoá dữ liệu chốt tham gia bang chiến của tháng đã chọn.</p>
+              <p className="mt-2 text-[11px] font-bold leading-4 text-slate-500">Chỉ xoá dữ liệu chốt tham gia bang chiến của tháng đã chọn.</p>
             </div>
-          </div>
-        </section>
+          </section>
+        </aside>
 
         <div className="space-y-4">
           {attendance.activeSession ? (
-            <SessionSummaryCard session={attendance.activeSession} channelName={attendance.config?.discordChannelName} onOpenDetails={() => setActiveDetailsOpen(true)} />
+            <SessionSummaryCard
+              session={attendance.activeSession}
+              channelName={attendance.config?.discordChannelName}
+              actionLoading={actionLoading}
+              onOpenDetails={() => setActiveDetailsOpen(true)}
+              onRefresh={onRefreshSession}
+              onClose={onCloseSession}
+            />
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/25 px-6 py-8 text-center">
               <ClipboardCheck size={38} className="mx-auto mb-3 text-slate-500" />

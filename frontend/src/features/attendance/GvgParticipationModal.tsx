@@ -163,22 +163,27 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-md lg:p-6" onClick={onClose}>
       <div
-        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950 shadow-2xl shadow-slate-950/60"
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-950 shadow-2xl shadow-slate-950/60"
         onClick={event => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="gvg-participation-title"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-900/80 px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <ShieldCheck size={17} className="shrink-0 text-violet-300" />
-            <h3 id="gvg-participation-title" className="truncate text-base font-black text-white">{isEditingFinalizedSession ? 'Sửa phiên bang chiến đã chốt' : 'Chốt tham gia bang chiến'}</h3>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 bg-gradient-to-r from-slate-900/95 to-slate-950/90 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-400/25 bg-sky-500/10 text-sky-200">
+              <ShieldCheck size={17} />
+            </span>
+            <div className="min-w-0">
+              <h3 id="gvg-participation-title" className="truncate text-base font-black text-white">{isEditingFinalizedSession ? 'Sửa phiên bang chiến đã chốt' : 'Chốt tham gia bang chiến'}</h3>
+              <p className="mt-0.5 truncate text-xs font-bold text-slate-500">Đồng bộ danh sách tham gia thực tế sau trận.</p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Đóng popup chốt tham gia"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-950/45 text-slate-400 transition-colors hover:border-slate-500 hover:bg-slate-900 hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-950/45 text-slate-400 transition-colors hover:border-slate-500 hover:bg-slate-900 hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
           >
             <X size={16} />
           </button>
@@ -202,13 +207,13 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
 
             <div className="grid gap-2.5 xl:grid-cols-[260px_minmax(0,1fr)]">
               <aside className="space-y-2">
-                <section className="rounded-xl border border-violet-400/25 bg-violet-500/10 p-2.5">
+                <section className="rounded-xl border border-slate-800/80 bg-slate-900/35 p-2.5">
                   <div className="mb-2 flex items-center gap-2">
-                    <CalendarDays size={15} className="shrink-0 text-violet-200" />
+                    <CalendarDays size={15} className="shrink-0 text-sky-300" />
                     <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">Ngày chốt</h4>
                   </div>
                   <div className="space-y-2">
-                    <input aria-label="Ngày bang chiến" type="date" value={battleDate} onChange={event => setBattleDate(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm text-slate-100 outline-none transition-colors focus:border-violet-500" />
+                    <input aria-label="Ngày bang chiến" type="date" value={battleDate} onChange={event => setBattleDate(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400/70" />
                     {isEditingFinalizedSession && (
                       <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wider text-amber-200">
                         Đang sửa phiên đã chốt
@@ -236,7 +241,7 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
 
                 <label className="block app-surface-soft rounded-xl border border-slate-800/80 p-2.5">
                   <span className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-500">Ghi chú</span>
-                  <textarea value={note} onChange={event => setNote(event.target.value)} placeholder="Ghi chú" rows={2} className="w-full resize-none rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500" />
+                  <textarea value={note} onChange={event => setNote(event.target.value)} placeholder="Ghi chú" rows={2} className="w-full resize-none rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-400/70" />
                 </label>
               </aside>
 
@@ -244,13 +249,13 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
                 <div className="border-b border-slate-800/80 px-3 py-2.5 sm:px-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Users size={16} className="shrink-0 text-violet-300" />
+                      <Users size={16} className="shrink-0 text-sky-300" />
                       <h4 className="text-sm font-black text-slate-100">Thành viên</h4>
                     </div>
-                    <span className="w-fit rounded-full border border-violet-400/25 bg-violet-500/10 px-2.5 py-0.5 text-xs font-black text-violet-200">{selectedSummary}</span>
+                    <span className="w-fit rounded-full border border-sky-400/25 bg-sky-500/10 px-2.5 py-0.5 text-xs font-black text-sky-200">{selectedSummary}</span>
                   </div>
                   <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-800/80">
-                    <div className="h-full rounded-full bg-violet-400 transition-all" style={{ width: `${selectedRatio}%` }} />
+                    <div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${selectedRatio}%` }} />
                   </div>
                 </div>
 
@@ -298,7 +303,7 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
                       value={memberSearchTerm}
                       onChange={event => setMemberSearchTerm(event.target.value)}
                       placeholder="Tìm tên hoặc phái..."
-                      className="w-full rounded-lg border border-slate-700 bg-slate-950/60 py-1.5 pl-8 pr-2.5 text-xs font-medium text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-violet-500"
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950/60 py-1.5 pl-8 pr-2.5 text-xs font-medium text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-400/70"
                     />
                   </div>
                 </div>
@@ -313,11 +318,11 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
                         className={cn(
                           'group flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs transition-colors',
                           selected
-                            ? 'border-violet-400/40 bg-violet-500/10 text-slate-50'
+                            ? 'border-sky-400/40 bg-sky-500/10 text-slate-50'
                             : 'border-slate-800/80 bg-slate-950/20 text-slate-200 hover:bg-slate-900/70',
                         )}
                       >
-                        <input type="checkbox" checked={selected} onChange={() => toggleMember(member.id)} className="h-3.5 w-3.5 shrink-0 accent-violet-500" />
+                        <input type="checkbox" checked={selected} onChange={() => toggleMember(member.id)} className="h-3.5 w-3.5 shrink-0 accent-sky-500" />
                         <button type="button" onClick={() => toggleMember(member.id)} className="min-w-0 flex-1 truncate text-left font-bold leading-4">
                           {member.ingameName || member.name}
                         </button>
@@ -334,7 +339,7 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
                                   className={cn(
                                     'rounded border px-1.5 py-0 text-[10px] font-black leading-4 transition-colors',
                                     active
-                                      ? 'border-violet-400/60 bg-violet-500/25 text-violet-100'
+                                      ? 'border-sky-400/60 bg-sky-500/20 text-sky-100'
                                       : 'border-slate-700 bg-slate-950/50 text-slate-500 hover:text-slate-200',
                                   )}
                                 >
