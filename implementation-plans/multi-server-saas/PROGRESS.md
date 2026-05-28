@@ -20,7 +20,7 @@ Phase 09 frontend onboarding and Phase 10 multi-guild hardening are implemented 
 | Phase 08 — Guild onboarding backend | Done | Added available guilds/connect/bot invite/provisioning/onboarding-state/complete APIs. |
 | Phase 09 — Guild onboarding frontend | Done | Added guild picker, bot invite retry, connected-guild setup checklist, completion CTA, and no-guild onboarding shell. |
 | Phase 10 — Multi-server cleanup và hardening | Done | Hardened websocket guild subscription authorization, target-guild import authorization, inactive bulk delete gating, and active-guild frontend sync. |
-| Phase 11 — Validation, tests và rollout | In progress | Local backend/frontend validation and browser smoke testing pass; broader rollout checklist remains before marking Done. |
+| Phase 11 — Validation, tests và rollout | Ready for validation | Full local command validation and local browser smoke testing pass; staging/production rollout checklist remains before marking Done. |
 
 ## Status legend
 
@@ -51,6 +51,20 @@ Phase 09 frontend onboarding and Phase 10 multi-guild hardening are implemented 
 4. Whether admin dashboard should be a tab inside current app shell first, or route-like separate view.
 
 ## Phase notes
+
+### Phase 11 — Validation, tests và rollout
+
+- Command validation run on branch `test/onboarding-hardening` at commit `5a647f6` plus this progress update:
+  - backend local TypeScript binary `tsc -p backend/tsconfig.json --noEmit`: pass.
+  - `npm --prefix backend test`: pass, 39 tests passing.
+  - `npm --prefix backend run build`: pass.
+  - `npm --prefix frontend run lint`: pass.
+  - `npm --prefix frontend run build`: pass with existing Vite chunk-size warning.
+- Local browser smoke validation already confirmed Discord OAuth login, no-guild onboarding, manageable guild picker, bot-missing invite CTA, bot-present connect, and app-shell entry for `Nguyệt Miêu Lâu`.
+- Rollout status:
+  - Local validation is complete.
+  - Staging/branch deploy validation is still required before marking Phase 11 `Done`.
+  - Production rollout should happen only after validating OAuth redirect/cookie settings, bot invite/connect, guild switch, subscription gates, billing/admin screens, realtime isolation, and existing guild continuity in the deployed environment.
 
 ### Phase 10 — Multi-server cleanup và hardening
 
