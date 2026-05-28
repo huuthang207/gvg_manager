@@ -22,6 +22,11 @@ interface UseAppSessionActionsParams {
   setGvgParticipationStats: Dispatch<SetStateAction<Record<string, number>>>;
   setSquadGroups: Dispatch<SetStateAction<SquadGroup[]>>;
   setAccessibleGuilds: Dispatch<SetStateAction<AccessibleGuild[]>>;
+  setActiveGuildId: Dispatch<SetStateAction<string | null>>;
+  setNeedsOnboarding: Dispatch<SetStateAction<boolean>>;
+  setAppNeedsOnboarding: Dispatch<SetStateAction<boolean>>;
+  setSubscription: Dispatch<SetStateAction<AppStateResponse['subscription']>>;
+  setAttendance: Dispatch<SetStateAction<AppStateResponse['attendance']>>;
 }
 
 export function useAppSessionActions({
@@ -42,6 +47,11 @@ export function useAppSessionActions({
   setGvgParticipationStats,
   setSquadGroups,
   setAccessibleGuilds,
+  setActiveGuildId,
+  setNeedsOnboarding,
+  setAppNeedsOnboarding,
+  setSubscription,
+  setAttendance,
 }: UseAppSessionActionsParams) {
   const handleLogout = React.useCallback(async () => {
     closeRealtimeConnection();
@@ -59,12 +69,17 @@ export function useAppSessionActions({
       setSkills([]);
       setRoleConfig(null);
       setCurrentGuild(null);
+      setActiveGuildId(null);
       setCurrentRole(null);
       setPermissions([]);
       setLineupLock(null);
       setGvgParticipationStats({});
       setSquadGroups([]);
       setAccessibleGuilds([]);
+      setNeedsOnboarding(false);
+      setAppNeedsOnboarding(false);
+      setSubscription(null);
+      setAttendance({ config: null, activeSession: null, recentSessions: [] });
       resetSnapshots();
     }
   }, [
@@ -74,17 +89,22 @@ export function useAppSessionActions({
     releaseHeldLineupLock,
     resetSnapshots,
     setAccessibleGuilds,
+    setActiveGuildId,
+    setAppNeedsOnboarding,
+    setAttendance,
     setCurrentGuild,
     setCurrentRole,
     setCurrentUser,
     setGvgParticipationStats,
     setIsAuthenticated,
     setLineupLock,
+    setNeedsOnboarding,
     setMemberPool,
     setPermissions,
     setRoleConfig,
     setSkills,
     setSquadGroups,
+    setSubscription,
   ]);
 
   return { handleLogout };

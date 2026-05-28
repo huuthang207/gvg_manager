@@ -16,6 +16,10 @@ interface UseAppStateLoaderParams {
   setCurrentUser: Dispatch<SetStateAction<AppStateResponse['user']>>;
   setAttendance: Dispatch<SetStateAction<AppStateResponse['attendance']>>;
   setLineupLock: Dispatch<SetStateAction<AppStateResponse['lineupLock']>>;
+  setSubscription: Dispatch<SetStateAction<AppStateResponse['subscription']>>;
+  setAppSystemAdmin: Dispatch<SetStateAction<AppStateResponse['systemAdmin']>>;
+  setAppNeedsOnboarding: Dispatch<SetStateAction<boolean>>;
+  setActiveGuildId?: Dispatch<SetStateAction<string | null>>;
 }
 
 export function useAppStateLoader(params: UseAppStateLoaderParams) {
@@ -31,6 +35,10 @@ export function useAppStateLoader(params: UseAppStateLoaderParams) {
     setCurrentUser,
     setAttendance,
     setLineupLock,
+    setSubscription,
+    setAppSystemAdmin,
+    setAppNeedsOnboarding,
+    setActiveGuildId,
   } = params;
 
   const preloadSkillLogos = (skillList: Skill[]) => {
@@ -69,12 +77,16 @@ export function useAppStateLoader(params: UseAppStateLoaderParams) {
     setLastSyncedAt(state.lastSyncedAt);
     setRoleConfig(state.roleConfig);
     setCurrentGuild(state.guild ?? null);
+    setActiveGuildId?.(state.guild?.id ?? null);
     setCurrentRole(state.currentRole ?? null);
     setPermissions(state.permissions ?? []);
     setSquadGroups(state.squadGroups || []);
     setAttendance(state.attendance);
     setLineupLock(state.lineupLock ?? null);
-  }, [resolveSkills, setAttendance, setCurrentGuild, setCurrentRole, setLastSyncedAt, setLineupLock, setMemberPool, setPermissions, setRoleConfig, setSkills, setSquadGroups]);
+    setSubscription(state.subscription ?? null);
+    setAppSystemAdmin(state.systemAdmin ?? null);
+    setAppNeedsOnboarding(!!state.needsOnboarding);
+  }, [resolveSkills, setActiveGuildId, setAppNeedsOnboarding, setAppSystemAdmin, setAttendance, setCurrentGuild, setCurrentRole, setLastSyncedAt, setLineupLock, setMemberPool, setPermissions, setRoleConfig, setSkills, setSquadGroups, setSubscription]);
 
   const loadAppState = useCallback(async () => {
     const state = await getAppState();

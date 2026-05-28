@@ -9,10 +9,11 @@ export type Permission =
   | 'restore:snapshots'
   | 'manage:members'
   | 'manage:settings'
+  | 'manage:billing'
   | 'reset:guild-data';
 
 const ROLE_PERMISSIONS: Record<GuildRole, Permission[]> = {
-  owner: ['view:guild', 'manage:lineup', 'manage:snapshots', 'restore:snapshots', 'manage:members', 'manage:settings', 'reset:guild-data'],
+  owner: ['view:guild', 'manage:lineup', 'manage:snapshots', 'restore:snapshots', 'manage:members', 'manage:settings', 'manage:billing', 'reset:guild-data'],
   manager: ['view:guild', 'manage:lineup', 'manage:snapshots', 'restore:snapshots', 'manage:members'],
   member: ['view:guild'],
 };
@@ -173,8 +174,22 @@ export async function getAccessibleGuildForUser(userId: string, activeGuildId?: 
   return accessibleGuilds[0];
 }
 
+export async function getAccessibleGuildByIdForUser(userId: string, guildId: string): Promise<AccessibleGuild | null> {
+  const accessibleGuilds = await listAccessibleGuildsForUser(userId);
+  return accessibleGuilds.find(item => item.guild.id === guildId) ?? null;
+}
+
 export async function requireAccessibleGuild(userId: string, permission: Permission, activeGuildId?: string | null) {
   const access = await getAccessibleGuildForUser(userId, activeGuildId);
+  if (!access) return null;
+  if (!hasPermission(access.role, permission)) {
+    return { ...access, forbidden: true as const };
+  }
+  return { ...access, forbidden: false as const };
+}
+
+export async function requireAccessibleGuildById(userId: string, permission: Permission, guildId: string) {
+  const access = await getAccessibleGuildByIdForUser(userId, guildId);
   if (!access) return null;
   if (!hasPermission(access.role, permission)) {
     return { ...access, forbidden: true as const };

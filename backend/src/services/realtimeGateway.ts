@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { requireAccessibleGuildById } from '../permissions.js';
 import { getSession } from '../session.js';
 
 const realtimeDebugEnabled = process.env.DISCORD_REALTIME_DEBUG === 'true';
@@ -27,6 +28,7 @@ export type GuildAppStateChangeReason =
 
 type ServerMessage =
   | { type: 'subscribed'; guildId: string }
+  | { type: 'subscription_error'; code: 'FORBIDDEN_GUILD'; guildId: string }
   | {
     type: 'guild_app_state_changed';
     guildId: string;
@@ -89,7 +91,7 @@ function send(socket: WebSocket, message: ServerMessage) {
   socket.send(JSON.stringify(message));
 }
 
-function handleMessage(socket: WebSocket, raw: Buffer) {
+async function handleMessage(socket: WebSocket, raw: Buffer) {
   let message: ClientMessage | null = null;
   try {
     message = JSON.parse(raw.toString()) as ClientMessage;
@@ -101,6 +103,13 @@ function handleMessage(socket: WebSocket, raw: Buffer) {
 
   const meta = socketMeta.get(socket);
   if (!meta) return;
+
+  const access = await requireAccessibleGuildById(meta.userId, 'view:guild', message.guildId);
+  if (!access || access.forbidden) {
+    logRealtime(`[WS] Rejected guild subscription guild=${message.guildId} user=${meta.userId}`);
+    send(socket, { type: 'subscription_error', code: 'FORBIDDEN_GUILD', guildId: message.guildId });
+    return;
+  }
 
   meta.guildId = message.guildId;
   socketMeta.set(socket, meta);
@@ -130,7 +139,7 @@ async function handleConnection(socket: WebSocket, request: IncomingMessage) {
 
   socket.on('message', data => {
     if (!(data instanceof Buffer)) return;
-    handleMessage(socket, data);
+    void handleMessage(socket, data);
   });
 
   socket.on('close', () => {

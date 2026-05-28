@@ -9,8 +9,12 @@ import { Sidebar } from './features/app/Sidebar.tsx';
 import { MemberDashboard } from './features/members/MemberDashboard.tsx';
 import { TeamLayout } from './features/lineup/TeamLayout.tsx';
 import { AttendanceView } from './features/attendance/AttendanceView.tsx';
+import { AdminDashboard } from './features/admin/AdminDashboard.tsx';
+import { BillingView } from './features/billing/BillingView.tsx';
+import { SubscriptionBanner } from './features/billing/SubscriptionBanner.tsx';
+import { OnboardingView } from './features/onboarding/OnboardingView.tsx';
 import { mergeMemberDeltaIntoPool, replaceMemberPoolPreservingSkills, sortMembersByDisplayName } from './features/members/memberPoolUtils.ts';
-import { AppStateResponse, DiscordUser, loginWithDiscord } from './services/discordApi.ts';
+import { AppStateResponse, DiscordUser, loginWithDiscord, SystemAdminRole } from './services/discordApi.ts';
 import { useLineupSnapshots } from './hooks/useLineupSnapshots.ts';
 import { useAppStateLoader } from './features/app/useAppStateLoader.ts';
 import { useGuildContext } from './features/guild/useGuildContext.ts';
@@ -33,6 +37,9 @@ export default function App() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<DiscordUser | null>(null);
+  const [activeGuildId, setActiveGuildId] = useState<string | null>(null);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [systemAdminRole, setSystemAdminRole] = useState<SystemAdminRole | null>(null);
 
   // State
   const [squadGroups, setSquadGroups] = useState<SquadGroup[]>([]);
@@ -44,6 +51,9 @@ export default function App() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [currentGuild, setCurrentGuild] = useState<AppStateResponse['guild']>(null);
   const [attendance, setAttendance] = useState<AppStateResponse['attendance']>({ config: null, activeSession: null, recentSessions: [] });
+  const [subscription, setSubscription] = useState<AppStateResponse['subscription']>(null);
+  const [appSystemAdmin, setAppSystemAdmin] = useState<AppStateResponse['systemAdmin']>(null);
+  const [appNeedsOnboarding, setAppNeedsOnboarding] = useState(false);
   const [attendanceActionLoading, setAttendanceActionLoading] = useState(false);
   const [, setSyncing] = useState(false);
   const realtimeDebugEnabled = import.meta.env.DEV || import.meta.env.VITE_REALTIME_DEBUG === 'true';
@@ -51,10 +61,14 @@ export default function App() {
 
   useGuildDocumentMetadata(currentGuild);
 
+  const hasSystemAdminEntry = Boolean(appSystemAdmin?.role || systemAdminRole);
+  const showBillingTab = Boolean(currentGuild && subscription);
   const { activeTab, updateActiveTab, clearActiveTabState } = useGuildActiveTab({
     currentUser,
     currentGuild,
     permissions,
+    showBillingTab,
+    showAdminTab: hasSystemAdminEntry,
   });
   const [teamsTabMounted, setTeamsTabMounted] = useState(activeTab === 'teams');
 
@@ -127,6 +141,10 @@ export default function App() {
     setCurrentUser,
     setAttendance,
     setLineupLock,
+    setSubscription,
+    setAppSystemAdmin,
+    setAppNeedsOnboarding,
+    setActiveGuildId,
   });
 
   const {
@@ -142,22 +160,20 @@ export default function App() {
     permissions,
   });
 
-  useAuthBootstrap({
-    loadAppState,
-    setAuthLoading,
-    setIsAuthenticated,
-    setIsAuthorized,
-    setBlockedReason,
-    setCurrentUser,
-  });
-
   // Computed values
+  const canMutateGuild = subscription?.isMutationAllowed ?? true;
   const canManageLineup = permissions.includes('manage:lineup');
   const canManageSnapshots = permissions.includes('manage:snapshots');
   const canRestoreSnapshots = permissions.includes('restore:snapshots');
   const canManageMembers = permissions.includes('manage:members');
   const canManageSettings = permissions.includes('manage:settings');
   const canSelfService = permissions.includes('view:guild');
+  const effectiveCanManageLineup = canManageLineup && canMutateGuild;
+  const effectiveCanManageSnapshots = canManageSnapshots && canMutateGuild;
+  const effectiveCanRestoreSnapshots = canRestoreSnapshots && canMutateGuild;
+  const effectiveCanManageMembers = canManageMembers && canMutateGuild;
+  const effectiveCanManageSettings = canManageSettings && canMutateGuild;
+  const mutationDisabledReason = canMutateGuild ? undefined : 'Subscription hiện không cho phép thay đổi dữ liệu.';
 
   const dashboardMembers = useMemo(() => memberPool.map(member => ({
     ...member,
@@ -248,13 +264,26 @@ export default function App() {
     setAccessibleGuilds,
     loadAccessibleGuilds,
     handleGuildSwitch,
-  } = useGuildContext(applyAppState, resetSnapshots);
+  } = useGuildContext(applyAppState, resetSnapshots, setActiveGuildId);
+
+  useAuthBootstrap({
+    loadAppState,
+    setAuthLoading,
+    setIsAuthenticated,
+    setIsAuthorized,
+    setBlockedReason,
+    setCurrentUser,
+    setActiveGuildId,
+    setNeedsOnboarding,
+    setSystemAdminRole,
+    setAccessibleGuilds,
+  });
 
   React.useEffect(() => {
-    if (isAuthenticated && isAuthorized) {
+    if (isAuthenticated) {
       void loadAccessibleGuilds();
     }
-  }, [isAuthenticated, isAuthorized, loadAccessibleGuilds]);
+  }, [isAuthenticated, loadAccessibleGuilds]);
 
   const { handleLogout } = useAppSessionActions({
     closeRealtimeConnection,
@@ -274,6 +303,11 @@ export default function App() {
     setGvgParticipationStats,
     setSquadGroups,
     setAccessibleGuilds,
+    setActiveGuildId,
+    setNeedsOnboarding,
+    setAppNeedsOnboarding,
+    setSubscription,
+    setAttendance,
   });
 
   const handleDiscordImport = async (importedMembers: Member[]) => {
@@ -317,19 +351,86 @@ export default function App() {
     );
   }
 
-  if (!isAuthorized) {
+  const showGuildSetupOnboarding = isAuthenticated && isAuthorized && currentGuild && currentRole === 'owner' && !currentGuild.onboardingCompletedAt;
+
+  if (!isAuthorized || showGuildSetupOnboarding) {
+    const hasAccessibleGuilds = accessibleGuilds.length > 0;
+    const showOnboarding = showGuildSetupOnboarding || needsOnboarding || appNeedsOnboarding || !hasAccessibleGuilds;
+
+    if (showOnboarding) {
+      return (
+        <OnboardingView
+          currentGuild={currentGuild}
+          accessibleGuilds={accessibleGuilds}
+          blockedReason={blockedReason}
+          systemAdminRole={systemAdminRole}
+          switchingGuild={switchingGuild}
+          applyAppState={applyAppState}
+          loadAppState={loadAppState}
+          loadAccessibleGuilds={loadAccessibleGuilds}
+          onGuildSwitch={handleGuildSwitch}
+          onOpenAdmin={() => {
+            setIsAuthorized(true);
+            updateActiveTab('admin');
+          }}
+          onConnected={state => {
+            const authorized = Boolean(state.permissions?.includes('view:guild'));
+            setIsAuthorized(authorized);
+            setNeedsOnboarding(Boolean(state.needsOnboarding));
+            setBlockedReason(authorized ? null : 'Bạn chưa có quyền truy cập server vừa kết nối.');
+            updateActiveTab('dashboard');
+          }}
+          onOpenDashboard={() => {
+            setIsAuthorized(true);
+            updateActiveTab('dashboard');
+          }}
+          onOpenSettings={() => {
+            setIsAuthorized(true);
+            updateActiveTab('dashboard');
+          }}
+          onOpenAttendance={() => {
+            setIsAuthorized(true);
+            updateActiveTab('attendance');
+          }}
+          onLogout={handleLogout}
+        />
+      );
+    }
+
     return (
       <div className="app-shell min-h-screen text-slate-100 flex items-center justify-center p-6 font-sans">
-        <div className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-slate-900/75 p-8 text-center shadow-2xl shadow-red-950/20 space-y-4">
-          <h1 className="text-xl font-black uppercase tracking-widest text-white">Không có quyền truy cập</h1>
-          <p className="text-sm text-slate-300">{blockedReason || 'Tài khoản của bạn chưa đủ điều kiện vào hệ thống.'}</p>
-          <p className="text-xs text-slate-500">Vui lòng liên hệ quản trị bang để được cấp đúng role yêu cầu.</p>
-          <button
-            onClick={handleLogout}
-            className="inline-flex items-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs transition-colors"
-          >
-            Đăng xuất
-          </button>
+        <div className="w-full max-w-lg rounded-2xl border border-amber-400/30 bg-slate-900/75 p-8 text-center shadow-2xl shadow-amber-950/20 space-y-4">
+          <h1 className="text-xl font-black uppercase tracking-widest text-white">Không có quyền truy cập server</h1>
+          <p className="text-sm text-slate-300">{blockedReason || 'Quyền truy cập server đã chọn đã thay đổi hoặc server không còn khả dụng.'}</p>
+          <p className="text-xs text-slate-500">Hãy chọn lại server khả dụng hoặc liên hệ quản trị server để kiểm tra role.</p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {hasSystemAdminEntry && (
+              <button
+                onClick={() => {
+                  setIsAuthorized(true);
+                  updateActiveTab('admin');
+                }}
+                className="inline-flex items-center gap-2 px-5 py-3 bg-violet-500 hover:bg-violet-400 text-white rounded-xl font-black uppercase tracking-widest text-xs transition-colors"
+              >
+                Mở Admin Console
+              </button>
+            )}
+            {hasAccessibleGuilds && !activeGuildId && (
+              <button
+                onClick={() => handleGuildSwitch(accessibleGuilds[0].id)}
+                disabled={switchingGuild}
+                className="inline-flex items-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-400 disabled:bg-amber-500/60 text-slate-950 rounded-xl font-black uppercase tracking-widest text-xs transition-colors"
+              >
+                Chọn server đầu tiên
+              </button>
+            )}
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs transition-colors"
+            >
+              Đăng xuất
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -345,7 +446,13 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         currentGuild={currentGuild}
-        canManageAttendance={canManageLineup}
+        accessibleGuilds={accessibleGuilds}
+        activeGuildId={activeGuildId}
+        switchingGuild={switchingGuild}
+        onGuildSwitch={handleGuildSwitch}
+        showAttendanceTab={canManageLineup}
+        showBillingTab={showBillingTab}
+        showAdminTab={hasSystemAdminEntry}
       />
 
       {/* Main Content */}
@@ -358,7 +465,10 @@ export default function App() {
           onAcquireLineupLock={handleAcquireLineupLock}
           onReleaseLineupLock={handleReleaseLineupLock}
           onOverrideLineupLock={handleOverrideLineupLock}
+          subscription={subscription}
         />
+
+        <SubscriptionBanner subscription={subscription} onOpenBilling={() => updateActiveTab('billing')} />
 
         {/* Tab Content */}
         <div className="flex-1 overflow-hidden">
@@ -375,8 +485,8 @@ export default function App() {
               onUpdateMyIngameName={handleUpdateMyIngameName}
               currentUser={currentUser}
               currentRole={currentRole}
-              canManageMembers={canManageMembers}
-              canManageSettings={canManageSettings}
+              canManageMembers={effectiveCanManageMembers}
+              canManageSettings={effectiveCanManageSettings}
               canSelfService={canSelfService}
               roleConfig={roleConfig}
               onUpdateRoleConfig={handleUpdateRoleConfig}
@@ -411,11 +521,11 @@ export default function App() {
                 onLineupMemberSourceSessionChange={setLineupMemberSourceSession}
                 onLineupMemberSourceIncludeNotVotedChange={setLineupMemberSourceIncludeNotVoted}
                 getMemberById={getMemberById}
-                readOnly={lineupReadOnly}
+                readOnly={lineupReadOnly || !canMutateGuild}
                 snapshotsOnly={false}
-                canManageLineup={canManageLineup}
-                canManageSnapshots={canManageSnapshots}
-                canRestoreSnapshots={canRestoreSnapshots}
+                canManageLineup={effectiveCanManageLineup}
+                canManageSnapshots={effectiveCanManageSnapshots}
+                canRestoreSnapshots={effectiveCanRestoreSnapshots}
                 snapshotState={{
                   snapshots,
                   snapshotsOpen,
@@ -445,6 +555,8 @@ export default function App() {
               attendance={attendance}
               members={memberPool}
               actionLoading={attendanceActionLoading}
+              mutationDisabled={!canMutateGuild}
+              mutationDisabledReason={mutationDisabledReason}
               onSetChannel={handleSetAttendanceChannel}
               onOpenSession={handleOpenAttendanceSession}
               onCloseSession={handleCloseAttendanceSession}
@@ -452,6 +564,10 @@ export default function App() {
               onDeleteGvgParticipationMonth={handleDeleteGvgParticipationMonth}
             />
           )}
+
+          {activeTab === 'billing' && showBillingTab && <BillingView />}
+
+          {activeTab === 'admin' && hasSystemAdminEntry && <AdminDashboard role={appSystemAdmin?.role ?? systemAdminRole} />}
         </div>
       </div>
 

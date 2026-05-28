@@ -1,9 +1,14 @@
 import { useCallback, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { AccessibleGuild, getAccessibleGuilds, setActiveGuild } from '../../services/discordApi.ts';
 import { getErrorMessage } from '../../lib/error.ts';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 
-export function useGuildContext(applyAppState: (state: Awaited<ReturnType<typeof setActiveGuild>>) => Promise<void>, resetSnapshots: () => void) {
+export function useGuildContext(
+  applyAppState: (state: Awaited<ReturnType<typeof setActiveGuild>>) => Promise<void>,
+  resetSnapshots: () => void,
+  setActiveGuildId?: Dispatch<SetStateAction<string | null>>,
+) {
   const { alert } = useSystemDialog();
   const [accessibleGuilds, setAccessibleGuilds] = useState<AccessibleGuild[]>([]);
   const [switchingGuild, setSwitchingGuild] = useState(false);
@@ -22,6 +27,7 @@ export function useGuildContext(applyAppState: (state: Awaited<ReturnType<typeof
     try {
       const state = await setActiveGuild(guildId);
       await applyAppState(state);
+      setActiveGuildId?.(state.guild?.id ?? guildId);
       resetSnapshots();
       await loadAccessibleGuilds();
     } catch (err) {
@@ -29,7 +35,7 @@ export function useGuildContext(applyAppState: (state: Awaited<ReturnType<typeof
     } finally {
       setSwitchingGuild(false);
     }
-  }, [alert, applyAppState, loadAccessibleGuilds, resetSnapshots]);
+  }, [alert, applyAppState, loadAccessibleGuilds, resetSnapshots, setActiveGuildId]);
 
   return {
     accessibleGuilds,

@@ -5,6 +5,16 @@ export type {
   AppStateResponse,
   DiscordUser,
   LineupEditLock,
+  AuthStatusResponse,
+  AccessibleGuildSummary,
+  SystemAdminRole,
+  SubscriptionStatus,
+  BillingCycle,
+  PaymentMethod,
+  SubscriptionAccessState,
+  BillingPayment,
+  BillingCurrentResponse,
+  BillingHistoryResponse,
 } from '../shared/types/auth.ts';
 
 export type {
@@ -18,4 +28,9 @@ export type {
   GuildsResponse,
   AccessibleGuild,
   AccessibleGuildsResponse,
+  OnboardingAvailableGuild,
+  OnboardingAvailableGuildsResponse,
+  ConnectGuildResponse,
+  GuildOnboardingStateResponse,
+  CompleteGuildOnboardingResponse,
 } from '../shared/types/guild.ts';

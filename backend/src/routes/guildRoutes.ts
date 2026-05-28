@@ -6,10 +6,13 @@ import { getCache, setCache } from '../cache.js';
 import { requireAuth } from '../auth.js';
 import { getUserAppState } from '../appState.js';
 import { prisma } from '../db.js';
-import { ensureOwnerMembership, getAccessibleGuildForUser, listAccessibleGuildsForUser, requireAccessibleGuild } from '../permissions.js';
+import { ensureOwnerMembership, listAccessibleGuildsForUser, requireAccessibleGuild, requireAccessibleGuildById } from '../permissions.js';
 import { syncGuildMembers } from '../discordSync.js';
 import { switchActiveGuild } from '../services/guildService.js';
+import { completeGuildOnboarding, connectGuildForOnboarding, getGuildOnboardingState, listAvailableGuildsForOnboarding } from '../services/guildOnboardingService.js';
 import { syncActiveGuildMembers } from '../services/syncService.js';
+import { ensureGuildSubscription } from '../services/subscriptionService.js';
+import { requireMutationSubscription } from '../services/subscriptionGuard.js';
 
 const GUILD_MEMBERS_CACHE_TTL = 5 * 60 * 1000;
 
@@ -74,11 +77,6 @@ export function createGuildRoutes() {
       const auth = await requireAuth(req, res);
       if (!auth) return;
 
-      if (auth.session.authBlockedReason) {
-        res.status(403).json({ error: auth.session.authBlockedReason, code: 'ACCESS_BLOCKED' });
-        return;
-      }
-
       const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
       res.json(state);
     } catch (err) {
@@ -103,6 +101,74 @@ export function createGuildRoutes() {
         })),
         activeGuildId: auth.session.activeGuildId ?? null,
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('/api/guilds/available', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const cacheKey = `available_guilds_${auth.sessionId}`;
+      const cachedData = getCache<Awaited<ReturnType<typeof listAvailableGuildsForOnboarding>>>(cacheKey);
+      if (cachedData) {
+        res.json(cachedData);
+        return;
+      }
+
+      const data = await listAvailableGuildsForOnboarding(auth.session.accessToken);
+      setCache(cacheKey, data, 2 * 60 * 1000);
+      res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/api/guilds/connect', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const discordGuildId = typeof req.body?.discordGuildId === 'string' ? req.body.discordGuildId.trim() : '';
+      if (!discordGuildId) {
+        res.status(400).json({ error: 'discordGuildId is required' });
+        return;
+      }
+
+      const result = await connectGuildForOnboarding({
+        userId: auth.user.id,
+        discordUserId: auth.user.discordUserId,
+        sessionId: auth.sessionId,
+        accessToken: auth.session.accessToken,
+        discordGuildId,
+      });
+      res.status(result.status).json(result.body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('/api/guilds/:guildId/onboarding', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const result = await getGuildOnboardingState(auth.user.id, req.params.guildId);
+      res.status(result.status).json(result.body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/api/guilds/:guildId/onboarding/complete', async (req, res, next) => {
+    try {
+      const auth = await requireAuth(req, res);
+      if (!auth) return;
+
+      const result = await completeGuildOnboarding(auth.user.id, auth.user.discordUserId, req.params.guildId);
+      res.status(result.status).json(result.body);
     } catch (err) {
       next(err);
     }
@@ -186,12 +252,17 @@ export function createGuildRoutes() {
         });
 
         if (existingGuild) {
-          const activeAccess = await getAccessibleGuildForUser(auth.user.id, auth.session.activeGuildId);
-          const hasManageSettingsInExistingGuild = activeAccess?.guild.id === existingGuild.id && activeAccess.permissions.includes('manage:settings');
+          const targetAccess = await requireAccessibleGuildById(auth.user.id, 'manage:settings', existingGuild.id);
           const isOwnerOfExistingGuild = existingGuild.ownerUserId === auth.user.id;
 
-          if (!isOwnerOfExistingGuild && !hasManageSettingsInExistingGuild) {
+          if (!isOwnerOfExistingGuild && (!targetAccess || targetAccess.forbidden)) {
             res.status(403).json({ error: 'Bạn không có quyền import dữ liệu cho server này.' });
+            return;
+          }
+
+          const subscriptionError = await requireMutationSubscription(existingGuild.id);
+          if (subscriptionError) {
+            res.status(subscriptionError.status).json(subscriptionError.body);
             return;
           }
         }
@@ -230,6 +301,7 @@ export function createGuildRoutes() {
           });
         }
 
+        await ensureGuildSubscription(guild.id);
         await ensureOwnerMembership(guild.id, auth.user.id);
 
         await syncGuildMembers({

@@ -4,6 +4,7 @@ import { addGuildMemberRole, removeGuildMemberRole } from '../discord.js';
 import { syncGuildMembers } from '../discordSync.js';
 import { requireAccessibleGuild } from '../permissions.js';
 import { publishGuildAppStateChanged } from './realtimeGateway.js';
+import { requireMutationSubscription } from './subscriptionGuard.js';
 
 const BANG_VIEN_ROLE_NAME = 'Bang Viên';
 const CLASS_TYPES = ['Toái Mộng', 'Cửu Linh', 'Long Ngâm', 'Thiết Y', 'Tố Vấn', 'Thần Tương', 'Huyết Hà'] as const;
@@ -26,6 +27,9 @@ export async function updateBotMemberIngameName(discordGuildId: string, discordU
   if (!member) {
     return { status: 404 as const, body: { error: 'Thành viên chưa được import hoặc đồng bộ vào hệ thống.' } };
   }
+
+  const subscriptionError = await requireMutationSubscription(member.guildId);
+  if (subscriptionError) return subscriptionError;
 
   const updatedMember = await prisma.member.update({
     where: { id: member.id },
@@ -57,6 +61,9 @@ export async function updateMemberIngameNameForManager(userId: string, activeGui
   if (access.forbidden) {
     return { status: 403 as const, body: { error: 'Bạn không có quyền cập nhật thành viên.' } };
   }
+
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
 
   const member = await prisma.member.findFirst({
     where: {
@@ -90,6 +97,9 @@ export async function updateMemberClassRoleForManager(userId: string, activeGuil
   if (access.forbidden) {
     return { status: 403 as const, body: { error: 'Bạn không có quyền cập nhật role môn phái.' } };
   }
+
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
 
   if (!isClassType(classType)) {
     return { status: 400 as const, body: { error: 'Môn phái không hợp lệ.' } };
@@ -172,6 +182,9 @@ export async function removeBangVienRoleFromMember(userId: string, activeGuildId
     return { status: 403 as const, body: { error: 'Bạn không có quyền xóa thành viên.' } };
   }
 
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
+
   const member = await prisma.member.findFirst({
     where: {
       id: memberId,
@@ -210,6 +223,9 @@ export async function deleteInactiveMemberFromDatabase(userId: string, activeGui
     return { status: 403 as const, body: { error: 'Bạn không có quyền xóa thành viên.' } };
   }
 
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
+
   const member = await prisma.member.findFirst({
     where: {
       id: memberId,
@@ -244,6 +260,9 @@ export async function deleteInactiveMembersFromDatabase(userId: string, activeGu
     return { status: 403 as const, body: { error: 'Bạn không có quyền xóa thành viên.' } };
   }
 
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
+
   const result = await prisma.member.deleteMany({
     where: {
       guildId: access.guild.id,
@@ -265,6 +284,9 @@ export async function updateMyIngameName(userId: string, discordUserId: string, 
   if (!access) {
     return { status: 404 as const, body: { error: 'Chưa có server nào được import.' } };
   }
+
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
 
   const selfMember = await prisma.member.findFirst({
     where: {
@@ -304,6 +326,9 @@ export async function assignSkillToMember(
   if (access.forbidden) {
     return { status: 403 as const, body: { error: 'Bạn không có quyền chỉnh sửa đội hình.' } };
   }
+
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
 
   const member = await prisma.member.findFirst({ where: { id: memberId, guildId: access.guild.id } });
 
@@ -356,6 +381,9 @@ export async function removeSkillFromMember(userId: string, activeGuildId: strin
     return { status: 403 as const, body: { error: 'Bạn không có quyền chỉnh sửa đội hình.' } };
   }
 
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
+
   const member = await prisma.member.findFirst({ where: { id: memberId, guildId: access.guild.id } });
   const skill = await prisma.skill.findFirst({ where: { id: skillId, guildId: access.guild.id } });
 
@@ -381,6 +409,9 @@ export async function clearSkillsFromMembers(userId: string, activeGuildId: stri
   if (access.forbidden) {
     return { status: 403 as const, body: { error: 'Bạn không có quyền chỉnh sửa đội hình.' } };
   }
+
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
 
   const uniqueMemberIds = [...new Set(memberIds.filter(id => typeof id === 'string' && id.trim()))];
   if (uniqueMemberIds.length === 0) {
@@ -418,6 +449,9 @@ export async function acknowledgeMemberClassChange(userId: string, activeGuildId
   if (access.forbidden) {
     return { status: 403 as const, body: { error: 'Bạn không có quyền xác nhận đổi phái.' } };
   }
+
+  const subscriptionError = await requireMutationSubscription(access.guild.id);
+  if (subscriptionError) return subscriptionError;
 
   const member = await prisma.member.findFirst({
     where: {
