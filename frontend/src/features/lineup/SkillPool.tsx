@@ -7,7 +7,7 @@ import React, { useState, useMemo } from 'react';
 import { Skill } from '../../types.ts';
 import { Search, Zap } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
-import { useDraggable } from '@dnd-kit/core';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 interface SkillPoolProps {
   skills: Skill[];
@@ -17,6 +17,12 @@ export const SkillPool: React.FC<SkillPoolProps> = ({
   skills
 }) => {
   const [search, setSearch] = useState('');
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'skill-pool',
+    data: {
+      type: 'skill-pool',
+    },
+  });
 
   const filteredSkills = useMemo(() => {
     return skills.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
@@ -47,7 +53,13 @@ export const SkillPool: React.FC<SkillPoolProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 grid grid-cols-3 gap-2 custom-scrollbar bg-slate-950/10 content-start">
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex-1 overflow-y-auto p-3 grid grid-cols-3 gap-2 custom-scrollbar bg-slate-950/10 content-start transition-colors',
+          isOver && 'bg-amber-500/5 ring-1 ring-inset ring-amber-400/25',
+        )}
+      >
         {filteredSkills.length === 0 ? (
           <div className="col-span-3 flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700/80 bg-slate-900/25 p-8 text-center text-slate-500">
             <Zap size={32} className="mb-2 opacity-60" />

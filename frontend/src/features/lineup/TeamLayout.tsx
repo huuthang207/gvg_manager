@@ -7,7 +7,6 @@ import React, { useCallback, useMemo } from 'react';
 import {
   DndContext,
   DragOverlay,
-  closestCenter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -36,6 +35,7 @@ import { ClipboardList, Loader2, Users, X, Zap } from 'lucide-react';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 import type { AttendanceSession } from '../../shared/types/auth.ts';
 import type { AttendanceLineupImportPayload, LineupMemberSource } from '../../shared/types/lineup.ts';
+import { createLineupCollisionDetection } from './skillCollisionDetection.ts';
 
 type EmptyLineupMode = 'source' | 'create';
 
@@ -359,6 +359,10 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     // Handle Skill dropping
     if (sourceData.type === 'skill') {
       const skill = sourceData.skill as Skill;
+
+      if (overData?.type === 'skill-pool' || dropId === 'skill-pool') {
+        return;
+      }
 
       if (overData?.type === 'member-target') {
         onAssignSkillToMember(overData.member.id, skill);
@@ -692,7 +696,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={createLineupCollisionDetection()}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
