@@ -855,7 +855,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
             />
           </div>
         ) : (activeData?.type === 'skill' && activeData.skill) ? (
-          <div className="w-12 h-12 bg-slate-800 border border-amber-500 rounded-lg overflow-hidden shadow-2xl">
+          <div className="w-12 h-12 -translate-x-1/2 -translate-y-1/2 bg-slate-800 border border-amber-500 rounded-lg overflow-hidden shadow-2xl">
             {activeData.skill.logo && (
               <img src={activeData.skill.logo} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             )}
