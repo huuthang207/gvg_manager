@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gvg-manager-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gvg_manager
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gvg_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    container_name: gvg-manager-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.docker
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gvg_manager?schema=public
+      FRONTEND_URL: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      DISCORD_REDIRECT_URI: http://localhost:3001/api/discord/oauth/callback
+      RUN_DB_MIGRATIONS: "true"
+      RUN_PRISMA_GENERATE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+      - ./backend/package.json:/app/package.json:ro
+      - ./backend/package-lock.json:/app/package-lock.json:ro
+      - ./backend/tsconfig.json:/app/tsconfig.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    container_name: gvg-manager-frontend
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env.docker
+    environment:
+      VITE_DISCORD_API_URL: http://localhost:3001
+      VITE_REALTIME_DEBUG: "false"
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html:ro
+      - ./frontend/package.json:/app/package.json:ro
+      - ./frontend/package-lock.json:/app/package-lock.json:ro
+      - ./frontend/tsconfig.json:/app/tsconfig.json:ro
+      - ./frontend/vite.config.ts:/app/vite.config.ts:ro
+
+volumes:
+  postgres-data:

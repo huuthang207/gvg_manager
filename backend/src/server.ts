@@ -56,8 +56,9 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 attachRealtimeGateway(wss);
 
 server.listen(PORT, () => {
-  console.log(`[GvG Backend] Server running on http://localhost:${PORT}`);
-  console.log(`[GvG Backend] WebSocket endpoint ws://localhost:${PORT}/ws`);
+  console.log(`[GvG Backend] Server listening on port ${PORT}`);
+  console.log('[GvG Backend] Health endpoint available at /api/health');
+  console.log('[GvG Backend] WebSocket endpoint available at /ws');
   console.log(`[GvG Backend] Bot token: ${process.env.DISCORD_BOT_TOKEN ? '✓ configured' : '✗ NOT SET'}`);
   console.log(`[GvG Backend] OAuth2 Client ID: ${process.env.DISCORD_CLIENT_ID ? '✓ configured' : '✗ NOT SET'}`);
 

@@ -18,7 +18,9 @@ backend/.env.*
 
 # keep examples
 !frontend/.env.example
+!frontend/.env.docker.example
 !backend/.env.example
+!backend/.env.docker.example
 
 # logs
 *.log
