@@ -3,7 +3,6 @@ import { requireAuth } from '../auth.js';
 import { requireInternalBotToken } from '../http/requireInternalBotToken.js';
 import { validateIngameName } from '../http/validators.js';
 import {
-  acknowledgeMemberClassChange,
   assignSkillToMember,
   clearSkillsFromMembers,
   deleteInactiveMemberFromDatabase,
@@ -184,19 +183,6 @@ export function createMemberRoutes() {
 
       const memberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds : [];
       const result = await clearSkillsFromMembers(auth.user.id, auth.session.activeGuildId, memberIds);
-      res.status(result.status).json(result.body);
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/api/members/:memberId/class-change/ack', async (req, res, next) => {
-    try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const { memberId } = req.params;
-      const result = await acknowledgeMemberClassChange(auth.user.id, auth.session.activeGuildId, memberId);
       res.status(result.status).json(result.body);
     } catch (err) {
       next(err);

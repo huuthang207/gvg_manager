@@ -23,7 +23,6 @@ export { loginWithDiscord, checkAuthStatus, logoutDiscord, getBotInviteUrl } fro
 export { getAccessibleGuilds, setActiveGuild, getDiscordGuilds, getAppState, checkHealth } from './guildApi.ts';
 export {
   importDiscordMembers,
-  acknowledgeClassChange,
   updateMemberIngameName,
   updateMemberClassRole,
   updateMyIngameName,

@@ -58,14 +58,6 @@ export const MemberCard = React.forwardRef<HTMLDivElement, MemberCardProps>(
         
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
           <p className="font-semibold truncate text-slate-200">{member.name}</p>
-          {member.previousClassType && member.previousClassType !== member.classType && (
-            <LucideIcons.AlertTriangle
-              size={11}
-              className="text-amber-400 shrink-0"
-              aria-label={`Đã đổi phái: ${member.previousClassType} → ${member.classType}`}
-            />
-          )}
-
           {/* Assigned Skills integrated here */}
           {skills.length > 0 && (
             <div className="flex items-center gap-1 ml-auto shrink-0 rounded-md border border-slate-600/35 bg-slate-950/45 p-0.5">

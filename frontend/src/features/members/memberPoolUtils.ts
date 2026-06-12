@@ -1,15 +1,13 @@
 import type { Member } from '../../types.ts';
 
-type MemberLike = Omit<Member, 'classType' | 'previousClassType'> & {
+type MemberLike = Omit<Member, 'classType'> & {
   classType: string;
-  previousClassType?: string | null;
 };
 
 export function normalizeMember(member: MemberLike): Member {
   return {
     ...member,
     classType: member.classType as Member['classType'],
-    previousClassType: member.previousClassType as Member['classType'] | null | undefined,
   };
 }
 

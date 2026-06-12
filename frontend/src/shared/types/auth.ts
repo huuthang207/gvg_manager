@@ -71,7 +71,7 @@ export interface AppStateResponse {
   user: DiscordUser | null;
   guild: { id: string; discordGuildId: string; name: string; icon: string | null } | null;
   squadGroups: LineupSnapshotData[];
-  members: Array<{ id: string; name: string; ingameName?: string | null; discordDisplayName?: string | null; classType: string; previousClassType?: string | null; classChangedAt?: string | null; joinedAt?: string | null; assignedSkills?: string[]; discordId?: string; discordUsername?: string; discordRoles?: string[]; avatar?: string | null; active?: boolean; gvgParticipationCount?: number }>;
+  members: Array<{ id: string; name: string; ingameName?: string | null; discordDisplayName?: string | null; classType: string; joinedAt?: string | null; assignedSkills?: string[]; discordId?: string; discordUsername?: string; discordRoles?: string[]; avatar?: string | null; active?: boolean; gvgParticipationCount?: number }>;
   divisions: Record<string, unknown> | null;
   skills: Array<{ id: string; name: string; logo: string; description?: string }>;
   attendance: AttendanceState;

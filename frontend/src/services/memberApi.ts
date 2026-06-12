@@ -14,10 +14,6 @@ export async function importDiscordMembers(
   });
 }
 
-export async function acknowledgeClassChange(memberId: string): Promise<AppStateResponse> {
-  return requestJson(`${API_BASE}/api/members/${memberId}/class-change/ack`, { method: 'POST', credentials: 'include' });
-}
-
 export async function updateMemberIngameName(memberId: string, ingameName: string): Promise<AppStateResponse> {
   return requestJson(`${API_BASE}/api/members/${memberId}`, {
     method: 'PATCH',

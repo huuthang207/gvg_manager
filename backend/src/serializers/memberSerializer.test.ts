@@ -8,8 +8,6 @@ test('serializeMember maps member row to API shape', () => {
     ingameName: 'IGN',
     displayName: 'Display',
     classType: 'Toái Mộng',
-    previousClassType: 'Huyền Cơ',
-    classChangedAt: new Date('2026-01-02T03:04:05.000Z'),
     joinedAt: new Date('2026-01-01T00:00:00.000Z'),
     memberSkills: [{ skillId: 's1' }, { skillId: 's2' }],
     discordUserId: 'd1',
@@ -27,8 +25,6 @@ test('serializeMember maps member row to API shape', () => {
     ingameName: 'IGN',
     discordDisplayName: 'Display',
     classType: 'Toái Mộng',
-    previousClassType: 'Huyền Cơ',
-    classChangedAt: '2026-01-02T03:04:05.000Z',
     joinedAt: '2026-01-01T00:00:00.000Z',
     assignedSkills: ['s1', 's2'],
     discordId: 'd1',
@@ -46,8 +42,6 @@ test('serializeMember falls back to displayName and null date', () => {
     ingameName: null,
     displayName: 'Display2',
     classType: 'Long Ngâm',
-    previousClassType: null,
-    classChangedAt: null,
     joinedAt: null,
     memberSkills: [],
     discordUserId: 'd2',
@@ -60,7 +54,6 @@ test('serializeMember falls back to displayName and null date', () => {
   const output = serializeMember(input);
 
   assert.equal(output.name, 'Display2');
-  assert.equal(output.classChangedAt, null);
   assert.equal(output.joinedAt, null);
   assert.deepEqual(output.assignedSkills, []);
   assert.deepEqual(output.discordRoles, []);
@@ -74,8 +67,6 @@ test('serializeMembers maps array', () => {
       ingameName: 'A',
       displayName: 'A',
       classType: 'Toái Mộng',
-      previousClassType: null,
-      classChangedAt: null,
       joinedAt: null,
       memberSkills: [],
       discordUserId: 'd1',
@@ -89,8 +80,6 @@ test('serializeMembers maps array', () => {
       ingameName: null,
       displayName: 'B',
       classType: 'Thần Tương',
-      previousClassType: null,
-      classChangedAt: null,
       joinedAt: null,
       memberSkills: [{ skillId: 's1' }],
       discordUserId: 'd2',

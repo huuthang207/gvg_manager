@@ -22,8 +22,6 @@ export interface Member {
   ingameName?: string | null;
   discordDisplayName?: string | null;
   classType: ClassType;
-  previousClassType?: ClassType | null;
-  classChangedAt?: string | null;
   joinedAt?: string | null;
   active?: boolean;
   level?: number;

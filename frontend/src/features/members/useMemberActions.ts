@@ -2,7 +2,6 @@ import React from 'react';
 import type { ClassType, Member, Skill } from '../../types.ts';
 import type { AppStateResponse } from '../../services/apiTypes.ts';
 import {
-  acknowledgeClassChange,
   assignMemberSkill,
   clearMemberSkills,
   deleteMember,
@@ -121,15 +120,6 @@ export function useMemberActions({
     }
   }, [alert, applyAppState, setSyncing]);
 
-  const handleAcknowledgeClassChange = React.useCallback(async (memberId: string) => {
-    try {
-      const state = await acknowledgeClassChange(memberId);
-      await applyAppState(state);
-    } catch (err) {
-      void alert({ message: getErrorMessage(err, 'Không thể cập nhật trạng thái đổi phái'), variant: 'error' });
-    }
-  }, [alert, applyAppState]);
-
   const handleUpdateIngameName = React.useCallback(async (memberId: string, ingameName: string) => {
     try {
       const state = await updateMemberIngameName(memberId, ingameName);
@@ -193,7 +183,6 @@ export function useMemberActions({
     handleDeleteSkill,
     handleDeleteMember,
     handleSyncDiscord,
-    handleAcknowledgeClassChange,
     handleUpdateIngameName,
     handleUpdateMemberClassRole,
     handleUpdateMyIngameName,

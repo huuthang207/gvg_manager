@@ -235,8 +235,6 @@ model Member {
   ingameName        String?
   avatar            String?
   classType         String
-  previousClassType String?
-  classChangedAt    DateTime?
   joinedAt          DateTime?
   active            Boolean   @default(true)
   createdAt         DateTime  @default(now())

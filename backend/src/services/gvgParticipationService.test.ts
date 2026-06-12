@@ -20,8 +20,6 @@ const memberA = {
   ingameName: 'Ingame A',
   avatar: null,
   classType: 'Tố Vấn',
-  previousClassType: null,
-  classChangedAt: null,
   joinedAt: null,
   active: true,
   createdAt: now,

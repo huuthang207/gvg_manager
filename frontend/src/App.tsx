@@ -207,7 +207,6 @@ export default function App() {
     handleAssignSkillToMember,
     handleRemoveSkillFromMember,
     handleDeleteMember,
-    handleAcknowledgeClassChange,
     handleUpdateIngameName,
     handleUpdateMemberClassRole,
     handleUpdateMyIngameName,
@@ -369,7 +368,6 @@ export default function App() {
               onGvgParticipationMonthChange={setGvgParticipationMonth}
               onImport={handleDiscordImport}
               onDelete={handleDeleteMember}
-              onAcknowledgeClassChange={handleAcknowledgeClassChange}
               onUpdateIngameName={handleUpdateIngameName}
               onUpdateMemberClassRole={handleUpdateMemberClassRole}
               onUpdateMyIngameName={handleUpdateMyIngameName}

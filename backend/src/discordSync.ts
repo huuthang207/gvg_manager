@@ -54,8 +54,6 @@ export async function syncGuildMembers(options: SyncOptions) {
     const existingMember = await prisma.member.findUnique({
       where: { guildId_discordUserId: { guildId, discordUserId: member.id } },
     });
-    const classChanged = !!existingMember && existingMember.classType !== classType;
-
     const savedMember = await prisma.member.upsert({
       where: { guildId_discordUserId: { guildId, discordUserId: member.id } },
       update: {
@@ -64,8 +62,6 @@ export async function syncGuildMembers(options: SyncOptions) {
         avatar: member.avatar,
         joinedAt: member.joinedAt ? new Date(member.joinedAt) : null,
         classType,
-        previousClassType: classChanged ? existingMember.classType : existingMember?.previousClassType ?? null,
-        classChangedAt: classChanged ? new Date() : existingMember?.classChangedAt ?? null,
         active: true,
       },
       create: {

@@ -407,39 +407,3 @@ export async function clearSkillsFromMembers(userId: string, activeGuildId: stri
   const state = await getUserAppState(userId, activeGuildId);
   return { status: 200 as const, body: state };
 }
-
-export async function acknowledgeMemberClassChange(userId: string, activeGuildId: string | null | undefined, memberId: string) {
-  const access = await requireAccessibleGuild(userId, 'manage:members', activeGuildId);
-
-  if (!access) {
-    return { status: 404 as const, body: { error: 'Chưa có server nào được import.' } };
-  }
-
-  if (access.forbidden) {
-    return { status: 403 as const, body: { error: 'Bạn không có quyền xác nhận đổi phái.' } };
-  }
-
-  const member = await prisma.member.findFirst({
-    where: {
-      id: memberId,
-      guildId: access.guild.id,
-    },
-  });
-
-  if (!member) {
-    return { status: 404 as const, body: { error: 'Member not found' } };
-  }
-
-  await prisma.member.update({
-    where: { id: memberId },
-    data: {
-      previousClassType: null,
-      classChangedAt: null,
-    },
-  });
-
-  publishGuildAppStateChanged({ guildId: access.guild.id, reason: 'member_updated' });
-
-  const state = await getUserAppState(userId, activeGuildId);
-  return { status: 200 as const, body: state };
-}

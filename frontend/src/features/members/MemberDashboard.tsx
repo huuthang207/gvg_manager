@@ -20,7 +20,6 @@ interface MemberDashboardProps {
   onGvgParticipationMonthChange: (month: string) => void;
   onImport: (members: Member[]) => void;
   onDelete: (memberId: string) => void | Promise<void>;
-  onAcknowledgeClassChange: (memberId: string) => void;
   onUpdateIngameName: (memberId: string, ingameName: string) => Promise<void>;
   onUpdateMemberClassRole: (memberId: string, classType: ClassType) => Promise<void>;
   onUpdateMyIngameName: (ingameName: string) => Promise<void>;
@@ -58,7 +57,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   onGvgParticipationMonthChange,
   onImport,
   onDelete,
-  onAcknowledgeClassChange,
   onUpdateIngameName,
   onUpdateMemberClassRole,
   onUpdateMyIngameName,
@@ -492,15 +490,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-2">
                               <p className="truncate text-xs font-semibold text-slate-400">{member.discordUsername ? `@${member.discordUsername}` : member.name}</p>
-                              {member.previousClassType && member.previousClassType !== member.classType && (
-                                <span
-                                  className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded"
-                                  title={`Đã đổi phái: ${member.previousClassType} → ${member.classType}`}
-                                >
-                                  <AlertTriangle size={10} />
-                                  Đổi phái
-                                </span>
-                              )}
                             </div>
                           </div>
                         </div>
@@ -558,10 +547,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           onClose={() => setSelectedMemberId(null)}
           onDelete={() => {
             confirmDeleteMember(selectedMember);
-            setSelectedMemberId(null);
-          }}
-          onAcknowledgeClassChange={() => {
-            onAcknowledgeClassChange(selectedMember.id);
             setSelectedMemberId(null);
           }}
           roleConfig={roleConfig}
@@ -949,12 +934,11 @@ interface MemberDetailModalProps {
   roleConfig: AppStateResponse['roleConfig'];
   onClose: () => void;
   onDelete: () => void;
-  onAcknowledgeClassChange: () => void;
   onUpdateIngameName: (memberId: string, ingameName: string) => Promise<void>;
   onUpdateMemberClassRole: (memberId: string, classType: ClassType) => Promise<void>;
 }
 
-const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfig, onClose, onDelete, onAcknowledgeClassChange, onUpdateIngameName, onUpdateMemberClassRole }) => {
+const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfig, onClose, onDelete, onUpdateIngameName, onUpdateMemberClassRole }) => {
   const [ingameName, setIngameName] = useState(member.ingameName || member.name);
   const [selectedClass, setSelectedClass] = useState<ClassType>(member.classType);
   const [saving, setSaving] = useState(false);
@@ -1103,29 +1087,6 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
               {mappedClassRole ? `Discord role sẽ đồng bộ: ${mappedClassRole}` : 'Chưa cấu hình Discord role cho phái này.'}
             </p>
           </section>
-
-          {member.previousClassType && member.previousClassType !== member.classType && (
-            <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200 shadow-sm shadow-amber-950/10">
-              <div className="flex items-start gap-3">
-                <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-300" />
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-black">Đã đổi phái:</span>
-                    <span className="font-bold">{member.previousClassType} → {member.classType}</span>
-                    {member.classChangedAt && (
-                      <span className="text-[11px] text-amber-400/80">{new Date(member.classChangedAt).toLocaleString('vi-VN')}</span>
-                    )}
-                  </div>
-                  <button
-                    onClick={onAcknowledgeClassChange}
-                    className="rounded-lg border border-amber-500/40 bg-amber-500/20 px-3 py-1.5 text-[11px] font-black text-amber-100 transition-colors hover:bg-amber-500/30"
-                  >
-                    Đã xử lý
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
         </div>
 
         <div className="flex justify-end border-t border-slate-800/80 bg-slate-950/45 px-5 py-4">
