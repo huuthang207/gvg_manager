@@ -195,7 +195,7 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
     return true;
   }
 
-  const label = parsed.choice === 'GO' ? 'Tham gia' : parsed.choice === 'MAYBE' ? 'Dự bị' : 'Không tham gia';
+  const label = parsed.choice === 'GO' ? 'Tham gia' : 'Không tham gia';
   await interaction.editReply({ content: `Đã ghi nhận lựa chọn: ${label}.` }).catch(err => {
     console.warn('[Discord Bot] Attendance button success reply failed:', err instanceof Error ? err.message : err);
   });

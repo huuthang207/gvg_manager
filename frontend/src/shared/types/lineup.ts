@@ -2,7 +2,6 @@ export interface Team {
   id: string;
   name: string;
   memberIds: string[];
-  reserveMemberIds: string[];
   slotSkills?: Record<string, string[]>;
 }
 
@@ -10,7 +9,6 @@ export interface SquadTeam {
   id: string;
   name: string;
   memberIds: string[];
-  reserveMemberIds: string[];
   slotSkills?: Record<string, string[]>;
 }
 
@@ -39,14 +37,13 @@ export interface LineupSnapshotData {
   id: string;
   name: string;
   leaderMemberId?: string | null;
-  teams: Array<{ id: string; name: string; memberIds: string[]; reserveMemberIds: string[]; slotSkills?: Record<string, string[]> }>;
+  teams: Array<{ id: string; name: string; memberIds: string[]; slotSkills?: Record<string, string[]> }>;
 }
 
 export type LineupMemberSource = 'guild' | 'attendance';
 
 export interface AttendanceLineupImportPayload {
-  mainMemberIds: string[];
-  reserveMemberIds: string[];
+  memberIds: string[];
 }
 
 export interface LineupSnapshotSummary {

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, CircleHelp, ClipboardCheck, Hash, Play, RefreshCw, Save, Search, ShieldCheck, Square, Trash2, X, XCircle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ClipboardCheck, Hash, Play, RefreshCw, Save, Search, ShieldCheck, Square, Trash2, X, XCircle } from 'lucide-react';
 import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
 import { deleteAttendanceHistorySession, getAttendanceHistory, getAttendanceSession, getGvgParticipationSessions } from '../../services/discordApi.ts';
@@ -13,7 +13,6 @@ import { GvgParticipationModal } from './GvgParticipationModal.tsx';
 
 const choiceMeta: Record<AttendanceChoice, { label: string; shortLabel: string; icon: React.ReactNode; className: string }> = {
   GO: { label: 'Tham gia', shortLabel: 'Tham gia', icon: <CheckCircle2 size={16} />, className: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25' },
-  MAYBE: { label: 'Dự bị', shortLabel: 'Dự bị', icon: <CircleHelp size={16} />, className: 'text-amber-300 bg-amber-500/10 border-amber-500/25' },
   NOGO: { label: 'Không tham gia', shortLabel: 'Không tham gia', icon: <XCircle size={16} />, className: 'text-red-300 bg-red-500/10 border-red-500/25' },
 };
 
@@ -334,7 +333,7 @@ function NotVotedTable({ members }: { members: Member[] }) {
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-black text-slate-100">Chưa điểm danh</h3>
-          <p className="text-xs text-slate-500">Thành viên active chưa chọn Tham gia, Dự bị hoặc Không tham gia</p>
+          <p className="text-xs text-slate-500">Thành viên active chưa chọn Tham gia hoặc Không tham gia</p>
         </div>
         <span className="w-fit rounded-full border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-xs font-black text-slate-300">
           {members.length} người
@@ -388,7 +387,7 @@ function SessionSummaryCard({
   onRefresh: () => void;
   onClose: () => void;
 }) {
-  const totalVotes = session.summary.go + session.summary.maybe + session.summary.nogo;
+  const totalVotes = session.summary.go + session.summary.nogo;
 
   return (
     <section className="rounded-2xl border border-sky-400/20 bg-gradient-to-br from-sky-500/10 via-slate-900/75 to-indigo-500/10 p-4 shadow-lg shadow-slate-950/25 backdrop-blur-sm">
@@ -417,7 +416,6 @@ function SessionSummaryCard({
         </div>
         <div className="grid min-w-full grid-cols-1 gap-2 sm:grid-cols-3 xl:min-w-[430px]">
           <ChoiceSummaryCard choice="GO" count={session.summary.go} />
-          <ChoiceSummaryCard choice="MAYBE" count={session.summary.maybe} />
           <ChoiceSummaryCard choice="NOGO" count={session.summary.nogo} />
         </div>
       </div>
@@ -494,7 +492,6 @@ function SessionDetailsPanel({ session, members }: { session: AttendanceSession;
           >
             <option value="ALL">Tất cả lựa chọn</option>
             <option value="GO">Tham gia</option>
-            <option value="MAYBE">Dự bị</option>
             <option value="NOGO">Không tham gia</option>
           </select>
           <select
@@ -969,7 +966,6 @@ export function AttendanceView({
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-1.5">
                         <SummaryPill choice="GO" count={session.summary.go} />
-                        <SummaryPill choice="MAYBE" count={session.summary.maybe} />
                         <SummaryPill choice="NOGO" count={session.summary.nogo} />
                       </div>
                     </button>
@@ -1055,7 +1051,6 @@ export function AttendanceView({
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-1.5">
                       <SummaryPill choice="GO" count={session.summary.go} />
-                      <SummaryPill choice="MAYBE" count={session.summary.maybe} />
                       <SummaryPill choice="NOGO" count={session.summary.nogo} />
                     </div>
                   </button>

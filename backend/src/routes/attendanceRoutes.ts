@@ -19,7 +19,7 @@ import {
 } from '../services/attendanceDiscordService.js';
 
 function parseAttendanceChoice(value: unknown): AttendanceChoice | null {
-  return value === 'GO' || value === 'MAYBE' || value === 'NOGO' ? value : null;
+  return value === 'GO' || value === 'NOGO' ? value : null;
 }
 
 function isDiscordSnowflake(value: string) {

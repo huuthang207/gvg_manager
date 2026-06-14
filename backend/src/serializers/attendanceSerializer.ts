@@ -42,12 +42,11 @@ export function summarizeAttendanceVotes(votes: Array<{ choice: AttendanceChoice
   return votes.reduce(
     (summary, vote) => {
       if (vote.choice === 'GO') summary.go += 1;
-      if (vote.choice === 'MAYBE') summary.maybe += 1;
       if (vote.choice === 'NOGO') summary.nogo += 1;
       summary.total += 1;
       return summary;
     },
-    { go: 0, maybe: 0, nogo: 0, total: 0 },
+    { go: 0, nogo: 0, total: 0 },
   );
 }
 

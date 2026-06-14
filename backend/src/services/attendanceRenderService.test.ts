@@ -24,12 +24,6 @@ const votes = [
     updatedAt: new Date('2026-05-17T12:00:00.000Z'),
   },
   {
-    choice: 'MAYBE' as const,
-    snapshotIngameName: 'Nguoi Ba',
-    snapshotClassType: 'Huyết Hà',
-    updatedAt: new Date('2026-05-17T12:02:00.000Z'),
-  },
-  {
     choice: 'NOGO' as const,
     snapshotIngameName: 'Nguoi Bon',
     snapshotClassType: 'Thiết Y',
@@ -41,9 +35,8 @@ describe('attendanceRenderService', () => {
   it('summarizes vote choices', () => {
     assert.deepEqual(summarizeAttendanceRenderVotes(votes), {
       go: 2,
-      maybe: 1,
       nogo: 1,
-      total: 4,
+      total: 3,
     });
   });
 
@@ -52,14 +45,12 @@ describe('attendanceRenderService', () => {
 
     assert.match(content, /## Bang chiến tối nay/);
     assert.match(content, /🟢 \*\*Đang mở điểm danh\*\*/);
-    assert.match(content, /Tổng vote: 4/);
+    assert.match(content, /Tổng vote: 3/);
     assert.match(content, /✅ Tham gia: 2/);
-    assert.match(content, /❔ Dự bị: 1/);
     assert.match(content, /❌ Không tham gia: 1/);
-    assert.match(content, /⚔️ Theo phái: Toái Mộng:1 \| Huyết Hà:1 \| Thiết Y:1 \| Tố Vấn:1/);
+    assert.match(content, /⚔️ Theo phái: Toái Mộng:1 \| Thiết Y:1 \| Tố Vấn:1/);
     assert.match(content, /Toái Mộng \(1\)\n1\. Nguoi Hai/);
     assert.match(content, /Tố Vấn \(1\)\n1\. Nguoi Mot/);
-    assert.match(content, /1\. Nguoi Ba - Huyết Hà/);
     assert.match(content, /1\. Nguoi Bon - Thiết Y/);
   });
 
@@ -70,7 +61,6 @@ describe('attendanceRenderService', () => {
     assert.match(content, /🟢 \*\*Đang mở điểm danh\*\*/);
     assert.match(content, /Tổng vote: 0/);
     assert.match(content, /✅ Tham gia: 0/);
-    assert.match(content, /❔ Dự bị: 0/);
     assert.match(content, /❌ Không tham gia: 0/);
     assert.match(content, /Theo phái: \(chưa có\)/);
     assert.match(content, /Chưa có ai đăng ký\./);
@@ -85,7 +75,6 @@ describe('attendanceRenderService', () => {
     assert.match(content, /Tổng vote: 0/);
     assert.match(content, /Theo phái: \(chưa có\)/);
     assert.match(content, /Chưa có ai đăng ký\./);
-    assert.match(content, /Chưa có ai chọn 'Dự bị'\./);
     assert.match(content, /Chưa có ai chọn 'Không tham gia'\./);
   });
 

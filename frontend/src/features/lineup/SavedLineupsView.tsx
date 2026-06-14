@@ -90,7 +90,6 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
       groupCount: selectedSnapshot.groups.length,
       teamCount: teams.length,
       mainCount: teams.reduce((sum, team) => sum + team.memberIds.filter(Boolean).length, 0),
-      reserveCount: teams.reduce((sum, team) => sum + team.reserveMemberIds.filter(Boolean).length, 0),
     };
   }, [selectedSnapshot]);
 
@@ -252,8 +251,7 @@ export const SavedLineupsView: React.FC<SavedLineupsViewProps> = ({
               {[
                 { label: 'Đoàn', value: selectedStats.groupCount, icon: Users },
                 { label: 'Đội', value: selectedStats.teamCount, icon: Layers },
-                { label: 'Chính', value: selectedStats.mainCount, icon: Shield },
-                { label: 'Dự bị', value: selectedStats.reserveCount, icon: Archive },
+                { label: 'Thành viên', value: selectedStats.mainCount, icon: Shield },
               ].map(item => (
                 <div key={item.label} className="rounded-2xl border border-slate-800/80 bg-slate-900/45 px-4 py-3 shadow-lg shadow-slate-950/10">
                   <div className="flex items-center justify-between gap-3">

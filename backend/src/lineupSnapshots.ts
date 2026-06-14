@@ -9,7 +9,6 @@ export type PersistedSquadGroupInput = Array<{
     id?: string;
     name?: string;
     memberIds?: string[];
-    reserveMemberIds?: string[];
   }>;
 }>;
 
@@ -57,7 +56,6 @@ function removeDuplicateSnapshotMembers(groups: ReturnType<typeof serializeSnaps
       return {
         ...team,
         memberIds: team.memberIds.map(filterMemberId),
-        reserveMemberIds: team.reserveMemberIds.map(filterMemberId),
       };
     }),
   }));
@@ -72,10 +70,6 @@ function collectSnapshotMemberSkills(groups: ReturnType<typeof serializeSnapshot
         if (!memberId) return;
         skillsByMemberId.set(memberId, new Set(team.slotSkills?.[`main-${slotIndex}`] ?? []));
       });
-      team.reserveMemberIds.forEach((memberId, slotIndex) => {
-        if (!memberId) return;
-        skillsByMemberId.set(memberId, new Set(team.slotSkills?.[`reserve-${slotIndex}`] ?? []));
-      });
     });
   });
 
@@ -87,7 +81,6 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
     ...(group.leaderMemberId ? [group.leaderMemberId] : []),
     ...(group.teams ?? []).flatMap(team => [
       ...(team.memberIds ?? []),
-      ...(team.reserveMemberIds ?? []),
     ]),
   ]).filter(Boolean))];
 
@@ -203,29 +196,16 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
 
           const mainIds = [...(team.memberIds ?? [])].slice(0, 6);
           while (mainIds.length < 6) mainIds.push('');
-          const reserveIds = [...(team.reserveMemberIds ?? [])].slice(0, 3);
-          while (reserveIds.length < 3) reserveIds.push('');
 
-          const slotPayload = [
-            ...mainIds.map((memberId, slotIndex) => {
-              const validMemberId = memberId && validMemberIds.has(memberId) ? memberId : null;
-              return {
-                slotType: 'main',
-                slotIndex,
-                memberId: validMemberId,
-                assignmentNote: '',
-              };
-            }),
-            ...reserveIds.map((memberId, slotIndex) => {
-              const validMemberId = memberId && validMemberIds.has(memberId) ? memberId : null;
-              return {
-                slotType: 'reserve',
-                slotIndex,
-                memberId: validMemberId,
-                assignmentNote: '',
-              };
-            }),
-          ];
+          const slotPayload = mainIds.map((memberId, slotIndex) => {
+            const validMemberId = memberId && validMemberIds.has(memberId) ? memberId : null;
+            return {
+              slotType: 'main',
+              slotIndex,
+              memberId: validMemberId,
+              assignmentNote: '',
+            };
+          });
 
           for (const slot of slotPayload) {
             await tx.squadTeamSlot.upsert({
