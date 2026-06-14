@@ -268,7 +268,7 @@ export const MainBoard: React.FC<MainBoardProps> = ({
             const leader = group.leaderMemberId ? getMemberById(group.leaderMemberId) : null;
             const availableLeaders = Array.from(new Map<string, NonNullable<ReturnType<typeof getMemberById>>>(
               group.teams
-                .flatMap(team => [...team.memberIds, ...team.reserveMemberIds])
+                .flatMap(team => [...team.memberIds])
                 .filter((memberId): memberId is string => Boolean(memberId))
                 .map(memberId => {
                   const member = getMemberById(memberId);
