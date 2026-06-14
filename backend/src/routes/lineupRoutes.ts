@@ -186,7 +186,6 @@ export function createLineupRoutes() {
             name?: string;
             memberIds?: string[];
             reserveMemberIds?: string[];
-            memberNotes?: Record<string, string>;
           }>;
         }>;
         clearSkillMemberIds?: string[];

@@ -7,10 +7,9 @@ import React from 'react';
 import { toBlob } from 'html-to-image';
 import { Member, Skill, SquadGroup } from '../../types.ts';
 import { LineupSnapshotActions, LineupSnapshotState } from '../../hooks/useLineupSnapshots.ts';
-import { DiscordUser } from '../../services/discordApi.ts';
-import { CLASSES, CLASS_COLORS, CLASS_ICONS, getClassIcon } from '../../constants.ts';
+import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { TeamCard } from './TeamCard.tsx';
-import { Archive, BarChart3, ChevronDown, ClipboardList, ImageDown, MessageSquareText, RotateCcw, Save, Search } from 'lucide-react';
+import { Archive, BarChart3, ImageDown, RotateCcw, Save } from 'lucide-react';
 import { SnapshotSaveModal } from './SnapshotSaveModal.tsx';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 import { getErrorMessage } from '../../lib/error.ts';
@@ -20,26 +19,15 @@ const GROUP_ACCENTS = [
   '#22D3EE', '#F472B6', '#FBBF24', '#4ADE80', '#60A5FA',
 ];
 
-const AssignmentInfo: React.FC<{ label: string; value: string; strong?: boolean }> = ({ label, value, strong = false }) => (
-  <div className="min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/45 px-3 py-2">
-    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</div>
-    <div className={`mt-1 truncate text-xs ${strong ? 'font-black text-slate-100' : 'font-bold text-slate-200'}`}>{value}</div>
-  </div>
-);
-
 interface MainBoardProps {
   squadGroups: SquadGroup[];
-  memberPool: Member[];
   skills: Skill[];
-  currentUser: DiscordUser | null;
   getMemberById: (id: string) => Member | null;
   onRemoveSkillFromMember: (memberId: string, skillId: string) => void;
   onStartNewLineup: () => void;
   onRearrangeMembers: () => void;
-  onOpenAttendanceImport?: () => void;
   lineupResetActionPending?: boolean;
   onSquadGroupLeaderChange: (groupId: string, leaderMemberId: string | null) => void;
-  onMemberNoteChange: (teamId: string, memberId: string, note: string) => void;
   readOnly: boolean;
   canManageLineup: boolean;
   canManageSnapshots: boolean;
@@ -49,17 +37,13 @@ interface MainBoardProps {
 
 export const MainBoard: React.FC<MainBoardProps> = ({
   squadGroups,
-  memberPool,
   skills,
-  currentUser,
   getMemberById,
   onRemoveSkillFromMember,
   onStartNewLineup,
   onRearrangeMembers,
-  onOpenAttendanceImport,
   lineupResetActionPending = false,
   onSquadGroupLeaderChange,
-  onMemberNoteChange,
   readOnly,
   canManageLineup,
   canManageSnapshots,
@@ -83,9 +67,6 @@ export const MainBoard: React.FC<MainBoardProps> = ({
   const [isSaveModalOpen, setIsSaveModalOpen] = React.useState(false);
   const [savingSnapshot, setSavingSnapshot] = React.useState(false);
   const [exportingLineupImage, setExportingLineupImage] = React.useState(false);
-  const [assignmentsOpen, setAssignmentsOpen] = React.useState(false);
-  const [assignmentSearch, setAssignmentSearch] = React.useState('');
-  const [draftNotes, setDraftNotes] = React.useState<Record<string, string>>({});
 
   const classStats = React.useMemo(() => {
     const stats: Record<string, number> = {};
@@ -108,82 +89,6 @@ export const MainBoard: React.FC<MainBoardProps> = ({
 
   const totalAssigned = (Object.values(classStats) as number[]).reduce((a, b) => a + b, 0);
   const totalTeams = squadGroups.reduce((sum, group) => sum + group.teams.length, 0);
-
-  const assignedRows = React.useMemo(() => {
-    return squadGroups.flatMap(group => group.teams.flatMap(team => {
-      const mainRows = team.memberIds
-        .map((memberId, index) => ({ memberId, position: `Chính ${index + 1}` }))
-        .filter(row => Boolean(row.memberId));
-      const reserveRows = team.reserveMemberIds
-        .map((memberId, index) => ({ memberId, position: `Dự bị ${index + 1}` }))
-        .filter(row => Boolean(row.memberId));
-
-      return [...mainRows, ...reserveRows].map(row => {
-        const member = getMemberById(row.memberId);
-        return member ? {
-          key: `${team.id}-${member.id}`,
-          groupId: group.id,
-          groupName: group.name,
-          teamId: team.id,
-          teamName: team.name,
-          member,
-          position: row.position,
-          note: team.memberNotes?.[member.id] ?? '',
-          skills: (member.assignedSkills || []).map(id => skills.find(skill => skill.id === id)).filter(Boolean) as Skill[],
-        } : null;
-      }).filter((row): row is NonNullable<typeof row> => Boolean(row));
-    }));
-  }, [getMemberById, skills, squadGroups]);
-
-  const filteredAssignedRows = React.useMemo(() => {
-    const query = assignmentSearch.trim().toLowerCase();
-    if (!query) return assignedRows;
-
-    return assignedRows.filter(row => {
-      const values = [
-        row.member.name,
-        row.member.ingameName,
-        row.member.discordDisplayName,
-        row.member.discordUsername,
-        row.member.classType,
-        row.groupName,
-        row.teamName,
-        row.position,
-        row.note,
-        ...row.skills.map(skill => skill.name),
-      ];
-
-      return values
-        .filter(Boolean)
-        .some(value => value!.toLowerCase().includes(query));
-    });
-  }, [assignedRows, assignmentSearch]);
-
-  const selfMember = React.useMemo(() => {
-    if (!currentUser?.id) return null;
-    return memberPool.find(member => member.discordId === currentUser.id) || null;
-  }, [currentUser, memberPool]);
-
-  const selfAssignment = React.useMemo(() => {
-    if (!selfMember) return null;
-    return assignedRows.find(row => row.member.id === selfMember.id) || null;
-  }, [assignedRows, selfMember]);
-
-  const handleNoteDraftChange = (key: string, note: string) => {
-    setDraftNotes(prev => ({ ...prev, [key]: note }));
-  };
-
-  const handleNoteBlur = (row: (typeof assignedRows)[number]) => {
-    if (!(row.key in draftNotes)) return;
-    onMemberNoteChange(row.teamId, row.member.id, draftNotes[row.key]);
-    setDraftNotes(prev => {
-      const next = { ...prev };
-      delete next[row.key];
-      return next;
-    });
-  };
-
-  const selfLineupType = selfAssignment?.position.startsWith('Dự bị') ? 'Đội hình Dự bị' : 'Đội hình Chính';
 
   const handleOpenSaveModal = async () => {
     setSaveMode('create');
@@ -271,145 +176,6 @@ export const MainBoard: React.FC<MainBoardProps> = ({
   return (
     <>
       <div className="flex-1 min-h-0 overflow-y-auto space-y-5 border-l border-slate-800/80 bg-slate-950/15 p-4 custom-scrollbar">
-        <div className="overflow-hidden rounded-2xl border border-emerald-400/20 bg-gradient-to-br from-emerald-500/10 via-slate-950/45 to-sky-500/8 shadow-xl shadow-slate-950/15">
-          <div className="flex flex-col gap-4 border-b border-slate-800/80 p-4 xl:flex-row xl:items-stretch xl:justify-between">
-            <section className="min-w-0 flex-1 rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-emerald-100">
-                  <ClipboardList size={16} className="text-emerald-300" />
-                  Phân công của bạn
-                </h2>
-                <span className="rounded-full border border-emerald-400/25 bg-emerald-500/12 px-2.5 py-1 text-[10px] font-black text-emerald-200">
-                  {selfAssignment ? selfLineupType : 'Chưa xếp'}
-                </span>
-              </div>
-              {selfMember ? selfAssignment ? (
-                <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-4">
-                  <AssignmentInfo label="Tên" value={selfMember.name} strong />
-                  <AssignmentInfo label="Phái" value={selfMember.classType} />
-                  <AssignmentInfo label="Vị trí" value={`${selfAssignment.groupName} - ${selfAssignment.teamName}`} />
-                  <div className="min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/45 px-3 py-2">
-                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Kỹ năng</div>
-                    <div className="mt-1 flex min-h-6 items-center gap-1">
-                      {selfAssignment.skills.length > 0 ? selfAssignment.skills.map(skill => (
-                        <img key={skill.id} src={skill.logo} alt={skill.name} title={skill.name} className="h-6 w-6 rounded border border-slate-700 bg-slate-950 object-cover" />
-                      )) : <span className="text-xs font-bold text-slate-500">Chưa có</span>}
-                    </div>
-                  </div>
-                  <div className="min-w-0 rounded-xl border border-slate-800/80 bg-slate-950/45 px-3 py-2 lg:col-span-2 2xl:col-span-4" title={selfAssignment.note || 'Không có ghi chú'}>
-                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Ghi chú</div>
-                    <div className="mt-1 truncate text-xs font-bold text-slate-200">{selfAssignment.note || 'Không có ghi chú'}</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-700/80 bg-slate-950/35 px-3 py-5 text-center text-sm font-bold text-slate-500">
-                  Bạn chưa được xếp vào đội hình hiện tại.
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-700/80 bg-slate-950/35 px-3 py-5 text-center text-sm font-bold text-slate-500">
-                  Không tìm thấy thông tin thành viên của bạn.
-                </div>
-              )}
-            </section>
-
-            <section className="flex w-full flex-col justify-between gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 xl:w-72">
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">Danh sách phân công</div>
-                <div className="mt-1 text-2xl font-black text-slate-100">{assignedRows.length}</div>
-                <div className="text-xs font-bold text-slate-500">thành viên đã có vị trí</div>
-              </div>
-              <button
-                onClick={() => setAssignmentsOpen(open => !open)}
-                className="flex items-center justify-between gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2 text-left transition-colors hover:border-emerald-300/45 hover:bg-emerald-500/15"
-              >
-                <span className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-emerald-100">
-                  <ClipboardList size={15} className="text-emerald-300" />
-                  {assignmentsOpen ? 'Ẩn danh sách' : 'Xem tất cả'}
-                </span>
-                <ChevronDown size={16} className={`shrink-0 text-emerald-200 transition-transform ${assignmentsOpen ? 'rotate-180' : ''}`} />
-              </button>
-            </section>
-          </div>
-
-          {assignmentsOpen && (
-            <div className="space-y-3 bg-slate-950/20 p-4">
-              <div className="relative max-w-md">
-                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  value={assignmentSearch}
-                  onChange={event => setAssignmentSearch(event.target.value)}
-                  placeholder="Tìm thành viên, đoàn, đội, phái, skill..."
-                  className="w-full rounded-lg border border-slate-700/80 bg-slate-800/70 py-2 pl-9 pr-3 text-xs font-bold text-slate-100 placeholder:text-slate-500 focus:border-emerald-400/60 focus:outline-none"
-                />
-              </div>
-              {assignedRows.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-700/80 bg-slate-900/35 px-3 py-5 text-center text-xs text-slate-500">
-                  Chưa có thành viên nào được xếp vào đội hình.
-                </div>
-              ) : filteredAssignedRows.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-700/80 bg-slate-900/35 px-3 py-5 text-center text-xs text-slate-500">
-                  Không tìm thấy thành viên phù hợp.
-                </div>
-              ) : (
-                <div className="overflow-x-auto custom-scrollbar">
-                  <table className="w-full min-w-[820px] table-fixed border-separate border-spacing-y-1 text-left text-xs">
-                    <thead className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      <tr>
-                        <th className="w-[22%] px-3 py-2">Thành viên</th>
-                        <th className="w-[14%] px-3 py-2">Đoàn</th>
-                        <th className="w-[14%] px-3 py-2">Đội</th>
-                        <th className="w-[13%] px-3 py-2">Vị trí</th>
-                        <th className="w-[13%] px-3 py-2">Skill</th>
-                        <th className="w-[24%] px-3 py-2">Ghi chú</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredAssignedRows.map(row => (
-                        <tr key={row.key} className="bg-slate-900/45 text-slate-200 transition-colors hover:bg-slate-800/55">
-                          <td className="rounded-l-xl px-3 py-2">
-                            <div className="flex min-w-0 items-center gap-2.5">
-                              {getClassIcon(row.member.classType) ? (
-                                <img src={getClassIcon(row.member.classType)!} alt="" className="h-7 w-7 shrink-0 object-contain" />
-                              ) : (
-                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-950/50 text-[9px] font-black text-slate-300">?</div>
-                              )}
-                              <span className="truncate font-semibold text-slate-300">{row.member.name}</span>
-                              {row.note && <MessageSquareText size={13} className="shrink-0 text-emerald-300" />}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-slate-400"><span className="block truncate">{row.groupName}</span></td>
-                          <td className="px-3 py-2 text-slate-300"><span className="block truncate">{row.teamName}</span></td>
-                          <td className="px-3 py-2 text-slate-400"><span className="block truncate">{row.position}</span></td>
-                          <td className="px-3 py-2">
-                            {row.skills.length > 0 ? (
-                              <div className="flex items-center gap-1">
-                                {row.skills.map(skill => (
-                                  <img key={skill.id} src={skill.logo} alt={skill.name} title={skill.name} className="h-6 w-6 rounded border border-slate-700 bg-slate-950 object-cover" />
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-slate-600">—</span>
-                            )}
-                          </td>
-                          <td className="rounded-r-xl px-3 py-2">
-                            <input
-                              value={draftNotes[row.key] ?? row.note}
-                              onChange={event => handleNoteDraftChange(row.key, event.target.value)}
-                              onBlur={() => handleNoteBlur(row)}
-                              disabled={readOnly}
-                              placeholder={readOnly ? 'Không có ghi chú' : 'Nhập nhiệm vụ...'}
-                              className="w-full rounded-lg border border-slate-700/80 bg-slate-950/55 px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-600 focus:border-emerald-400/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
 
         {canManageLineup && (
           <div className="rounded-2xl border border-slate-800/80 bg-slate-950/35 p-3 shadow-sm shadow-slate-950/20">

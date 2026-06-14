@@ -152,25 +152,6 @@ export function useLineupWorkspace({
     });
   }, [alert, canManageLineup, handleSquadGroupsChange, lineupLock?.isHeldByMe, squadGroups, updateActiveTab]);
 
-  const handleMemberNoteChange = React.useCallback((teamId: string, memberId: string, note: string) => {
-    handleSquadGroupsChange(prev => prev.map(group => ({
-      ...group,
-      teams: group.teams.map(team => {
-        if (team.id !== teamId) return team;
-
-        const memberNotes = { ...(team.memberNotes ?? {}) };
-        const trimmedNote = note.trim();
-        if (trimmedNote) {
-          memberNotes[memberId] = trimmedNote;
-        } else {
-          delete memberNotes[memberId];
-        }
-
-        return { ...team, memberNotes };
-      }),
-    })));
-  }, [handleSquadGroupsChange]);
-
   const runLineupLockAction = React.useCallback(async (action: () => Promise<AppStateResponse['lineupLock']>, fallbackMessage: string) => {
     setLineupLockActionLoading(true);
     try {
@@ -269,7 +250,6 @@ export function useLineupWorkspace({
     handleSquadGroupsChange,
     handleResetSquadGroups,
     handleSquadGroupLeaderChange,
-    handleMemberNoteChange,
     handleImportAttendanceToLineup,
     flushPendingSquadLayoutSave,
     clearLineupWorkspaceUiState,

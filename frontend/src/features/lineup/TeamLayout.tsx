@@ -22,7 +22,7 @@ import {
 } from '@dnd-kit/sortable';
 import { Member, Skill, SquadGroup } from '../../types.ts';
 import { LineupSnapshotActions, LineupSnapshotState } from '../../hooks/useLineupSnapshots.ts';
-import { DiscordUser, getAttendanceHistory, getAttendanceSession } from '../../services/discordApi.ts';
+import { getAttendanceHistory, getAttendanceSession } from '../../services/discordApi.ts';
 import { MemberPool } from './MemberPool.tsx';
 import { SkillPool } from './SkillPool.tsx';
 import { MainBoard } from './MainBoard.tsx';
@@ -203,14 +203,12 @@ interface TeamLayoutProps {
   memberPool: Member[];
   fullMemberPool: Member[];
   skills: Skill[];
-  currentUser: DiscordUser | null;
   assignedMemberIds: Set<string>;
   onSquadGroupsChange: React.Dispatch<React.SetStateAction<SquadGroup[]>>;
   onResetSquadGroups: (update: React.SetStateAction<SquadGroup[]>, clearSkillMemberIds: string[]) => void;
   onSquadGroupLeaderChange: (groupId: string, leaderMemberId: string | null) => void;
   onAssignSkillToMember: (memberId: string, skill: Skill) => void;
   onRemoveSkillFromMember: (memberId: string, skillId: string) => void;
-  onMemberNoteChange: (teamId: string, memberId: string, note: string) => void;
   getMemberById: (id: string) => Member | null;
   readOnly: boolean;
   snapshotsOnly: boolean;
@@ -234,14 +232,12 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   memberPool,
   fullMemberPool,
   skills,
-  currentUser,
   assignedMemberIds,
   onSquadGroupsChange,
   onResetSquadGroups,
   onSquadGroupLeaderChange,
   onAssignSkillToMember,
   onRemoveSkillFromMember,
-  onMemberNoteChange,
   getMemberById,
   readOnly,
   snapshotsOnly,
@@ -405,40 +401,8 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       }));
     };
 
-    const removeMemberNotes = (groups: SquadGroup[], memberId: string) => {
-      return groups.map(group => ({
-        ...group,
-        teams: group.teams.map(team => {
-          if (!team.memberNotes?.[memberId]) return team;
-          const memberNotes = { ...team.memberNotes };
-          delete memberNotes[memberId];
-          return { ...team, memberNotes };
-        }),
-      }));
-    };
-
-    const moveMemberNoteToTeam = (groups: SquadGroup[], memberId: string, targetTeamId: string) => {
-      let note = '';
-      groups.forEach(group => {
-        group.teams.forEach(team => {
-          if (team.memberNotes?.[memberId]) note = team.memberNotes[memberId];
-        });
-      });
-      if (!note) return groups;
-
-      return groups.map(group => ({
-        ...group,
-        teams: group.teams.map(team => {
-          const memberNotes = { ...(team.memberNotes ?? {}) };
-          delete memberNotes[memberId];
-          if (team.id === targetTeamId) memberNotes[memberId] = note;
-          return { ...team, memberNotes };
-        }),
-      }));
-    };
-
     const clearMemberFromSlots = (groups: SquadGroup[], memberId: string) => {
-      return removeMemberNotes(groups, memberId).map(group => ({
+      return groups.map(group => ({
         ...group,
         teams: group.teams.map(team => ({
           ...team,
@@ -481,7 +445,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       const isOverPool = dropId === 'pool' || (overData?.type === 'member-target' && !assignedMemberIds.has(overData.member.id));
       if (isOverPool) {
         (member.assignedSkills || []).forEach((skillId: string) => onRemoveSkillFromMember(member.id, skillId));
-        onSquadGroupsChange(prev => removeMemberNotes(updateMemberInSlot(prev, origin, null), member.id));
+        onSquadGroupsChange(prev => updateMemberInSlot(prev, origin, null));
         return;
       }
 
@@ -495,12 +459,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
         const originSlot = parseSlotId(origin);
         if (originMemberId !== member.id || !targetSlot || !originSlot) return prev;
 
-        let next = updateMemberInSlot(updateMemberInSlot(prev, origin, targetMemberId), targetSlotId, member.id);
-        next = moveMemberNoteToTeam(next, member.id, targetSlot.teamId);
-        if (targetMemberId) {
-          next = moveMemberNoteToTeam(next, targetMemberId, originSlot.teamId);
-        }
-        return next;
+        return updateMemberInSlot(updateMemberInSlot(prev, origin, targetMemberId), targetSlotId, member.id);
       });
     }
   };
@@ -557,7 +516,6 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
           memberIds: team.memberIds.map(() => ''),
           reserveMemberIds: team.reserveMemberIds.map(() => ''),
           slotSkills: {},
-          memberNotes: {},
         })),
       })), getAssignedLineupMemberIdsWithSkills());
     } finally {
@@ -750,9 +708,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
         )}
         <MainBoard
           squadGroups={squadGroups}
-          memberPool={fullMemberPool}
           skills={skills}
-          currentUser={currentUser}
           getMemberById={getMemberById}
           onRemoveSkillFromMember={onRemoveSkillFromMember}
           onStartNewLineup={startNewLineup}
@@ -760,7 +716,6 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
           onOpenAttendanceImport={openAttendanceImport}
           lineupResetActionPending={lineupResetActionPending}
           onSquadGroupLeaderChange={onSquadGroupLeaderChange}
-          onMemberNoteChange={onMemberNoteChange}
           readOnly={readOnly}
           canManageLineup={canManageLineup}
           canManageSnapshots={canManageSnapshots}

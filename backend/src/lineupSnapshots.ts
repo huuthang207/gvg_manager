@@ -10,7 +10,6 @@ export type PersistedSquadGroupInput = Array<{
     name?: string;
     memberIds?: string[];
     reserveMemberIds?: string[];
-    memberNotes?: Record<string, string>;
   }>;
 }>;
 
@@ -46,29 +45,19 @@ function removeDuplicateSnapshotMembers(groups: ReturnType<typeof serializeSnaps
     ...group,
     leaderMemberId: group.leaderMemberId && seenMemberIds.has(group.leaderMemberId) ? null : group.leaderMemberId,
     teams: group.teams.map(team => {
-      const memberNotes = { ...(team.memberNotes ?? {}) };
       const filterMemberId = (memberId: string) => {
         if (!memberId) return '';
         if (seenMemberIds.has(memberId)) {
-          delete memberNotes[memberId];
           return '';
         }
         seenMemberIds.add(memberId);
         return memberId;
       };
 
-      const memberIds = team.memberIds.map(filterMemberId);
-      const reserveMemberIds = team.reserveMemberIds.map(filterMemberId);
-      const assignedMemberIds = new Set([...memberIds, ...reserveMemberIds].filter(Boolean));
-      Object.keys(memberNotes).forEach(memberId => {
-        if (!assignedMemberIds.has(memberId)) delete memberNotes[memberId];
-      });
-
       return {
         ...team,
-        memberIds,
-        reserveMemberIds,
-        memberNotes,
+        memberIds: team.memberIds.map(filterMemberId),
+        reserveMemberIds: team.reserveMemberIds.map(filterMemberId),
       };
     }),
   }));
@@ -217,11 +206,6 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
           const reserveIds = [...(team.reserveMemberIds ?? [])].slice(0, 3);
           while (reserveIds.length < 3) reserveIds.push('');
 
-          const getAssignmentNote = (memberId: string | null) => {
-            if (!memberId) return '';
-            return (team.memberNotes?.[memberId] ?? '').trim();
-          };
-
           const slotPayload = [
             ...mainIds.map((memberId, slotIndex) => {
               const validMemberId = memberId && validMemberIds.has(memberId) ? memberId : null;
@@ -229,7 +213,7 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
                 slotType: 'main',
                 slotIndex,
                 memberId: validMemberId,
-                assignmentNote: getAssignmentNote(validMemberId),
+                assignmentNote: '',
               };
             }),
             ...reserveIds.map((memberId, slotIndex) => {
@@ -238,7 +222,7 @@ export async function persistSquadGroupsForGuild(guildId: string, groups: Persis
                 slotType: 'reserve',
                 slotIndex,
                 memberId: validMemberId,
-                assignmentNote: getAssignmentNote(validMemberId),
+                assignmentNote: '',
               };
             }),
           ];
