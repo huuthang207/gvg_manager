@@ -47,28 +47,6 @@ export const TeamCard: React.FC<TeamCardProps> = ({ team, skills, accent, getMem
         ))}
       </div>
 
-      <div className="mt-1 rounded-xl border border-slate-800/70 bg-slate-950/20 p-2">
-        <div className="flex items-center justify-between mb-1.5 px-1">
-          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Dự bị</p>
-          <span className="rounded-full border border-slate-700/70 bg-slate-800/45 px-2 py-0.5 text-[10px] font-black text-slate-500">
-            {team.reserveMemberIds.filter(Boolean).length}/3
-          </span>
-        </div>
-        <div className="grid grid-cols-1 gap-1.5">
-          {team.reserveMemberIds.map((memberId, idx) => (
-            <MemberSlot
-              key={`${team.id}-reserve-${idx}`}
-              id={`${team.id}-reserve-${idx}`}
-              member={memberId ? getMemberById(memberId) : null}
-              skills={skills}
-              isReserve
-              onRemoveSkillFromMember={onRemoveSkillFromMember}
-              readOnly={readOnly}
-              snapshotSkillIds={hideSkills ? [] : team.slotSkills?.[`reserve-${idx}`]}
-            />
-          ))}
-        </div>
-      </div>
     </div>
   );
 };

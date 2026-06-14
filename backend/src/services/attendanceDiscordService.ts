@@ -22,11 +22,6 @@ export function buildAttendanceButtons(sessionId: string, disabled = false) {
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled),
     new ButtonBuilder()
-      .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:MAYBE:${sessionId}`)
-      .setLabel('Dự bị')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(disabled),
-    new ButtonBuilder()
       .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:NOGO:${sessionId}`)
       .setLabel('Không tham gia')
       .setStyle(ButtonStyle.Danger)
@@ -37,7 +32,7 @@ export function buildAttendanceButtons(sessionId: string, disabled = false) {
 export function parseAttendanceButtonCustomId(customId: string) {
   const [prefix, choice, sessionId] = customId.split(':');
   if (prefix !== ATTENDANCE_BUTTON_PREFIX) return null;
-  if (choice !== 'GO' && choice !== 'MAYBE' && choice !== 'NOGO') return null;
+  if (choice !== 'GO' && choice !== 'NOGO') return null;
   if (!sessionId) return null;
   return { choice, sessionId };
 }

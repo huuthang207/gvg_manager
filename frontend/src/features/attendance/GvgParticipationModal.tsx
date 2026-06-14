@@ -45,9 +45,7 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
   const existingSessionForDate = historySessions.find(session => formatInputDate(session.battleDate) === battleDate) || null;
   const isEditingFinalizedSession = !!existingSessionForDate;
   const attendanceGoMemberIds = new Set(selectedAttendanceSession?.votes.filter(vote => vote.choice === 'GO').map(vote => vote.memberId) ?? []);
-  const attendanceMaybeMemberIds = new Set(selectedAttendanceSession?.votes.filter(vote => vote.choice === 'MAYBE').map(vote => vote.memberId) ?? []);
   const selectableAttendanceGoMemberIds = activeMembers.filter(member => attendanceGoMemberIds.has(member.id)).map(member => member.id);
-  const selectableAttendanceMaybeMemberIds = activeMembers.filter(member => attendanceMaybeMemberIds.has(member.id)).map(member => member.id);
   const memberSearchQuery = memberSearchTerm.trim().toLowerCase();
   const filteredActiveMembers = memberSearchQuery
     ? activeMembers.filter(member => [member.ingameName, member.name, member.discordUsername, member.discordDisplayName, member.classType]
@@ -133,11 +131,10 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
   const selectAllMembers = () => setSelectedBattlesByMember(createFullBattleSelections(activeMembers.map(member => member.id)));
   const clearSelectedMembers = () => setSelectedBattlesByMember({});
   const selectAttendanceGoMembers = () => setSelectedBattlesByMember(createFullBattleSelections(selectableAttendanceGoMemberIds));
-  const selectAttendanceMaybeMembers = () => setSelectedBattlesByMember(createFullBattleSelections(selectableAttendanceMaybeMemberIds));
   const getAttendanceSessionLabel = (session: AttendanceSession) => {
     const status = session.status === 'OPEN' ? 'Đang mở' : 'Đã đóng';
     const title = session.headerText || 'Điểm danh Bang Chiến';
-    return `${status} · ${title} · ${formatInputDate(session.openedAt)} · Tham gia ${session.summary.go} · Dự bị ${session.summary.maybe}`;
+    return `${status} · ${title} · ${formatInputDate(session.openedAt)} · Tham gia ${session.summary.go}`;
   };
 
   const handleFinalize = async () => {
@@ -280,14 +277,6 @@ export const GvgParticipationModal: React.FC<GvgParticipationModalProps> = ({ me
                       className="app-button-primary rounded-xl px-2.5 py-1.5 text-xs font-black disabled:opacity-50"
                     >
                       Tham gia ({selectableAttendanceGoMemberIds.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={selectAttendanceMaybeMembers}
-                      disabled={!selectableAttendanceMaybeMemberIds.length}
-                      className="app-button-secondary rounded-xl px-2.5 py-1.5 text-xs font-black disabled:opacity-50"
-                    >
-                      Dự bị ({selectableAttendanceMaybeMemberIds.length})
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">

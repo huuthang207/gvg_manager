@@ -3,8 +3,7 @@ import type { AttendanceLineupImportPayload } from '../../shared/types/lineup.ts
 
 export interface AttendanceLineupImportResult {
   nextGroups: SquadGroup[];
-  importedMainCount: number;
-  importedReserveCount: number;
+  importedCount: number;
   skippedAlreadyAssignedCount: number;
   overflowCount: number;
 }
@@ -14,7 +13,6 @@ export function collectAssignedMemberIds(groups: SquadGroup[]) {
   groups.forEach(group => {
     group.teams.forEach(team => {
       team.memberIds.forEach(id => id && ids.add(id));
-      team.reserveMemberIds.forEach(id => id && ids.add(id));
     });
   });
   return ids;
@@ -48,7 +46,6 @@ export function importMembersIntoSquadGroups(groups: SquadGroup[], payload: Atte
     teams: group.teams.map(team => ({
       ...team,
       memberIds: [...team.memberIds],
-      reserveMemberIds: [...team.reserveMemberIds],
     })),
   }));
   const assignedIds = collectAssignedMemberIds(nextGroups);
@@ -64,26 +61,12 @@ export function importMembersIntoSquadGroups(groups: SquadGroup[], payload: Atte
     }
     return false;
   };
-  const fillReserveSlot = (memberId: string) => {
-    for (const group of nextGroups) {
-      for (const team of group.teams) {
-        const emptyIndex = team.reserveMemberIds.findIndex(id => !id);
-        if (emptyIndex !== -1) {
-          team.reserveMemberIds[emptyIndex] = memberId;
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-  const mainResult = fillEmptySlots(payload.mainMemberIds, assignedIds, fillMainSlot);
-  const reserveResult = fillEmptySlots(payload.reserveMemberIds, assignedIds, fillReserveSlot);
+  const result = fillEmptySlots(payload.memberIds, assignedIds, fillMainSlot);
 
   return {
     nextGroups,
-    importedMainCount: mainResult.importedCount,
-    importedReserveCount: reserveResult.importedCount,
-    skippedAlreadyAssignedCount: mainResult.skippedAlreadyAssignedCount + reserveResult.skippedAlreadyAssignedCount,
-    overflowCount: mainResult.overflowCount + reserveResult.overflowCount,
+    importedCount: result.importedCount,
+    skippedAlreadyAssignedCount: result.skippedAlreadyAssignedCount,
+    overflowCount: result.overflowCount,
   };
 }

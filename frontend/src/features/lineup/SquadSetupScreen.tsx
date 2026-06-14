@@ -98,7 +98,6 @@ export const SquadSetupScreen: React.FC<SquadSetupScreenProps> = ({ onCreate }) 
         id: `team-${timestamp}-${groupIndex}-${teamIndex}`,
         name: teamName.trim(),
         memberIds: Array(6).fill(''),
-        reserveMemberIds: Array(3).fill(''),
       })),
     })));
   };

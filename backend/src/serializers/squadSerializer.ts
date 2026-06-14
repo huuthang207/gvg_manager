@@ -18,14 +18,10 @@ type GroupWithTeams = {
 
 export function toTeamSlotArrays(team: TeamWithSlots) {
   const memberIds = Array(6).fill('');
-  const reserveMemberIds = Array(3).fill('');
 
   for (const slot of team.slots) {
     if (slot.slotType === 'main' && slot.slotIndex < memberIds.length) {
       memberIds[slot.slotIndex] = slot.memberId ?? '';
-    }
-    if (slot.slotType === 'reserve' && slot.slotIndex < reserveMemberIds.length) {
-      reserveMemberIds[slot.slotIndex] = slot.memberId ?? '';
     }
   }
 
@@ -33,7 +29,6 @@ export function toTeamSlotArrays(team: TeamWithSlots) {
     id: team.id,
     name: team.name,
     memberIds,
-    reserveMemberIds,
   };
 }
 
@@ -44,9 +39,6 @@ export function toSnapshotTeamSlotArrays(team: Omit<TeamWithSlots, 'slots'> & { 
   for (const slot of team.slots) {
     if (slot.slotType === 'main' && slot.slotIndex < slotArrays.memberIds.length) {
       slotSkills[`main-${slot.slotIndex}`] = slot.skillIds ?? [];
-    }
-    if (slot.slotType === 'reserve' && slot.slotIndex < slotArrays.reserveMemberIds.length) {
-      slotSkills[`reserve-${slot.slotIndex}`] = slot.skillIds ?? [];
     }
   }
 
@@ -85,7 +77,7 @@ export function serializeDivisions(
 ) {
   if (teams.length === 0) return null;
 
-  const divisions: Record<string, { type: string; teams: Array<{ id: string; name: string; memberIds: string[]; reserveMemberIds: string[] }> }> = {};
+  const divisions: Record<string, { type: string; teams: Array<{ id: string; name: string; memberIds: string[] }> }> = {};
 
   for (const team of teams.sort((a, b) => (divisionOrder[a.divisionType] ?? 99) - (divisionOrder[b.divisionType] ?? 99) || a.orderIndex - b.orderIndex)) {
     if (!divisions[team.divisionType]) {

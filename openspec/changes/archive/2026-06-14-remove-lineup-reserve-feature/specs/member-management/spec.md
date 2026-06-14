@@ -1,8 +1,4 @@
-## Purpose
-
-Quy định behavior quản lý và hiển thị thành viên sau khi loại bỏ class-change tracking. UI và API không còn cảnh báo hoặc acknowledge lịch sử đổi phái.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Member UI does not show class-change alerts
 Giao diện quản lý thành viên MUST không hiển thị badge, icon, tooltip, hoặc section cảnh báo lịch sử đổi phái.

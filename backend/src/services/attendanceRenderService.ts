@@ -54,12 +54,11 @@ export function summarizeAttendanceRenderVotes(votes: RenderVote[]) {
   return votes.reduce(
     (summary, vote) => {
       if (vote.choice === 'GO') summary.go += 1;
-      if (vote.choice === 'MAYBE') summary.maybe += 1;
       if (vote.choice === 'NOGO') summary.nogo += 1;
       summary.total += 1;
       return summary;
     },
-    { go: 0, maybe: 0, nogo: 0, total: 0 },
+    { go: 0, nogo: 0, total: 0 },
   );
 }
 
@@ -81,7 +80,6 @@ function renderSummary(votes: RenderVote[]) {
     '```txt',
     `Tổng vote: ${summary.total}`,
     `✅ Tham gia: ${summary.go}`,
-    `❔ Dự bị: ${summary.maybe}`,
     `❌ Không tham gia: ${summary.nogo}`,
     classLine,
     '```',
@@ -143,8 +141,6 @@ export function renderAttendancePublicContent(session: RenderSession, votes: Ren
     renderSummary(votes),
     '**Danh sách tham gia:**',
     renderGoList(votes),
-    '**Danh sách dự bị:**',
-    renderChoiceList(votes, 'MAYBE', "Chưa có ai chọn 'Dự bị'."),
     '**Danh sách không tham gia:**',
     renderChoiceList(votes, 'NOGO', "Chưa có ai chọn 'Không tham gia'."),
     `**Cập nhật lần cuối:** **${formatVietnameseDate(lastUpdate)}**`,

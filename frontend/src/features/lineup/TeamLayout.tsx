@@ -51,50 +51,30 @@ function getMemberName(member: Member) {
 interface AttendanceImportModalProps {
   sessions: AttendanceSession[];
   selectedSession: AttendanceSession | null;
-  memberPool: Member[];
   loading: boolean;
   detailLoading: boolean;
   error: string;
-  includeNotVoted: boolean;
   hasMore: boolean;
   onClose: () => void;
   onSelectSession: (sessionId: string) => void;
   onLoadMore: () => void;
-  onIncludeNotVotedChange: (value: boolean) => void;
   onImport: (payload: AttendanceLineupImportPayload) => void;
 }
 
 function AttendanceImportModal({
   sessions,
   selectedSession,
-  memberPool,
   loading,
   detailLoading,
   error,
-  includeNotVoted,
   hasMore,
   onClose,
   onSelectSession,
   onLoadMore,
-  onIncludeNotVotedChange,
   onImport,
 }: AttendanceImportModalProps) {
-  const votedMemberIds = React.useMemo(() => new Set((selectedSession?.votes || []).map(vote => vote.memberId)), [selectedSession]);
-  const notVotedMembers = React.useMemo(() => (
-    selectedSession
-      ? memberPool
-        .filter(member => member.active !== false && !votedMemberIds.has(member.id))
-        .sort((a, b) => {
-          const classCompare = a.classType.localeCompare(b.classType, 'vi');
-          if (classCompare !== 0) return classCompare;
-          return getMemberName(a).localeCompare(getMemberName(b), 'vi');
-        })
-      : []
-  ), [memberPool, selectedSession, votedMemberIds]);
-  const mainMemberIds = React.useMemo(() => selectedSession?.votes.filter(vote => vote.choice === 'GO').map(vote => vote.memberId) || [], [selectedSession]);
-  const standbyMemberIds = React.useMemo(() => selectedSession?.votes.filter(vote => vote.choice === 'MAYBE').map(vote => vote.memberId) || [], [selectedSession]);
-  const reserveMemberIds = includeNotVoted ? [...standbyMemberIds, ...notVotedMembers.map(member => member.id)] : standbyMemberIds;
-  const canImport = !!selectedSession && !detailLoading && (mainMemberIds.length > 0 || reserveMemberIds.length > 0);
+  const memberIds = React.useMemo(() => selectedSession?.votes.filter(vote => vote.choice === 'GO').map(vote => vote.memberId) || [], [selectedSession]);
+  const canImport = !!selectedSession && !detailLoading && memberIds.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm lg:p-6" onClick={onClose}>
@@ -130,7 +110,6 @@ function AttendanceImportModal({
                   <div className="mt-1 text-xs text-slate-500">{formatAttendanceDate(session.openedAt)} - {formatAttendanceDate(session.closedAt)}</div>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black">
                     <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">Tham gia {session.summary.go}</span>
-                    <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-amber-200">Dự bị {session.summary.maybe}</span>
                     <span className="rounded-full border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-red-200">Không {session.summary.nogo}</span>
                   </div>
                 </button>
@@ -155,34 +134,24 @@ function AttendanceImportModal({
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/35 p-4">
                   <h3 className="text-lg font-black text-white">{selectedSession.headerText || 'Điểm danh Bang Chiến'}</h3>
                   <p className="mt-1 text-sm text-slate-500">{formatAttendanceDate(selectedSession.openedAt)} - {formatAttendanceDate(selectedSession.closedAt)}</p>
-                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3"><div className="text-xs font-black text-emerald-200">Vào chính</div><div className="text-2xl font-black text-white">{mainMemberIds.length}</div></div>
-                    <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3"><div className="text-xs font-black text-amber-200">Dự bị</div><div className="text-2xl font-black text-white">{standbyMemberIds.length}</div></div>
-                    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3"><div className="text-xs font-black text-slate-300">Chưa điểm danh</div><div className="text-2xl font-black text-white">{notVotedMembers.length}</div></div>
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3"><div className="text-xs font-black text-emerald-200">Sẽ nhập</div><div className="text-2xl font-black text-white">{memberIds.length}</div></div>
+                    <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-3"><div className="text-xs font-black text-red-200">Không tham gia</div><div className="text-2xl font-black text-white">{selectedSession.votes.filter(vote => vote.choice === 'NOGO').length}</div></div>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/35 p-4">
-                  <label className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/45 px-3 py-2 text-sm font-bold text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={includeNotVoted}
-                      onChange={event => onIncludeNotVotedChange(event.target.checked)}
-                      className="h-4 w-4 accent-sky-500"
-                    />
-                    Thêm người chưa điểm danh vào dự bị ({notVotedMembers.length})
-                  </label>
-                  <p className="mt-2 text-xs text-slate-500">Người chọn “Không tham gia” sẽ không được nhập vào đội hình.</p>
+                  <p className="text-xs text-slate-500">Chỉ các thành viên chọn “Tham gia” mới được nhập vào đội hình.</p>
                 </div>
 
                 <div className="flex justify-end gap-2">
                   <button onClick={onClose} className="app-button-secondary rounded-xl px-4 py-2 text-sm font-bold">Hủy</button>
                   <button
-                    onClick={() => onImport({ mainMemberIds, reserveMemberIds })}
+                    onClick={() => onImport({ memberIds })}
                     disabled={!canImport}
                     className="app-button-primary rounded-xl px-4 py-2 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Nhập {mainMemberIds.length} chính / {reserveMemberIds.length} dự bị
+                    Nhập {memberIds.length} thành viên
                   </button>
                 </div>
               </div>
@@ -219,10 +188,8 @@ interface TeamLayoutProps {
   lineupMemberSource: LineupMemberSource;
   lineupMemberSourceSessionId: string | null;
   lineupMemberSourceSession: AttendanceSession | null;
-  lineupMemberSourceIncludeNotVoted: boolean;
   onLineupMemberSourceChange: (source: LineupMemberSource) => void;
   onLineupMemberSourceSessionChange: (session: AttendanceSession | null) => void;
-  onLineupMemberSourceIncludeNotVotedChange: (include: boolean) => void;
   snapshotState: LineupSnapshotState;
   snapshotActions: Pick<LineupSnapshotActions, 'openSnapshots' | 'closeSnapshots' | 'selectSnapshot' | 'saveSnapshot' | 'restoreSnapshot' | 'removeSnapshot' | 'refreshSnapshots'>;
 }
@@ -248,10 +215,8 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   lineupMemberSource,
   lineupMemberSourceSessionId,
   lineupMemberSourceSession,
-  lineupMemberSourceIncludeNotVoted,
   onLineupMemberSourceChange,
   onLineupMemberSourceSessionChange,
-  onLineupMemberSourceIncludeNotVotedChange,
   snapshotState,
   snapshotActions,
 }) => {
@@ -267,7 +232,6 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   const [attendanceImportDetailLoading, setAttendanceImportDetailLoading] = React.useState(false);
   const [attendanceImportError, setAttendanceImportError] = React.useState('');
   const [selectedAttendanceSession, setSelectedAttendanceSession] = React.useState<AttendanceSession | null>(null);
-  const [includeNotVoted, setIncludeNotVoted] = React.useState(false);
   const [attendanceHistoryHasMore, setAttendanceHistoryHasMore] = React.useState(false);
   const [attendanceHistoryNextOffset, setAttendanceHistoryNextOffset] = React.useState(0);
   const menuSnapshotsFetchedRef = React.useRef(false);
@@ -305,12 +269,10 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     if (!sourceData) return;
 
     const parseSlotId = (slotId: string) => {
-      const isReserve = slotId.includes('-reserve-');
-      const parts = slotId.split(isReserve ? '-reserve-' : '-slot-');
+      const parts = slotId.split('-slot-');
       if (parts.length !== 2) return null;
 
       return {
-        isReserve,
         teamId: parts[0],
         slotIndex: parseInt(parts[1]),
       };
@@ -333,7 +295,7 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       if (!slotData) return null;
 
       const { slot, team } = slotData;
-      return slot.isReserve ? team.reserveMemberIds[slot.slotIndex] : team.memberIds[slot.slotIndex];
+      return team.memberIds[slot.slotIndex];
     };
 
     const getSlotIdForMemberFromGroups = (groups: SquadGroup[], memberId: string) => {
@@ -342,9 +304,6 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
         group.teams.forEach(team => {
           const sIdx = team.memberIds.indexOf(memberId);
           if (sIdx !== -1) slotId = `${team.id}-slot-${sIdx}`;
-
-          const rIdx = team.reserveMemberIds.indexOf(memberId);
-          if (rIdx !== -1) slotId = `${team.id}-reserve-${rIdx}`;
         });
       });
       return slotId;
@@ -381,18 +340,12 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
       const slot = parseSlotId(slotId);
       if (!slot) return groups;
 
-      const { isReserve, teamId, slotIndex } = slot;
+      const { teamId, slotIndex } = slot;
 
       return groups.map(group => ({
         ...group,
         teams: group.teams.map(team => {
           if (team.id !== teamId) return team;
-
-          if (isReserve) {
-            const reserveMemberIds = [...team.reserveMemberIds];
-            reserveMemberIds[slotIndex] = memberId || '';
-            return { ...team, reserveMemberIds };
-          }
 
           const memberIds = [...team.memberIds];
           memberIds[slotIndex] = memberId || '';
@@ -407,7 +360,6 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
         teams: group.teams.map(team => ({
           ...team,
           memberIds: team.memberIds.map(id => id === memberId ? '' : id),
-          reserveMemberIds: team.reserveMemberIds.map(id => id === memberId ? '' : id),
         })),
       }));
     };
@@ -469,7 +421,6 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
     squadGroups.forEach(group => {
       group.teams.forEach(team => {
         team.memberIds.forEach(id => id && assignedIds.add(id));
-        team.reserveMemberIds.forEach(id => id && assignedIds.add(id));
       });
     });
 
@@ -514,7 +465,6 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
         teams: group.teams.map(team => ({
           ...team,
           memberIds: team.memberIds.map(() => ''),
-          reserveMemberIds: team.reserveMemberIds.map(() => ''),
           slotSkills: {},
         })),
       })), getAssignedLineupMemberIdsWithSkills());
@@ -554,14 +504,12 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
   const openAttendanceImport = useCallback(() => {
     setAttendanceImportOpen(true);
     setSelectedAttendanceSession(null);
-    setIncludeNotVoted(false);
     loadAttendanceSessions(0);
   }, [loadAttendanceSessions]);
 
   const selectAttendanceSession = useCallback((sessionId: string) => {
     const preview = attendanceSessions.find(session => session.id === sessionId) || null;
     setSelectedAttendanceSession(preview);
-    setIncludeNotVoted(false);
     setAttendanceImportDetailLoading(true);
     setAttendanceImportError('');
     getAttendanceSession(sessionId)
@@ -692,13 +640,11 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
                   lineupMemberSource={lineupMemberSource}
                   lineupMemberSourceSessionId={lineupMemberSourceSessionId}
                   lineupMemberSourceSession={lineupMemberSourceSession}
-                  lineupMemberSourceIncludeNotVoted={lineupMemberSourceIncludeNotVoted}
                   attendanceSessions={attendanceSessions}
                   attendanceImportLoading={attendanceImportLoading}
                   attendanceImportError={attendanceImportError}
                   onSourceChange={handleSourceChange}
                   onSourceSessionChange={handleSourceSessionChange}
-                  onIncludeNotVotedChange={onLineupMemberSourceIncludeNotVotedChange}
                 />
               ) : (
                 <SkillPool skills={skills} />
@@ -756,16 +702,13 @@ export const TeamLayout: React.FC<TeamLayoutProps> = ({
         <AttendanceImportModal
           sessions={attendanceSessions}
           selectedSession={selectedAttendanceSession}
-          memberPool={fullMemberPool}
           loading={attendanceImportLoading}
           detailLoading={attendanceImportDetailLoading}
           error={attendanceImportError}
-          includeNotVoted={includeNotVoted}
           hasMore={attendanceHistoryHasMore}
           onClose={() => setAttendanceImportOpen(false)}
           onSelectSession={selectAttendanceSession}
           onLoadMore={() => loadAttendanceSessions(attendanceHistoryNextOffset)}
-          onIncludeNotVotedChange={setIncludeNotVoted}
           onImport={handleAttendanceImport}
         />
       ) : null}

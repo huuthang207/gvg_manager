@@ -82,7 +82,6 @@ export default function App() {
     lineupMemberSource,
     lineupMemberSourceSessionId,
     lineupMemberSourceSession,
-    lineupMemberSourceIncludeNotVoted,
     refreshLineupLock,
     handleAcquireLineupLock,
     handleReleaseLineupLock,
@@ -95,7 +94,6 @@ export default function App() {
     clearLineupWorkspaceUiState,
     setLineupMemberSource,
     setLineupMemberSourceSession,
-    setLineupMemberSourceIncludeNotVoted,
     releaseHeldLineupLock,
   } = useLineupWorkspace({
     squadGroups,
@@ -402,10 +400,8 @@ export default function App() {
                 lineupMemberSource={lineupMemberSource}
                 lineupMemberSourceSessionId={lineupMemberSourceSessionId}
                 lineupMemberSourceSession={lineupMemberSourceSession}
-                lineupMemberSourceIncludeNotVoted={lineupMemberSourceIncludeNotVoted}
                 onLineupMemberSourceChange={setLineupMemberSource}
                 onLineupMemberSourceSessionChange={setLineupMemberSourceSession}
-                onLineupMemberSourceIncludeNotVotedChange={setLineupMemberSourceIncludeNotVoted}
                 getMemberById={getMemberById}
                 readOnly={lineupReadOnly}
                 snapshotsOnly={false}

@@ -44,7 +44,6 @@ export function useLineupWorkspace({
 }: UseLineupWorkspaceParams) {
   const [lineupMemberSource, setLineupMemberSource] = React.useState<LineupMemberSource>('guild');
   const [lineupMemberSourceSession, setLineupMemberSourceSessionState] = React.useState<AttendanceSession | null>(null);
-  const [lineupMemberSourceIncludeNotVoted, setLineupMemberSourceIncludeNotVoted] = React.useState(false);
   const [lineupLock, setLineupLock] = React.useState<AppStateResponse['lineupLock']>(null);
   const [lineupLockActionLoading, setLineupLockActionLoading] = React.useState(false);
   const squadLayoutSaveRef = React.useRef<Promise<void>>(Promise.resolve());
@@ -58,23 +57,14 @@ export function useLineupWorkspace({
   const lineupVisibleMemberPool = React.useMemo(() => {
     if (lineupMemberSource !== 'attendance' || !lineupMemberSourceSession) return memberPool;
 
-    const votedMemberIds = new Set(lineupMemberSourceSession.votes.map(vote => vote.memberId));
     const visibleMemberIds = new Set(
       lineupMemberSourceSession.votes
-        .filter(vote => vote.choice === 'GO' || vote.choice === 'MAYBE')
+        .filter(vote => vote.choice === 'GO')
         .map(vote => vote.memberId),
     );
 
-    if (lineupMemberSourceIncludeNotVoted) {
-      memberPool.forEach(member => {
-        if (member.active !== false && !votedMemberIds.has(member.id)) {
-          visibleMemberIds.add(member.id);
-        }
-      });
-    }
-
     return memberPool.filter(member => visibleMemberIds.has(member.id));
-  }, [lineupMemberSource, lineupMemberSourceIncludeNotVoted, lineupMemberSourceSession, memberPool]);
+  }, [lineupMemberSource, lineupMemberSourceSession, memberPool]);
 
   const refreshLineupLock = React.useCallback(async () => {
     if (!currentGuild || !permissions.includes('view:guild')) {
@@ -147,8 +137,8 @@ export function useLineupWorkspace({
     handleSquadGroupsChange(result.nextGroups);
     updateActiveTab('teams');
     void alert({
-      message: `Đã nhập ${result.importedMainCount} thành viên chính và ${result.importedReserveCount} dự bị. Bỏ qua ${result.skippedAlreadyAssignedCount} người đã có trong đội hình, ${result.overflowCount} người chưa có slot trống.`,
-      variant: result.importedMainCount || result.importedReserveCount ? 'success' : 'warning',
+      message: `Đã nhập ${result.importedCount} thành viên. Bỏ qua ${result.skippedAlreadyAssignedCount} người đã có trong đội hình, ${result.overflowCount} người chưa có slot trống.`,
+      variant: result.importedCount ? 'success' : 'warning',
     });
   }, [alert, canManageLineup, handleSquadGroupsChange, lineupLock?.isHeldByMe, squadGroups, updateActiveTab]);
 
@@ -196,7 +186,6 @@ export function useLineupWorkspace({
   const clearLineupWorkspaceUiState = React.useCallback(() => {
     setLineupMemberSource('guild');
     setLineupMemberSourceSessionState(null);
-    setLineupMemberSourceIncludeNotVoted(false);
   }, []);
 
   const setLineupMemberSourceSession = React.useCallback((session: AttendanceSession | null) => {
@@ -242,7 +231,6 @@ export function useLineupWorkspace({
     lineupMemberSource,
     lineupMemberSourceSessionId,
     lineupMemberSourceSession,
-    lineupMemberSourceIncludeNotVoted,
     refreshLineupLock,
     handleAcquireLineupLock,
     handleReleaseLineupLock,
@@ -255,7 +243,6 @@ export function useLineupWorkspace({
     clearLineupWorkspaceUiState,
     setLineupMemberSource,
     setLineupMemberSourceSession,
-    setLineupMemberSourceIncludeNotVoted,
     releaseHeldLineupLock,
   };
 }

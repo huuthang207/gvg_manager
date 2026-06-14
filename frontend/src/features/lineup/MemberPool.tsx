@@ -57,13 +57,11 @@ interface MemberPoolProps {
   lineupMemberSource: LineupMemberSource;
   lineupMemberSourceSessionId: string | null;
   lineupMemberSourceSession: AttendanceSession | null;
-  lineupMemberSourceIncludeNotVoted: boolean;
   attendanceSessions: AttendanceSession[];
   attendanceImportLoading: boolean;
   attendanceImportError: string;
   onSourceChange: (source: LineupMemberSource) => void;
   onSourceSessionChange: (sessionId: string) => void;
-  onIncludeNotVotedChange: (include: boolean) => void;
 }
 
 export const MemberPool: React.FC<MemberPoolProps> = ({
@@ -74,13 +72,11 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
   lineupMemberSource,
   lineupMemberSourceSessionId,
   lineupMemberSourceSession,
-  lineupMemberSourceIncludeNotVoted,
   attendanceSessions,
   attendanceImportLoading,
   attendanceImportError,
   onSourceChange,
   onSourceSessionChange,
-  onIncludeNotVotedChange,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState<ClassType | 'All'>('All');
@@ -218,16 +214,6 @@ export const MemberPool: React.FC<MemberPoolProps> = ({
                   </option>
                 ))}
               </select>
-              <label className="flex items-center gap-2 text-[11px] font-bold text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={lineupMemberSourceIncludeNotVoted}
-                  onChange={event => onIncludeNotVotedChange(event.target.checked)}
-                  disabled={!lineupMemberSourceSession}
-                  className="h-4 w-4 accent-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                Thêm người chưa điểm danh
-              </label>
               {attendanceImportLoading ? <div className="text-[11px] font-bold text-sky-300">Đang tải điểm danh...</div> : null}
               {attendanceImportError ? <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-200">{attendanceImportError}</div> : null}
             </div>
