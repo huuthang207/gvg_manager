@@ -18,7 +18,6 @@ interface MemberSlotProps {
   onRemoveSkillFromMember: (memberId: string, skillId: string) => void;
   readOnly?: boolean;
   snapshotSkillIds?: string[];
-  assignmentNote?: string;
 }
 
 export const MemberSlot: React.FC<MemberSlotProps> = ({ id, member, skills, isReserve, isLeader, onRemoveSkillFromMember, readOnly = false, snapshotSkillIds }) => {

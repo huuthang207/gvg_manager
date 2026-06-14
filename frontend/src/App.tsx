@@ -90,7 +90,6 @@ export default function App() {
     handleSquadGroupsChange,
     handleResetSquadGroups,
     handleSquadGroupLeaderChange,
-    handleMemberNoteChange,
     handleImportAttendanceToLineup,
     flushPendingSquadLayoutSave,
     clearLineupWorkspaceUiState,
@@ -399,7 +398,6 @@ export default function App() {
                 onAssignSkillToMember={handleAssignSkillToMember}
                 onSkillsChange={setSkills}
                 onRemoveSkillFromMember={handleRemoveSkillFromMember}
-                onMemberNoteChange={handleMemberNoteChange}
                 onImportAttendanceToLineup={handleImportAttendanceToLineup}
                 lineupMemberSource={lineupMemberSource}
                 lineupMemberSourceSessionId={lineupMemberSourceSessionId}
