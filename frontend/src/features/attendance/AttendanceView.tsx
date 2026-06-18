@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, ClipboardCheck, Hash, Play, RefreshCw, Save, Search, ShieldCheck, Square, Trash2, X, XCircle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ClipboardCheck, Hash, Play, RefreshCw, Save, Search, ShieldCheck, Square, Trash2, Users, X, XCircle } from 'lucide-react';
 import { CLASSES, CLASS_COLORS, CLASS_ICONS } from '../../constants.ts';
 import { cn } from '../../lib/utils.ts';
 import { deleteAttendanceHistorySession, getAttendanceHistory, getAttendanceSession, getGvgParticipationSessions } from '../../services/discordApi.ts';
@@ -108,39 +108,372 @@ function ClassSummary({ votes }: { votes: AttendanceVote[] }) {
   const maxCount = Math.max(...classCounts.map(([, count]) => count), 1);
 
   return (
-    <section className="app-surface rounded-2xl p-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <section className="rounded-3xl border border-slate-800/80 bg-slate-950/35 p-3.5">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-black text-slate-100">Cơ cấu phái</h3>
-          <p className="text-xs text-slate-500">Tổng hợp tất cả lựa chọn</p>
+          <p className="text-xs text-slate-500">Tổng hợp theo phản hồi hiện có</p>
         </div>
-        <span className="rounded-full border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-xs font-black text-slate-300">
-          Tổng {votes.length}
+        <span className="w-fit rounded-full border border-slate-700/80 bg-slate-900/70 px-2.5 py-1 text-[11px] font-black text-slate-300">
+          {votes.length} phản hồi
         </span>
       </div>
       {classCounts.length ? (
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="space-y-2">
           {classCounts.map(([classType, count]) => {
             const color = getClassColor(classType);
+            const width = Math.max((count / maxCount) * 100, 10);
             return (
-              <div key={classType} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-2">
-                <div className="flex items-center justify-between gap-3">
-                  <ClassBadge classType={classType} />
-                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs font-black text-white tabular-nums">{count}</span>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800/80">
-                  <div className="h-full rounded-full" style={{ width: `${Math.max((count / maxCount) * 100, 8)}%`, backgroundColor: color }} />
+              <div key={classType} className="rounded-2xl border border-slate-800/70 bg-slate-900/45 px-3 py-2.5">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-[0_0_140px] sm:flex-[0_0_160px]">
+                    <ClassBadge classType={classType} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-800/80">
+                      <div className="h-full rounded-full" style={{ width: `${width}%`, backgroundColor: color }} />
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-sm font-black tabular-nums text-slate-200">{count}</span>
                 </div>
               </div>
             );
           })}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-sm text-slate-500">
+        <div className="rounded-2xl border border-dashed border-slate-700/70 px-3 py-6 text-center text-sm text-slate-500">
           Chưa có vote nào.
         </div>
       )}
     </section>
+  );
+}
+
+function HistoryMetricCard({
+  label,
+  value,
+  helper,
+  className,
+}: {
+  label: string;
+  value: string | number;
+  helper?: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn('rounded-3xl border px-4 py-3 shadow-lg shadow-slate-950/15', className || 'border-slate-800/80 bg-slate-950/45')}>
+      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-2 text-2xl font-black tracking-tight text-white tabular-nums">{value}</div>
+      {helper ? <div className="mt-1 text-xs font-bold text-slate-400">{helper}</div> : null}
+    </div>
+  );
+}
+
+function SessionResponseSummary({
+  session,
+  totalActiveMembers,
+  notVotedCount,
+}: {
+  session: AttendanceSession;
+  totalActiveMembers: number;
+  notVotedCount: number;
+}) {
+  const respondedCount = session.votes.length;
+  const progressPercent = totalActiveMembers ? Math.min(100, Math.round((respondedCount / totalActiveMembers) * 100)) : 0;
+
+  return (
+    <section className="rounded-[28px] border border-sky-400/20 bg-gradient-to-br from-sky-500/10 via-slate-950/85 to-indigo-500/10 p-4 shadow-2xl shadow-slate-950/25">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0 xl:max-w-[420px]">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-sky-200/80">
+            <ClipboardCheck size={14} />
+            Snapshot phiên đã đóng
+          </div>
+          <h3 className="mt-3 text-lg font-black text-white sm:text-xl">Tình hình phản hồi của phiên này</h3>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Xem nhanh số người tham gia, không tham gia và những thành viên active vẫn chưa phản hồi để review lại phiên attendance đã đóng.
+          </p>
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs font-bold text-slate-400">
+              <span>{respondedCount}/{totalActiveMembers} thành viên đã phản hồi</span>
+              <span className="text-slate-200 tabular-nums">{progressPercent}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-800/80">
+              <div className="h-full rounded-full bg-gradient-to-r from-sky-400 via-cyan-300 to-emerald-400 transition-all" style={{ width: `${progressPercent}%` }} />
+            </div>
+          </div>
+        </div>
+        <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          <HistoryMetricCard label="Tham gia" value={session.summary.go} helper="Đã chọn GO" className="border-emerald-500/25 bg-emerald-500/10" />
+          <HistoryMetricCard label="Không tham gia" value={session.summary.nogo} helper="Đã chọn NOGO" className="border-red-500/25 bg-red-500/10" />
+          <HistoryMetricCard label="Chưa điểm danh" value={notVotedCount} helper="Active chưa phản hồi" className="border-amber-500/25 bg-amber-500/10" />
+          <HistoryMetricCard label="Tổng active" value={totalActiveMembers} helper="Dùng để tính tiến độ" className="border-slate-700/80 bg-slate-900/70" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SessionDetailsHeader({ session }: { session: AttendanceSession }) {
+  return (
+    <section className="rounded-3xl border border-slate-800/80 bg-slate-950/40 px-4 py-4 shadow-lg shadow-slate-950/15">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-slate-700/80 bg-slate-900/80 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-slate-300">
+              Lịch sử attendance
+            </span>
+            <span className="rounded-full border border-slate-700/80 bg-slate-950/80 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+              {session.status === 'CLOSED' ? 'Đã đóng' : session.status}
+            </span>
+          </div>
+          <h3 className="mt-3 text-xl font-black text-white sm:text-2xl">{session.headerText || 'Điểm danh Bang Chiến'}</h3>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-slate-400">
+            <span>Mở: {formatDate(session.openedAt)}</span>
+            <span>Đóng: {formatDate(session.closedAt)}</span>
+            <span>Cập nhật cuối: {formatDate(session.lastVoteAt || session.updatedAt)}</span>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 px-3 py-2">
+            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Lượt vote</div>
+            <div className="mt-1 text-sm font-black text-slate-100 tabular-nums">{session.votes.length}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 px-3 py-2">
+            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Snapshot</div>
+            <div className="mt-1 text-sm font-black text-slate-100">Đã lưu tên và phái tại thời điểm vote</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SessionDetailsToolbar({
+  searchTerm,
+  onSearchChange,
+  choiceFilter,
+  onChoiceFilterChange,
+  classFilter,
+  onClassFilterChange,
+  classOptions,
+}: {
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  choiceFilter: AttendanceChoice | 'ALL';
+  onChoiceFilterChange: (value: AttendanceChoice | 'ALL') => void;
+  classFilter: string;
+  onClassFilterChange: (value: string) => void;
+  classOptions: Array<[string, number]>;
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-800/80 bg-slate-950/45 p-3 shadow-lg shadow-slate-950/15">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+        <div className="relative flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            value={searchTerm}
+            onChange={event => onSearchChange(event.target.value)}
+            className="w-full rounded-2xl border border-slate-700/80 bg-slate-950/75 py-2.5 pl-9 pr-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-400/70"
+            placeholder="Tìm theo tên ingame hoặc Discord..."
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:w-[360px]">
+          <select
+            value={choiceFilter}
+            onChange={event => onChoiceFilterChange(event.target.value as AttendanceChoice | 'ALL')}
+            className="rounded-2xl border border-slate-700/80 bg-slate-950/75 px-3 py-2.5 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-400/70"
+          >
+            <option value="ALL">Tất cả lựa chọn</option>
+            <option value="GO">Tham gia</option>
+            <option value="NOGO">Không tham gia</option>
+          </select>
+          <select
+            value={classFilter}
+            onChange={event => onClassFilterChange(event.target.value)}
+            className="rounded-2xl border border-slate-700/80 bg-slate-950/75 px-3 py-2.5 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-400/70"
+          >
+            <option value="ALL">Tất cả phái</option>
+            {classOptions.map(([classType]) => <option key={classType} value={classType}>{classType}</option>)}
+          </select>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function VoteList({ votes, totalVotes }: { votes: AttendanceVote[]; totalVotes: number }) {
+  return (
+    <section className="rounded-3xl border border-slate-800/80 bg-slate-950/45 p-4 shadow-lg shadow-slate-950/15">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-black text-slate-100">Đã điểm danh</h3>
+          <p className="text-xs text-slate-500">Hiển thị {votes.length}/{totalVotes} phản hồi phù hợp với bộ lọc</p>
+        </div>
+        <span className="w-fit rounded-full border border-slate-700/80 bg-slate-900/80 px-2.5 py-1 text-xs font-black text-slate-300">
+          {votes.length} mục
+        </span>
+      </div>
+      {votes.length ? (
+        <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+          {votes.map(vote => (
+            <article key={vote.id} className="rounded-2xl border border-slate-800/80 bg-slate-900/55 px-3 py-3 transition-colors hover:border-slate-700/80 hover:bg-slate-900/80">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="truncate text-sm font-black text-slate-100">{getVoteName(vote)}</div>
+                    <ClassBadge classType={getVoteClass(vote)} />
+                  </div>
+                  <div className="mt-1 text-xs font-medium text-slate-500">{vote.member.username}</div>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                  <VoteChoiceBadge choice={vote.choice} />
+                  <span className="rounded-full border border-slate-700/80 bg-slate-950/80 px-2.5 py-1 text-[11px] font-bold text-slate-400">
+                    {formatDate(vote.updatedAt)}
+                  </span>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-slate-700/70 px-3 py-8 text-center text-sm text-slate-500">
+          Không có vote phù hợp với bộ lọc.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function NotVotedList({ members }: { members: Member[] }) {
+  return (
+    <section className="rounded-3xl border border-slate-800/80 bg-slate-950/45 p-4 shadow-lg shadow-slate-950/15">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-black text-slate-100">Chưa điểm danh</h3>
+          <p className="text-xs text-slate-500">Thành viên active chưa chọn Tham gia hoặc Không tham gia</p>
+        </div>
+        <span className="w-fit rounded-full border border-slate-700/80 bg-slate-900/80 px-2.5 py-1 text-xs font-black text-slate-300">
+          {members.length} người
+        </span>
+      </div>
+      {members.length ? (
+        <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+          {members.map(member => (
+            <article key={member.id} className="rounded-2xl border border-slate-800/80 bg-slate-900/55 px-3 py-3 transition-colors hover:border-slate-700/80 hover:bg-slate-900/80">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-black text-slate-100">{getMemberName(member)}</div>
+                  <div className="mt-1 text-xs font-medium text-slate-500">{member.discordUsername || member.name}</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-black text-amber-200">
+                    Chưa phản hồi
+                  </span>
+                  <ClassBadge classType={member.classType} />
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-emerald-500/30 bg-emerald-500/10 px-3 py-8 text-center text-sm font-bold text-emerald-200">
+          Tất cả thành viên active đã điểm danh.
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SessionReviewSections({ votes, totalVotes, notVotedMembers }: { votes: AttendanceVote[]; totalVotes: number; notVotedMembers: Member[] }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <VoteList votes={votes} totalVotes={totalVotes} />
+      <NotVotedList members={notVotedMembers} />
+    </div>
+  );
+}
+
+function AttendanceEmptyState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-slate-700/70 bg-slate-950/35 px-4 py-8 text-center">
+      <Users size={28} className="mx-auto mb-3 text-slate-500" />
+      <h3 className="text-base font-black text-white">{title}</h3>
+      <p className="mt-2 text-sm text-slate-400">{description}</p>
+    </div>
+  );
+}
+
+function LegacyVoteNotice({ hasLegacyVotes }: { hasLegacyVotes: boolean }) {
+  if (!hasLegacyVotes) return null;
+
+  return (
+    <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-100">
+      Phiên này có dữ liệu vote legacy. Giao diện vẫn ưu tiên hiển thị theo các trạng thái hiện hành `GO` / `NOGO` và nhóm chưa phản hồi.
+    </div>
+  );
+}
+
+function SessionDetailsPanel({ session, members }: { session: AttendanceSession; members: Member[] }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [choiceFilter, setChoiceFilter] = useState<AttendanceChoice | 'ALL'>('ALL');
+  const [classFilter, setClassFilter] = useState('ALL');
+  const sortedVotesByClass = useMemo(() => (
+    [...session.votes].sort((a, b) => {
+      const classCompare = getVoteClass(a).localeCompare(getVoteClass(b), 'vi');
+      if (classCompare !== 0) return classCompare;
+      return getVoteName(a).localeCompare(getVoteName(b), 'vi');
+    })
+  ), [session.votes]);
+  const activeMembers = useMemo(() => (
+    members.filter(member => member.active !== false)
+  ), [members]);
+  const notVotedMembers = useMemo(() => {
+    const votedMemberIds = new Set(session.votes.map(vote => vote.memberId));
+    return activeMembers
+      .filter(member => !votedMemberIds.has(member.id))
+      .sort((a, b) => {
+        const classCompare = a.classType.localeCompare(b.classType, 'vi');
+        if (classCompare !== 0) return classCompare;
+        return getMemberName(a).localeCompare(getMemberName(b), 'vi');
+      });
+  }, [activeMembers, session.votes]);
+  const classOptions = useMemo(() => sortClassEntries([...new Set(session.votes.map(getVoteClass))].map(classType => [classType, 0])), [session.votes]);
+  const filteredVotes = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return sortedVotesByClass.filter(vote => {
+      if (choiceFilter !== 'ALL' && vote.choice !== choiceFilter) return false;
+      if (classFilter !== 'ALL' && getVoteClass(vote) !== classFilter) return false;
+      if (!query) return true;
+      return [getVoteName(vote), vote.member.username, vote.member.displayName, vote.member.ingameName]
+        .filter(Boolean)
+        .some(value => value!.toLowerCase().includes(query));
+    });
+  }, [choiceFilter, classFilter, searchTerm, sortedVotesByClass]);
+  const totalActiveMembers = activeMembers.length;
+  const hasLegacyVotes = false;
+
+  return (
+    <div className="space-y-4">
+      <SessionDetailsHeader session={session} />
+      <LegacyVoteNotice hasLegacyVotes={hasLegacyVotes} />
+      <SessionResponseSummary session={session} totalActiveMembers={totalActiveMembers} notVotedCount={notVotedMembers.length} />
+      {session.votes.length ? <ClassSummary votes={sortedVotesByClass} /> : null}
+      <SessionDetailsToolbar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        choiceFilter={choiceFilter}
+        onChoiceFilterChange={setChoiceFilter}
+        classFilter={classFilter}
+        onClassFilterChange={setClassFilter}
+        classOptions={classOptions}
+      />
+      {session.votes.length || notVotedMembers.length ? (
+        <SessionReviewSections votes={filteredVotes} totalVotes={session.votes.length} notVotedMembers={notVotedMembers} />
+      ) : (
+        <AttendanceEmptyState title="Phiên này chưa có dữ liệu hiển thị" description="Không có phản hồi hoặc thành viên active nào cần review trong lịch sử attendance này." />
+      )}
+    </div>
   );
 }
 
@@ -151,52 +484,6 @@ function VoteChoiceBadge({ choice }: { choice: AttendanceChoice }) {
       {meta.icon}
       {meta.label}
     </span>
-  );
-}
-
-function VoteTable({ votes, totalVotes }: { votes: AttendanceVote[]; totalVotes: number }) {
-  return (
-    <section className="app-surface rounded-2xl p-4">
-      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-sm font-black text-slate-100">Danh sách điểm danh</h3>
-          <p className="text-xs text-slate-500">Hiển thị {votes.length}/{totalVotes} vote</p>
-        </div>
-      </div>
-      {votes.length ? (
-        <div className="max-h-[560px] overflow-auto rounded-xl border border-slate-800/80 custom-scrollbar">
-          <table className="min-w-full divide-y divide-slate-800/80 text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-950/95 text-xs uppercase tracking-wider text-slate-500 backdrop-blur">
-              <tr>
-                <th className="w-16 px-3 py-3 font-black">#</th>
-                <th className="min-w-[220px] px-3 py-3 font-black">Thành viên</th>
-                <th className="min-w-[140px] px-3 py-3 font-black">Phái</th>
-                <th className="min-w-[150px] px-3 py-3 font-black">Lựa chọn</th>
-                <th className="min-w-[170px] px-3 py-3 text-right font-black">Cập nhật</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 bg-slate-950/25">
-              {votes.map((vote, index) => (
-                <tr key={vote.id} className="transition-colors hover:bg-slate-900/70">
-                  <td className="px-3 py-3 font-mono text-xs font-black text-slate-500">#{index + 1}</td>
-                  <td className="px-3 py-3">
-                    <div className="font-bold text-slate-100">{getVoteName(vote)}</div>
-                    <div className="text-xs text-slate-500">{vote.member.username}</div>
-                  </td>
-                  <td className="px-3 py-3"><ClassBadge classType={getVoteClass(vote)} /></td>
-                  <td className="px-3 py-3"><VoteChoiceBadge choice={vote.choice} /></td>
-                  <td className="px-3 py-3 text-right text-xs font-medium text-slate-500">{formatDate(vote.updatedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-slate-700/70 px-3 py-8 text-center text-sm text-slate-500">
-          Không có vote phù hợp với bộ lọc.
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -327,51 +614,6 @@ function GvgHistoryDetailsPanel({ session, members }: { session: GvgParticipatio
   );
 }
 
-function NotVotedTable({ members }: { members: Member[] }) {
-  return (
-    <section className="app-surface rounded-2xl p-4">
-      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-sm font-black text-slate-100">Chưa điểm danh</h3>
-          <p className="text-xs text-slate-500">Thành viên active chưa chọn Tham gia hoặc Không tham gia</p>
-        </div>
-        <span className="w-fit rounded-full border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-xs font-black text-slate-300">
-          {members.length} người
-        </span>
-      </div>
-      {members.length ? (
-        <div className="max-h-[360px] overflow-auto rounded-xl border border-slate-800/80 custom-scrollbar">
-          <table className="min-w-full divide-y divide-slate-800/80 text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-950/95 text-xs uppercase tracking-wider text-slate-500 backdrop-blur">
-              <tr>
-                <th className="w-16 px-3 py-3 font-black">#</th>
-                <th className="min-w-[220px] px-3 py-3 font-black">Thành viên</th>
-                <th className="min-w-[140px] px-3 py-3 font-black">Phái</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 bg-slate-950/25">
-              {members.map((member, index) => (
-                <tr key={member.id} className="transition-colors hover:bg-slate-900/70">
-                  <td className="px-3 py-3 font-mono text-xs font-black text-slate-500">#{index + 1}</td>
-                  <td className="px-3 py-3">
-                    <div className="font-bold text-slate-100">{getMemberName(member)}</div>
-                    <div className="text-xs text-slate-500">{member.discordUsername || member.name}</div>
-                  </td>
-                  <td className="px-3 py-3"><ClassBadge classType={member.classType} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-emerald-500/30 bg-emerald-500/10 px-3 py-8 text-center text-sm font-bold text-emerald-200">
-          Tất cả thành viên active đã điểm danh.
-        </div>
-      )}
-    </section>
-  );
-}
-
 function SessionSummaryCard({
   session,
   channelName,
@@ -434,81 +676,6 @@ function SessionSummaryCard({
         </button>
       </div>
     </section>
-  );
-}
-
-function SessionDetailsPanel({ session, members }: { session: AttendanceSession; members: Member[] }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [choiceFilter, setChoiceFilter] = useState<AttendanceChoice | 'ALL'>('ALL');
-  const [classFilter, setClassFilter] = useState('ALL');
-  const sortedVotesByClass = useMemo(() => (
-    [...session.votes].sort((a, b) => {
-      const classCompare = getVoteClass(a).localeCompare(getVoteClass(b), 'vi');
-      if (classCompare !== 0) return classCompare;
-      return getVoteName(a).localeCompare(getVoteName(b), 'vi');
-    })
-  ), [session.votes]);
-  const notVotedMembers = useMemo(() => {
-    const votedMemberIds = new Set(session.votes.map(vote => vote.memberId));
-    return members
-      .filter(member => member.active !== false && !votedMemberIds.has(member.id))
-      .sort((a, b) => {
-        const classCompare = a.classType.localeCompare(b.classType, 'vi');
-        if (classCompare !== 0) return classCompare;
-        return getMemberName(a).localeCompare(getMemberName(b), 'vi');
-      });
-  }, [members, session.votes]);
-  const classOptions = useMemo(() => sortClassEntries([...new Set(session.votes.map(getVoteClass))].map(classType => [classType, 0])), [session.votes]);
-  const filteredVotes = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    return sortedVotesByClass.filter(vote => {
-      if (choiceFilter !== 'ALL' && vote.choice !== choiceFilter) return false;
-      if (classFilter !== 'ALL' && getVoteClass(vote) !== classFilter) return false;
-      if (!query) return true;
-      return [getVoteName(vote), vote.member.username, vote.member.displayName, vote.member.ingameName]
-        .filter(Boolean)
-        .some(value => value!.toLowerCase().includes(query));
-    });
-  }, [choiceFilter, classFilter, searchTerm, sortedVotesByClass]);
-
-  return (
-    <div className="space-y-4">
-      <ClassSummary votes={sortedVotesByClass} />
-      <section className="app-surface rounded-2xl p-3">
-        <div className="grid grid-cols-1 gap-2 xl:grid-cols-[1fr_170px_170px]">
-          <div className="relative">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              value={searchTerm}
-              onChange={event => setSearchTerm(event.target.value)}
-              className="w-full rounded-xl border border-slate-700/80 bg-slate-950/60 py-2 pl-9 pr-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-400/70"
-              placeholder="Tìm theo tên ingame hoặc Discord..."
-            />
-          </div>
-          <select
-            value={choiceFilter}
-            onChange={event => setChoiceFilter(event.target.value as AttendanceChoice | 'ALL')}
-            className="rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-400/70"
-          >
-            <option value="ALL">Tất cả lựa chọn</option>
-            <option value="GO">Tham gia</option>
-            <option value="NOGO">Không tham gia</option>
-          </select>
-          <select
-            value={classFilter}
-            onChange={event => setClassFilter(event.target.value)}
-            className="rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-sm font-bold text-slate-200 outline-none transition-colors focus:border-sky-400/70"
-          >
-            <option value="ALL">Tất cả phái</option>
-            {classOptions.map(([classType]) => <option key={classType} value={classType}>{classType}</option>)}
-          </select>
-        </div>
-      </section>
-      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_360px]">
-        <VoteTable votes={filteredVotes} totalVotes={session.votes.length} />
-        <NotVotedTable members={notVotedMembers} />
-      </div>
-    </div>
   );
 }
 
