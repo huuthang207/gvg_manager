@@ -5,6 +5,7 @@ import {
   castAttendanceVote,
   closeAttendanceSession,
   openAttendanceSession,
+  persistAttendanceVote,
   refreshAttendanceSession,
   setAttendanceChannel,
 } from './attendanceService.js';
@@ -63,6 +64,19 @@ function createSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function createVoteSnapshot(choice: 'GO' | 'NOGO') {
+  return {
+    id: 'vote-1',
+    memberId: member.id,
+    choice,
+    snapshotIngameName: member.ingameName,
+    snapshotClassType: member.classType,
+    votedAt: now,
+    updatedAt: now,
+    member,
+  };
+}
+
 function mockPrisma(model: keyof typeof prisma, methods: Record<string, unknown>) {
   const target = prisma[model] as unknown as Record<string, unknown>;
   Object.entries(methods).forEach(([name, fn]) => {
@@ -80,11 +94,17 @@ beforeEach(() => {
   });
   mockPrisma('attendanceSession', {
     findFirst: async () => null,
+    findUnique: async () => createSession({ lastVoteAt: now }),
     create: async () => createSession({ headerText: 'Bang chiến tối nay' }),
-    update: async () => createSession({ lastVoteAt: now }),
+    update: async () => ({
+      id: 'session-1',
+      guildId: guild.id,
+      discordChannelId: channelConfig.discordChannelId,
+      discordMessageId: '456789012345678901',
+    }),
   });
   mockPrisma('member', {
-    findFirst: async () => member,
+    findUnique: async () => member,
   });
   mockPrisma('attendanceVote', {
     upsert: async () => ({ id: 'vote-1' }),
@@ -166,22 +186,56 @@ describe('attendanceService', () => {
     assert.match(result.body.error, /Đang có một phiên điểm danh mở/);
   });
 
+  it('persists a vote and returns a minimal refresh target for the bot path', async () => {
+    let sessionUpdateArgs: any = null;
+    let voteUpsertArgs: any = null;
+    mockPrisma('attendanceSession', {
+      findFirst: async () => createSession(),
+      update: async (args: any) => {
+        sessionUpdateArgs = args;
+        return {
+          id: 'session-1',
+          guildId: guild.id,
+          discordChannelId: channelConfig.discordChannelId,
+          discordMessageId: '456789012345678901',
+        };
+      },
+    });
+    mockPrisma('attendanceVote', {
+      upsert: async (args: any) => {
+        voteUpsertArgs = args;
+        return { id: 'vote-1' };
+      },
+    });
+
+    const result = await persistAttendanceVote({
+      discordGuildId: guild.discordGuildId,
+      discordUserId: member.discordUserId,
+      sessionId: 'session-1',
+      choice: 'GO',
+    });
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(voteUpsertArgs.where, { sessionId_memberId: { sessionId: 'session-1', memberId: member.id } });
+    assert.equal(voteUpsertArgs.create.snapshotIngameName, member.ingameName);
+    assert.deepEqual(sessionUpdateArgs.where, { id: 'session-1' });
+    assert.equal(result.body.refreshTarget.sessionId, 'session-1');
+    assert.equal(result.body.refreshTarget.discordChannelId, channelConfig.discordChannelId);
+  });
+
   it('casts a vote using the member snapshot data', async () => {
     let voteUpsertArgs: any = null;
     mockPrisma('attendanceSession', {
       findFirst: async () => createSession(),
-      update: async () => createSession({
+      findUnique: async () => createSession({
         lastVoteAt: now,
-        votes: [{
-          id: 'vote-1',
-          memberId: member.id,
-          choice: 'GO',
-          snapshotIngameName: member.ingameName,
-          snapshotClassType: member.classType,
-          votedAt: now,
-          updatedAt: now,
-          member,
-        }],
+        votes: [createVoteSnapshot('GO')],
+      }),
+      update: async () => ({
+        id: 'session-1',
+        guildId: guild.id,
+        discordChannelId: channelConfig.discordChannelId,
+        discordMessageId: '456789012345678901',
       }),
     });
     mockPrisma('attendanceVote', {
@@ -209,18 +263,15 @@ describe('attendanceService', () => {
     let voteUpsertArgs: any = null;
     mockPrisma('attendanceSession', {
       findFirst: async () => createSession(),
-      update: async () => createSession({
+      findUnique: async () => createSession({
         lastVoteAt: now,
-        votes: [{
-          id: 'vote-1',
-          memberId: member.id,
-          choice: 'NOGO',
-          snapshotIngameName: member.ingameName,
-          snapshotClassType: member.classType,
-          votedAt: now,
-          updatedAt: now,
-          member,
-        }],
+        votes: [createVoteSnapshot('NOGO')],
+      }),
+      update: async () => ({
+        id: 'session-1',
+        guildId: guild.id,
+        discordChannelId: channelConfig.discordChannelId,
+        discordMessageId: '456789012345678901',
       }),
     });
     mockPrisma('attendanceVote', {
@@ -264,7 +315,13 @@ describe('attendanceService', () => {
       findFirst: async () => createSession(),
     });
     mockPrisma('member', {
-      findFirst: async () => ({ ...member, active: false }),
+      findUnique: async () => ({
+        id: member.id,
+        active: false,
+        ingameName: member.ingameName,
+        displayName: member.displayName,
+        classType: member.classType,
+      }),
     });
 
     const result = await castAttendanceVote({
@@ -288,7 +345,6 @@ describe('attendanceService', () => {
           status: 'CLOSED',
           closedByDiscordUserId: member.discordUserId,
           closedAt: now,
-          lastRenderedAt: now,
         });
       },
     });
@@ -318,12 +374,12 @@ describe('attendanceService', () => {
     assert.match(result.body.error, /Không có phiên điểm danh nào đang mở/);
   });
 
-  it('refreshes the active attendance session render timestamp', async () => {
-    let updateArgs: any = null;
+  it('returns the active attendance session for manual refresh without mutating render timestamp', async () => {
+    let updateCalled = false;
     mockPrisma('attendanceSession', {
-      findFirst: async () => createSession(),
-      update: async (args: any) => {
-        updateArgs = args;
+      findFirst: async () => createSession({ lastRenderedAt: now }),
+      update: async () => {
+        updateCalled = true;
         return createSession({ lastRenderedAt: now });
       },
     });
@@ -331,7 +387,8 @@ describe('attendanceService', () => {
     const result = await refreshAttendanceSession(guild.discordGuildId);
 
     assert.equal(result.status, 200);
-    assert.ok(result.body.session.lastRenderedAt);
-    assert.deepEqual(updateArgs.where, { id: 'session-1' });
+    assert.equal(result.body.session.id, 'session-1');
+    assert.equal(result.body.session.lastRenderedAt, now.toISOString());
+    assert.equal(updateCalled, false);
   });
 });

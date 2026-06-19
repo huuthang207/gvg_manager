@@ -15,6 +15,7 @@ import {
 } from '../services/attendanceService.js';
 import {
   editAttendanceDiscordMessage,
+  queueAttendanceDiscordMessageRefresh,
   sendAttendanceDiscordMessage,
 } from '../services/attendanceDiscordService.js';
 
@@ -200,7 +201,12 @@ export function createAttendanceRoutes() {
         return;
       }
 
-      await editAttendanceDiscordMessage(result.body.session.id, result.body.session.discordChannelId, result.body.session.discordMessageId, false);
+      const session = result.body.session;
+      const edited = await editAttendanceDiscordMessage(session.id, session.discordChannelId, session.discordMessageId, false);
+      if (!edited) {
+        res.status(404).json({ error: 'Không tìm thấy message Discord để refresh.' });
+        return;
+      }
 
       const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
       res.json(state);
@@ -235,7 +241,12 @@ export function createAttendanceRoutes() {
         return;
       }
 
-      await editAttendanceDiscordMessage(result.body.session.id, result.body.session.discordChannelId, result.body.session.discordMessageId, false);
+      queueAttendanceDiscordMessageRefresh({
+        sessionId: result.body.session.id,
+        discordChannelId: result.body.session.discordChannelId,
+        discordMessageId: result.body.session.discordMessageId,
+        closed: false,
+      });
 
       const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
       res.json(state);
