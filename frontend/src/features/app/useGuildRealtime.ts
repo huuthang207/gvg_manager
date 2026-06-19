@@ -60,6 +60,7 @@ interface UseGuildRealtimeParams {
 
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 30000];
 const SNAPSHOT_REASONS = new Set<RealtimeReason>(['snapshot_saved', 'snapshot_deleted', 'snapshot_restored']);
+const ATTENDANCE_REALTIME_DEBOUNCE_MS = 300;
 
 export function useGuildRealtime({
   isAuthenticated,
@@ -81,6 +82,8 @@ export function useGuildRealtime({
   const reconnectTimerRef = React.useRef<number | null>(null);
   const reconnectAttemptRef = React.useRef(0);
   const appStateRefreshRef = React.useRef(false);
+  const pendingAttendanceRefreshRef = React.useRef(false);
+  const attendanceRefreshTimerRef = React.useRef<number | null>(null);
 
   const logRealtime = React.useCallback((...args: unknown[]) => {
     if (!realtimeDebugEnabled) return;
@@ -94,10 +97,24 @@ export function useGuildRealtime({
     }
   }, []);
 
-  const refreshAppStateFromRealtime = React.useCallback(async () => {
-    if (appStateRefreshRef.current) return;
+  const clearAttendanceRefreshTimer = React.useCallback(() => {
+    if (attendanceRefreshTimerRef.current) {
+      window.clearTimeout(attendanceRefreshTimerRef.current);
+      attendanceRefreshTimerRef.current = null;
+    }
+  }, []);
+
+  const refreshAppStateFromRealtime = React.useCallback(async (reason: RealtimeReason | 'poll' = 'poll') => {
+    if (appStateRefreshRef.current) {
+      if (reason === 'attendance_updated') {
+        pendingAttendanceRefreshRef.current = true;
+        logRealtime('[WS] Coalesced attendance refresh while request is in flight');
+      }
+      return;
+    }
     appStateRefreshRef.current = true;
     try {
+      logRealtime('[WS] Refreshing app state from realtime', reason);
       const state = await getAppState();
       await applyAppState(state);
       const hasGuildAccess = !!state.guild && (state.permissions ?? []).includes('view:guild');
@@ -106,8 +123,29 @@ export function useGuildRealtime({
     } catch {
     } finally {
       appStateRefreshRef.current = false;
+      if (pendingAttendanceRefreshRef.current) {
+        pendingAttendanceRefreshRef.current = false;
+        logRealtime('[WS] Running queued attendance refresh after in-flight request');
+        void refreshAppStateFromRealtime('attendance_updated');
+      }
     }
-  }, [applyAppState, setBlockedReason, setIsAuthorized]);
+  }, [applyAppState, logRealtime, setBlockedReason, setIsAuthorized]);
+
+  const scheduleAttendanceRefresh = React.useCallback(() => {
+    pendingAttendanceRefreshRef.current = true;
+    if (attendanceRefreshTimerRef.current) {
+      logRealtime('[WS] Coalesced attendance refresh within debounce window');
+      return;
+    }
+
+    attendanceRefreshTimerRef.current = window.setTimeout(() => {
+      attendanceRefreshTimerRef.current = null;
+      if (!pendingAttendanceRefreshRef.current) return;
+      pendingAttendanceRefreshRef.current = false;
+      void refreshAppStateFromRealtime('attendance_updated');
+    }, ATTENDANCE_REALTIME_DEBOUNCE_MS);
+    logRealtime('[WS] Scheduled attendance refresh', ATTENDANCE_REALTIME_DEBOUNCE_MS);
+  }, [logRealtime, refreshAppStateFromRealtime]);
 
   const subscribeCurrentGuild = React.useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !currentGuild) return;
@@ -151,7 +189,11 @@ export function useGuildRealtime({
         }
 
         if (payload.type === 'guild_app_state_changed') {
-          void refreshAppStateFromRealtime();
+          if (payload.reason === 'attendance_updated') {
+            scheduleAttendanceRefresh();
+          } else {
+            void refreshAppStateFromRealtime(payload.reason ?? 'poll');
+          }
           if (payload.reason && SNAPSHOT_REASONS.has(payload.reason)) {
             void refreshSnapshots();
           }
@@ -186,15 +228,17 @@ export function useGuildRealtime({
         connectWebSocket();
       }, delay);
     };
-  }, [isAuthenticated, isAuthorized, currentGuild, logRealtime, subscribeCurrentGuild, mergeMemberDelta, setLastSyncedAt, refreshAppStateFromRealtime, refreshSnapshots, refreshLineupLock, refreshGvgParticipationStats, replaceMemberPool, clearReconnectTimer]);
+  }, [isAuthenticated, isAuthorized, currentGuild, logRealtime, subscribeCurrentGuild, mergeMemberDelta, setLastSyncedAt, scheduleAttendanceRefresh, refreshAppStateFromRealtime, refreshSnapshots, refreshLineupLock, refreshGvgParticipationStats, replaceMemberPool, clearReconnectTimer]);
 
   const closeRealtimeConnection = React.useCallback(() => {
     clearReconnectTimer();
+    clearAttendanceRefreshTimer();
+    pendingAttendanceRefreshRef.current = false;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
-  }, [clearReconnectTimer]);
+  }, [clearAttendanceRefreshTimer, clearReconnectTimer]);
 
   React.useEffect(() => {
     const refreshAppState = async () => {
@@ -233,15 +277,18 @@ export function useGuildRealtime({
     if (!isAuthenticated || !isAuthorized) {
       reconnectAttemptRef.current = 0;
       clearReconnectTimer();
+      clearAttendanceRefreshTimer();
+      pendingAttendanceRefreshRef.current = false;
     }
-  }, [isAuthenticated, isAuthorized, clearReconnectTimer]);
+  }, [isAuthenticated, isAuthorized, clearAttendanceRefreshTimer, clearReconnectTimer]);
 
   React.useEffect(() => {
     return () => {
+      clearAttendanceRefreshTimer();
       clearReconnectTimer();
       closeRealtimeConnection();
     };
-  }, [clearReconnectTimer, closeRealtimeConnection]);
+  }, [clearAttendanceRefreshTimer, clearReconnectTimer, closeRealtimeConnection]);
 
   return { closeRealtimeConnection };
 }

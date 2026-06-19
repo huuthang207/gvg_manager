@@ -7,9 +7,9 @@ import type { AttendanceChoice } from '@prisma/client';
 import { prisma } from './db.js';
 import { hasPermission } from './permissions.js';
 import {
-  castAttendanceVote,
   closeAttendanceSession,
   openAttendanceSession,
+  persistAttendanceVote,
   refreshAttendanceSession,
   setAttendanceChannel,
 } from './services/attendanceService.js';
@@ -17,9 +17,21 @@ import {
   buildAttendanceButtons,
   editAttendanceDiscordMessage,
   parseAttendanceButtonCustomId,
+  queueAttendanceDiscordMessageRefresh,
   sendAttendanceDiscordMessage,
   setAttendanceDiscordClient,
 } from './services/attendanceDiscordService.js';
+
+const attendanceInteractionDebugEnabled = process.env.DISCORD_ATTENDANCE_DEBUG === 'true' || process.env.DISCORD_REALTIME_DEBUG === 'true';
+
+function logAttendanceInteraction(message: string, details?: Record<string, unknown>) {
+  if (!attendanceInteractionDebugEnabled) return;
+  if (details) {
+    console.log(`[Discord Bot][Attendance] ${message}`, details);
+    return;
+  }
+  console.log(`[Discord Bot][Attendance] ${message}`);
+}
 
 export const setAttendanceChannelCommand = new SlashCommandBuilder()
   .setName('setchannel')
@@ -173,19 +185,32 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
     return true;
   }
 
+  const interactionStartedAt = Date.now();
+
   try {
     await interaction.deferReply({ ephemeral: true });
+    logAttendanceInteraction('Deferred attendance button interaction', {
+      sessionId: parsed.sessionId,
+      discordUserId: interaction.user.id,
+      deferMs: Date.now() - interactionStartedAt,
+    });
   } catch (err) {
     console.warn('[Discord Bot] Attendance button defer failed:', err instanceof Error ? err.message : err);
     return true;
   }
 
-  const result = await castAttendanceVote({
+  const voteStartedAt = Date.now();
+  const result = await persistAttendanceVote({
     discordGuildId: interaction.guildId,
     discordUserId: interaction.user.id,
     sessionId: parsed.sessionId,
     choice: parsed.choice,
     discordMessageId: interaction.message.id,
+  });
+  logAttendanceInteraction('Attendance vote persistence completed', {
+    sessionId: parsed.sessionId,
+    discordUserId: interaction.user.id,
+    voteMs: Date.now() - voteStartedAt,
   });
 
   if (result.status !== 200) {
@@ -199,9 +224,21 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
   await interaction.editReply({ content: `Đã ghi nhận lựa chọn: ${label}.` }).catch(err => {
     console.warn('[Discord Bot] Attendance button success reply failed:', err instanceof Error ? err.message : err);
   });
-
-  editAttendanceDiscordMessage(result.body.session.id, result.body.session.discordChannelId, result.body.session.discordMessageId, false).catch(err => {
-    console.warn('[Discord Bot] Attendance message refresh failed:', err instanceof Error ? err.message : err);
+  logAttendanceInteraction('Attendance button interaction acknowledged', {
+    sessionId: parsed.sessionId,
+    discordUserId: interaction.user.id,
+    totalMs: Date.now() - interactionStartedAt,
   });
+
+  const queued = queueAttendanceDiscordMessageRefresh({
+    sessionId: result.body.refreshTarget.sessionId,
+    discordChannelId: result.body.refreshTarget.discordChannelId,
+    discordMessageId: result.body.refreshTarget.discordMessageId,
+    closed: false,
+  });
+
+  if (!queued) {
+    console.warn('[Discord Bot] Attendance message refresh skipped: missing channel or message id');
+  }
   return true;
 }

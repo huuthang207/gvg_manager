@@ -11,8 +11,31 @@ import {
 import { fetchDiscordChannel, setDiscordClient } from './discordClientService.js';
 
 const ATTENDANCE_BUTTON_PREFIX = 'attendance';
+const attendanceRefreshDebugEnabled = process.env.DISCORD_ATTENDANCE_DEBUG === 'true' || process.env.DISCORD_REALTIME_DEBUG === 'true';
+const attendanceRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const attendanceRefreshRunning = new Set<string>();
+const attendanceRefreshPending = new Map<string, {
+  channelId: string | null;
+  messageId: string | null;
+  closed: boolean;
+  queuedAt: number;
+}>();
 
 export const setAttendanceDiscordClient = setDiscordClient;
+
+function getAttendanceRefreshDebounceMs() {
+  const parsed = Number(process.env.DISCORD_ATTENDANCE_REFRESH_DEBOUNCE_MS ?? 400);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 400;
+}
+
+function logAttendanceRefresh(message: string, details?: Record<string, unknown>) {
+  if (!attendanceRefreshDebugEnabled) return;
+  if (details) {
+    console.log(`[Attendance Refresh] ${message}`, details);
+    return;
+  }
+  console.log(`[Attendance Refresh] ${message}`);
+}
 
 export function buildAttendanceButtons(sessionId: string, disabled = false) {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -40,6 +63,7 @@ export function parseAttendanceButtonCustomId(customId: string) {
 export async function sendAttendanceDiscordMessage(sessionId: string, channelId: string | null) {
   if (!channelId) return false;
 
+  const renderStartedAt = Date.now();
   const renderResult = await getAttendanceRenderPayload(sessionId);
   if (renderResult.status !== 200) return false;
 
@@ -51,25 +75,133 @@ export async function sendAttendanceDiscordMessage(sessionId: string, channelId:
     components: [buildAttendanceButtons(sessionId)],
   });
   await attachAttendanceMessage({ sessionId, discordMessageId: message.id });
+  logAttendanceRefresh('Sent attendance message', {
+    sessionId,
+    channelId,
+    messageId: message.id,
+    elapsedMs: Date.now() - renderStartedAt,
+  });
   return true;
 }
 
 export async function editAttendanceDiscordMessage(sessionId: string, channelId: string | null, messageId: string | null, closed = false) {
   if (!channelId || !messageId) return false;
 
+  const refreshStartedAt = Date.now();
+  const renderStartedAt = Date.now();
   const renderResult = await getAttendanceRenderPayload(sessionId);
   if (renderResult.status !== 200) return false;
 
+  const channelFetchStartedAt = Date.now();
   const channel = await fetchDiscordChannel(channelId);
   if (!channel || !channel.isTextBased()) return false;
 
+  const messageFetchStartedAt = Date.now();
   const message = await channel.messages.fetch(messageId).catch(() => null);
   if (!message) return false;
 
+  const editStartedAt = Date.now();
   await message.edit({
     content: renderResult.body.content,
     components: [buildAttendanceButtons(sessionId, closed)],
   });
   await markAttendanceRendered(sessionId);
+
+  logAttendanceRefresh('Edited attendance message', {
+    sessionId,
+    channelId,
+    messageId,
+    closed,
+    renderMs: channelFetchStartedAt - renderStartedAt,
+    channelFetchMs: messageFetchStartedAt - channelFetchStartedAt,
+    messageFetchMs: editStartedAt - messageFetchStartedAt,
+    messageEditMs: Date.now() - editStartedAt,
+    totalMs: Date.now() - refreshStartedAt,
+    contentLength: renderResult.body.content.length,
+  });
+
+  return true;
+}
+
+async function runQueuedAttendanceDiscordRefresh(sessionId: string) {
+  if (attendanceRefreshRunning.has(sessionId)) return;
+
+  const pending = attendanceRefreshPending.get(sessionId);
+  if (!pending) return;
+
+  attendanceRefreshPending.delete(sessionId);
+  attendanceRefreshRunning.add(sessionId);
+
+  try {
+    const refreshed = await editAttendanceDiscordMessage(sessionId, pending.channelId, pending.messageId, pending.closed);
+    logAttendanceRefresh('Completed queued refresh', {
+      sessionId,
+      refreshed,
+      queueWaitMs: Date.now() - pending.queuedAt,
+    });
+  } catch (err) {
+    logAttendanceRefresh('Queued refresh failed', {
+      sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  } finally {
+    attendanceRefreshRunning.delete(sessionId);
+    if (attendanceRefreshPending.has(sessionId)) {
+      logAttendanceRefresh('Scheduling pending rerun', { sessionId });
+      queueAttendanceDiscordMessageRefresh({
+        sessionId,
+        discordChannelId: attendanceRefreshPending.get(sessionId)?.channelId ?? null,
+        discordMessageId: attendanceRefreshPending.get(sessionId)?.messageId ?? null,
+        closed: attendanceRefreshPending.get(sessionId)?.closed ?? false,
+        delayMs: 0,
+      });
+    }
+  }
+}
+
+export function queueAttendanceDiscordMessageRefresh(input: {
+  sessionId: string;
+  discordChannelId: string | null;
+  discordMessageId: string | null;
+  closed?: boolean;
+  delayMs?: number;
+}) {
+  if (!input.discordChannelId || !input.discordMessageId) return false;
+
+  attendanceRefreshPending.set(input.sessionId, {
+    channelId: input.discordChannelId,
+    messageId: input.discordMessageId,
+    closed: input.closed ?? false,
+    queuedAt: Date.now(),
+  });
+
+  if (attendanceRefreshRunning.has(input.sessionId)) {
+    logAttendanceRefresh('Coalesced refresh while active', {
+      sessionId: input.sessionId,
+      closed: input.closed ?? false,
+    });
+    return true;
+  }
+
+  const currentTimer = attendanceRefreshTimers.get(input.sessionId);
+  if (currentTimer) {
+    clearTimeout(currentTimer);
+  }
+
+  const delayMs = Math.max(0, input.delayMs ?? getAttendanceRefreshDebounceMs());
+  const timer = setTimeout(() => {
+    attendanceRefreshTimers.delete(input.sessionId);
+    void runQueuedAttendanceDiscordRefresh(input.sessionId).catch(err => {
+      console.warn('[Attendance Refresh] Queued refresh failed:', err instanceof Error ? err.message : err);
+    });
+  }, delayMs);
+
+  attendanceRefreshTimers.set(input.sessionId, timer);
+  logAttendanceRefresh('Queued attendance refresh', {
+    sessionId: input.sessionId,
+    closed: input.closed ?? false,
+    delayMs,
+  });
   return true;
 }

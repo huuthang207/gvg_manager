@@ -16,12 +16,117 @@ const attendanceSessionInclude = {
   },
 };
 
+const attendanceVoteDebugEnabled = process.env.DISCORD_ATTENDANCE_DEBUG === 'true' || process.env.DISCORD_REALTIME_DEBUG === 'true';
+
+function logAttendanceVoteDebug(message: string, details?: Record<string, unknown>) {
+  if (!attendanceVoteDebugEnabled) return;
+  if (details) {
+    console.log(`[Attendance Vote] ${message}`, details);
+    return;
+  }
+  console.log(`[Attendance Vote] ${message}`);
+}
+
+export type AttendanceRefreshTarget = {
+  guildId: string;
+  sessionId: string;
+  discordChannelId: string | null;
+  discordMessageId: string | null;
+};
+
 async function findGuildByDiscordId(discordGuildId: string) {
   return prisma.guild.findUnique({ where: { discordGuildId } });
 }
 
 function isDiscordSnowflake(value: string) {
   return /^\d{17,20}$/.test(value);
+}
+
+async function findAttendanceVoteSession(input: {
+  guildId: string;
+  sessionId: string;
+  discordMessageId?: string | null;
+}) {
+  return prisma.attendanceSession.findFirst({
+    where: {
+      guildId: input.guildId,
+      status: 'OPEN',
+      OR: [
+        { id: input.sessionId },
+        ...(input.discordMessageId ? [{ discordMessageId: input.discordMessageId }] : []),
+      ],
+    },
+    select: {
+      id: true,
+      guildId: true,
+      discordChannelId: true,
+      discordMessageId: true,
+    },
+  });
+}
+
+async function resolveAttendanceVoteContext(input: {
+  discordGuildId: string;
+  discordUserId: string;
+  sessionId: string;
+  discordMessageId?: string | null;
+}) {
+  const startedAt = Date.now();
+  const guild = await findGuildByDiscordId(input.discordGuildId);
+
+  if (!guild) {
+    return { status: 404 as const, body: { error: 'Server Discord chưa được import vào hệ thống.' } };
+  }
+
+  const session = await findAttendanceVoteSession({
+    guildId: guild.id,
+    sessionId: input.sessionId,
+    discordMessageId: input.discordMessageId,
+  });
+
+  if (!session) {
+    return { status: 404 as const, body: { error: 'Phiên điểm danh không tồn tại hoặc đã đóng.' } };
+  }
+
+  const member = await prisma.member.findUnique({
+    where: {
+      guildId_discordUserId: {
+        guildId: guild.id,
+        discordUserId: input.discordUserId,
+      },
+    },
+    select: {
+      id: true,
+      active: true,
+      ingameName: true,
+      displayName: true,
+      classType: true,
+    },
+  });
+
+  if (!member) {
+    return { status: 404 as const, body: { error: 'Thành viên chưa được import hoặc đồng bộ vào hệ thống.' } };
+  }
+
+  if (!member.active) {
+    return { status: 403 as const, body: { error: 'Thành viên không hoạt động không thể điểm danh.' } };
+  }
+
+  logAttendanceVoteDebug('Resolved attendance vote context', {
+    guildId: guild.id,
+    sessionId: session.id,
+    discordUserId: input.discordUserId,
+    elapsedMs: Date.now() - startedAt,
+  });
+
+  return {
+    status: 200 as const,
+    body: {
+      guild,
+      session,
+      member,
+    },
+  };
 }
 
 export async function setAttendanceChannel(discordGuildId: string, discordChannelId: string) {
@@ -157,8 +262,6 @@ export async function attachAttendanceMessage(input: {
     include: attendanceSessionInclude,
   });
 
-  publishGuildAppStateChanged({ guildId: session.guildId, reason: 'attendance_updated' });
-
   return { status: 200 as const, body: { session: serializeAttendanceSession(session) } };
 }
 
@@ -187,7 +290,6 @@ export async function closeAttendanceSession(input: {
       status: 'CLOSED',
       closedAt: new Date(),
       closedByDiscordUserId: input.closedByDiscordUserId,
-      lastRenderedAt: new Date(),
     },
     include: attendanceSessionInclude,
   });
@@ -197,48 +299,19 @@ export async function closeAttendanceSession(input: {
   return { status: 200 as const, body: { session: serializeAttendanceSession(updatedSession) } };
 }
 
-export async function castAttendanceVote(input: {
+export async function persistAttendanceVote(input: {
   discordGuildId: string;
   discordUserId: string;
   sessionId: string;
   choice: AttendanceChoice;
   discordMessageId?: string | null;
 }) {
-  const guild = await findGuildByDiscordId(input.discordGuildId);
+  const startedAt = Date.now();
+  const contextResult = await resolveAttendanceVoteContext(input);
+  if (contextResult.status !== 200) return contextResult;
 
-  if (!guild) {
-    return { status: 404 as const, body: { error: 'Server Discord chưa được import vào hệ thống.' } };
-  }
-
-  const session = await prisma.attendanceSession.findFirst({
-    where: {
-      guildId: guild.id,
-      status: 'OPEN',
-      OR: [
-        { id: input.sessionId },
-        ...(input.discordMessageId ? [{ discordMessageId: input.discordMessageId }] : []),
-      ],
-    },
-  });
-
-  if (!session) {
-    return { status: 404 as const, body: { error: 'Phiên điểm danh không tồn tại hoặc đã đóng.' } };
-  }
-
-  const member = await prisma.member.findFirst({
-    where: {
-      guildId: guild.id,
-      discordUserId: input.discordUserId,
-    },
-  });
-
-  if (!member) {
-    return { status: 404 as const, body: { error: 'Thành viên chưa được import hoặc đồng bộ vào hệ thống.' } };
-  }
-
-  if (!member.active) {
-    return { status: 403 as const, body: { error: 'Thành viên không hoạt động không thể điểm danh.' } };
-  }
+  const { guild, session, member } = contextResult.body;
+  const voteStartedAt = Date.now();
 
   await prisma.attendanceVote.upsert({
     where: {
@@ -261,15 +334,61 @@ export async function castAttendanceVote(input: {
     },
   });
 
-  const updatedSession = await prisma.attendanceSession.update({
+  const refreshTarget = await prisma.attendanceSession.update({
     where: { id: session.id },
     data: { lastVoteAt: new Date() },
-    include: attendanceSessionInclude,
+    select: {
+      id: true,
+      guildId: true,
+      discordChannelId: true,
+      discordMessageId: true,
+    },
   });
 
   publishGuildAppStateChanged({ guildId: guild.id, reason: 'attendance_updated' });
 
-  return { status: 200 as const, body: { session: serializeAttendanceSession(updatedSession) } };
+  logAttendanceVoteDebug('Persisted attendance vote', {
+    guildId: guild.id,
+    sessionId: session.id,
+    discordUserId: input.discordUserId,
+    choice: input.choice,
+    voteMs: Date.now() - voteStartedAt,
+    totalMs: Date.now() - startedAt,
+  });
+
+  return {
+    status: 200 as const,
+    body: {
+      refreshTarget: {
+        guildId: refreshTarget.guildId,
+        sessionId: refreshTarget.id,
+        discordChannelId: refreshTarget.discordChannelId,
+        discordMessageId: refreshTarget.discordMessageId,
+      } satisfies AttendanceRefreshTarget,
+    },
+  };
+}
+
+export async function castAttendanceVote(input: {
+  discordGuildId: string;
+  discordUserId: string;
+  sessionId: string;
+  choice: AttendanceChoice;
+  discordMessageId?: string | null;
+}) {
+  const persistResult = await persistAttendanceVote(input);
+  if (persistResult.status !== 200) return persistResult;
+
+  const session = await prisma.attendanceSession.findUnique({
+    where: { id: persistResult.body.refreshTarget.sessionId },
+    include: attendanceSessionInclude,
+  });
+
+  if (!session) {
+    return { status: 404 as const, body: { error: 'Phiên điểm danh không tồn tại hoặc đã đóng.' } };
+  }
+
+  return { status: 200 as const, body: { session: serializeAttendanceSession(session) } };
 }
 
 export async function refreshAttendanceSession(discordGuildId: string) {
@@ -289,15 +408,7 @@ export async function refreshAttendanceSession(discordGuildId: string) {
     return { status: 404 as const, body: { error: 'Không có phiên điểm danh nào đang mở.' } };
   }
 
-  const updatedSession = await prisma.attendanceSession.update({
-    where: { id: session.id },
-    data: { lastRenderedAt: new Date() },
-    include: attendanceSessionInclude,
-  });
-
-  publishGuildAppStateChanged({ guildId: guild.id, reason: 'attendance_updated' });
-
-  return { status: 200 as const, body: { session: serializeAttendanceSession(updatedSession) } };
+  return { status: 200 as const, body: { session: serializeAttendanceSession(session) } };
 }
 
 export async function listAttendanceSessions(discordGuildId: string, take = 20, offset = 0) {
