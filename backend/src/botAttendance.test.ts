@@ -19,6 +19,8 @@ function createButtonInteraction(overrides: Record<string, unknown> = {}) {
   let replyContent: string | null = null;
 
   const interaction: Record<string, unknown> = {
+    id: 'interaction-1',
+    channelId: 'channel-1',
     customId: 'attendance:GO:session-1',
     guildId: '123456789012345678',
     user: { id: '345678901234567890' },
@@ -151,4 +153,48 @@ test('returns an error reply when the persisted attendance vote is rejected', as
   assert.equal(handled, true);
   assert.equal(interaction.replyState, true);
   assert.match(interaction.replyContent ?? '', /chưa được import hoặc đồng bộ/i);
+});
+
+test('stops processing safely when deferReply fails with unknown interaction', async () => {
+  let voteUpsertCalled = false;
+  const interaction = createButtonInteraction({
+    deferReply: async () => {
+      const error = new Error('Unknown interaction') as Error & { code?: number };
+      error.code = 10062;
+      throw error;
+    },
+  });
+
+  mockPrisma('guild', {
+    findUnique: async () => ({ id: 'guild-1', discordGuildId: interaction.guildId }),
+  });
+  mockPrisma('attendanceSession', {
+    findFirst: async () => ({
+      id: 'session-1',
+      guildId: 'guild-1',
+      discordChannelId: '234567890123456789',
+      discordMessageId: interaction.message.id,
+    }),
+  });
+  mockPrisma('member', {
+    findUnique: async () => ({
+      id: 'member-1',
+      active: true,
+      ingameName: 'Ingame Name',
+      displayName: 'Discord Name',
+      classType: 'Tố Vấn',
+    }),
+  });
+  mockPrisma('attendanceVote', {
+    upsert: async () => {
+      voteUpsertCalled = true;
+      return { id: 'vote-1' };
+    },
+  });
+
+  const handled = await handleAttendanceInteraction(interaction);
+
+  assert.equal(handled, true);
+  assert.equal(voteUpsertCalled, false);
+  assert.equal(interaction.replyState, false);
 });

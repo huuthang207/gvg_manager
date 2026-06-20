@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, MessageFlags, REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { prisma } from './db.js';
 import { attendanceCommand, handleAttendanceInteraction, setAttendanceChannelCommand } from './botAttendance.js';
 import { setAttendanceDiscordClient } from './services/attendanceDiscordService.js';
@@ -8,6 +8,18 @@ import { queueGuildSync } from './services/syncService.js';
 const realtimeDebugEnabled = process.env.DISCORD_REALTIME_DEBUG === 'true';
 const recentQueuedGuilds = new Map<string, number>();
 const BANG_VIEN_ROLE_NAME = 'Bang Viên';
+
+function getBotInstanceIdentity() {
+  return {
+    instanceId: process.env.INSTANCE_ID || process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || 'local',
+    hostname: process.env.HOSTNAME || 'unknown',
+    pid: process.pid,
+  };
+}
+
+function isDiscordBotEnabled() {
+  return process.env.DISCORD_BOT_ENABLED !== 'false';
+}
 
 function logRealtime(message: string) {
   if (!realtimeDebugEnabled) return;
@@ -41,6 +53,21 @@ export async function startDiscordBot() {
   const token = process.env.DISCORD_BOT_TOKEN;
   const clientId = process.env.DISCORD_CLIENT_ID;
   const guildId = process.env.FIXED_GUILD_DISCORD_ID;
+  const botEnabled = isDiscordBotEnabled();
+  const instanceIdentity = getBotInstanceIdentity();
+
+  console.log('[Discord Bot] Startup configuration', {
+    ...instanceIdentity,
+    botEnabled,
+    hasToken: !!token,
+    hasClientId: !!clientId,
+    hasGuildId: !!guildId,
+  });
+
+  if (!botEnabled) {
+    console.log('[Discord Bot] Startup skipped because DISCORD_BOT_ENABLED=false', instanceIdentity);
+    return;
+  }
 
   if (!token || !clientId || !guildId) {
     console.log('[Discord Bot] Slash command disabled: DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID, or FIXED_GUILD_DISCORD_ID missing');
@@ -58,7 +85,7 @@ export async function startDiscordBot() {
   setAttendanceDiscordClient(client);
 
   client.once('ready', () => {
-    console.log(`[Discord Bot] Logged in as ${client.user?.tag}`);
+    console.log(`[Discord Bot] Logged in as ${client.user?.tag}`, instanceIdentity);
   });
 
   client.on('guildMemberAdd', member => {
@@ -94,7 +121,6 @@ export async function startDiscordBot() {
     }
   });
 
-
   client.on('error', err => {
     console.error('[Discord Bot] Client error:', err?.message || err);
   });
@@ -119,20 +145,20 @@ export async function startDiscordBot() {
     if (!interaction.isChatInputCommand() || interaction.commandName !== 'setname') return;
 
     if (!interaction.guildId) {
-      await interaction.reply({ content: 'Lệnh này chỉ dùng được trong Discord server.', ephemeral: true });
+      await interaction.reply({ content: 'Lệnh này chỉ dùng được trong Discord server.', flags: MessageFlags.Ephemeral });
       return;
     }
 
     const guildMember = await interaction.guild?.members.fetch(interaction.user.id);
     const hasBangVienRole = guildMember?.roles.cache.some(role => role.name === BANG_VIEN_ROLE_NAME) ?? false;
     if (!hasBangVienRole) {
-      await interaction.reply({ content: `Chỉ thành viên có role ${BANG_VIEN_ROLE_NAME} mới được dùng lệnh này.`, ephemeral: true });
+      await interaction.reply({ content: `Chỉ thành viên có role ${BANG_VIEN_ROLE_NAME} mới được dùng lệnh này.`, flags: MessageFlags.Ephemeral });
       return;
     }
 
     const ingameName = validateIngameName(interaction.options.getString('ten_ingame', true));
     if (!ingameName) {
-      await interaction.reply({ content: 'Tên ingame không hợp lệ. Vui lòng nhập từ 1-32 ký tự và không xuống dòng.', ephemeral: true });
+      await interaction.reply({ content: 'Tên ingame không hợp lệ. Vui lòng nhập từ 1-32 ký tự và không xuống dòng.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -145,7 +171,7 @@ export async function startDiscordBot() {
     });
 
     if (!member) {
-      await interaction.reply({ content: 'Bạn chưa được import hoặc đồng bộ vào hệ thống GvG. Vui lòng liên hệ quản lý để đồng bộ Discord trước.', ephemeral: true });
+      await interaction.reply({ content: 'Bạn chưa được import hoặc đồng bộ vào hệ thống GvG. Vui lòng liên hệ quản lý để đồng bộ Discord trước.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -156,7 +182,7 @@ export async function startDiscordBot() {
 
     publishGuildAppStateChanged({ guildId: member.guildId, reason: 'member_updated' });
 
-    await interaction.reply({ content: `Đã cập nhật tên ingame của bạn thành: ${ingameName}`, ephemeral: true });
+    await interaction.reply({ content: `Đã cập nhật tên ingame của bạn thành: ${ingameName}`, flags: MessageFlags.Ephemeral });
   });
 
   await client.login(token);

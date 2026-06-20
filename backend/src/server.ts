@@ -61,6 +61,7 @@ server.listen(PORT, () => {
   console.log('[GvG Backend] WebSocket endpoint available at /ws');
   console.log(`[GvG Backend] Bot token: ${process.env.DISCORD_BOT_TOKEN ? '✓ configured' : '✗ NOT SET'}`);
   console.log(`[GvG Backend] OAuth2 Client ID: ${process.env.DISCORD_CLIENT_ID ? '✓ configured' : '✗ NOT SET'}`);
+  console.log(`[GvG Backend] Discord bot enabled: ${process.env.DISCORD_BOT_ENABLED !== 'false' ? 'true' : 'false'}`);
 
   startDiscordBot().catch(err => {
     console.error('[Discord Bot] Failed to start:', err.message);

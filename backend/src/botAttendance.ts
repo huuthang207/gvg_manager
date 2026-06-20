@@ -1,6 +1,7 @@
 import {
   ChatInputCommandInteraction,
   Interaction,
+  MessageFlags,
   SlashCommandBuilder,
 } from 'discord.js';
 import type { AttendanceChoice } from '@prisma/client';
@@ -14,7 +15,6 @@ import {
   setAttendanceChannel,
 } from './services/attendanceService.js';
 import {
-  buildAttendanceButtons,
   editAttendanceDiscordMessage,
   parseAttendanceButtonCustomId,
   queueAttendanceDiscordMessageRefresh,
@@ -23,6 +23,22 @@ import {
 } from './services/attendanceDiscordService.js';
 
 const attendanceInteractionDebugEnabled = process.env.DISCORD_ATTENDANCE_DEBUG === 'true' || process.env.DISCORD_REALTIME_DEBUG === 'true';
+
+function getBotInstanceIdentity() {
+  return {
+    instanceId: process.env.INSTANCE_ID || process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || 'local',
+    hostname: process.env.HOSTNAME || 'unknown',
+    pid: process.pid,
+  };
+}
+
+function getErrorCode(err: unknown) {
+  return typeof err === 'object' && err !== null && 'code' in err ? (err as { code?: unknown }).code ?? null : null;
+}
+
+function getErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err);
+}
 
 function logAttendanceInteraction(message: string, details?: Record<string, unknown>) {
   if (!attendanceInteractionDebugEnabled) return;
@@ -57,21 +73,21 @@ export const attendanceCommand = new SlashCommandBuilder()
 
 async function requireAttendanceManager(interaction: ChatInputCommandInteraction) {
   if (!interaction.guildId) {
-    await interaction.reply({ content: 'Lệnh này chỉ dùng được trong Discord server.', ephemeral: true });
+    await interaction.reply({ content: 'Lệnh này chỉ dùng được trong Discord server.', flags: MessageFlags.Ephemeral });
     return null;
   }
 
   const guild = await prisma.guild.findUnique({ where: { discordGuildId: interaction.guildId } });
 
   if (!guild) {
-    await interaction.reply({ content: 'Server Discord này chưa được import vào GvG Manager.', ephemeral: true });
+    await interaction.reply({ content: 'Server Discord này chưa được import vào GvG Manager.', flags: MessageFlags.Ephemeral });
     return null;
   }
 
   const user = await prisma.user.findUnique({ where: { discordUserId: interaction.user.id } });
 
   if (!user) {
-    await interaction.reply({ content: 'Bạn chưa đăng nhập GvG Manager bằng Discord nên chưa có quyền quản lý điểm danh.', ephemeral: true });
+    await interaction.reply({ content: 'Bạn chưa đăng nhập GvG Manager bằng Discord nên chưa có quyền quản lý điểm danh.', flags: MessageFlags.Ephemeral });
     return null;
   }
 
@@ -81,7 +97,7 @@ async function requireAttendanceManager(interaction: ChatInputCommandInteraction
   const role = guild.ownerUserId === user.id ? 'owner' : membership?.role === 'owner' || membership?.role === 'manager' || membership?.role === 'member' ? membership.role : null;
 
   if (!hasPermission(role, 'manage:lineup')) {
-    await interaction.reply({ content: 'Bạn không có quyền quản lý điểm danh trong GvG Manager.', ephemeral: true });
+    await interaction.reply({ content: 'Bạn không có quyền quản lý điểm danh trong GvG Manager.', flags: MessageFlags.Ephemeral });
     return null;
   }
 
@@ -94,7 +110,7 @@ async function replyServiceError(interaction: ChatInputCommandInteraction, resul
     await interaction.editReply({ content });
     return;
   }
-  await interaction.reply({ content, ephemeral: true });
+  await interaction.reply({ content, flags: MessageFlags.Ephemeral });
 }
 
 export async function handleAttendanceInteraction(interaction: Interaction) {
@@ -109,7 +125,7 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
         return true;
       }
 
-      await interaction.reply({ content: 'Đã đặt kênh hiện tại làm kênh điểm danh Bang Chiến.', ephemeral: true });
+      await interaction.reply({ content: 'Đã đặt kênh hiện tại làm kênh điểm danh Bang Chiến.', flags: MessageFlags.Ephemeral });
       return true;
     }
 
@@ -121,7 +137,7 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === 'open') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const result = await openAttendanceSession({
         discordGuildId: interaction.guildId,
         openedByDiscordUserId: interaction.user.id,
@@ -140,7 +156,7 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
     }
 
     if (subcommand === 'close') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const result = await closeAttendanceSession({
         discordGuildId: interaction.guildId,
         closedByDiscordUserId: interaction.user.id,
@@ -158,7 +174,7 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
     }
 
     if (subcommand === 'refresh') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const result = await refreshAttendanceSession(interaction.guildId);
 
       if (result.status !== 200) {
@@ -181,21 +197,37 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
   if (!parsed) return false;
 
   if (!interaction.guildId) {
-    await interaction.reply({ content: 'Nút điểm danh chỉ dùng được trong Discord server.', ephemeral: true });
+    await interaction.reply({ content: 'Nút điểm danh chỉ dùng được trong Discord server.', flags: MessageFlags.Ephemeral });
     return true;
   }
 
   const interactionStartedAt = Date.now();
+  const interactionContext = {
+    ...getBotInstanceIdentity(),
+    interactionId: interaction.id,
+    customId: interaction.customId,
+    sessionId: parsed.sessionId,
+    discordUserId: interaction.user.id,
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+  };
+
+  logAttendanceInteraction('Received attendance button interaction', interactionContext);
 
   try {
-    await interaction.deferReply({ ephemeral: true });
+    logAttendanceInteraction('Attempting to defer attendance button interaction', interactionContext);
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     logAttendanceInteraction('Deferred attendance button interaction', {
-      sessionId: parsed.sessionId,
-      discordUserId: interaction.user.id,
+      ...interactionContext,
       deferMs: Date.now() - interactionStartedAt,
     });
   } catch (err) {
-    console.warn('[Discord Bot] Attendance button defer failed:', err instanceof Error ? err.message : err);
+    console.warn('[Discord Bot] Attendance button defer failed:', {
+      ...interactionContext,
+      elapsedMs: Date.now() - interactionStartedAt,
+      errorCode: getErrorCode(err),
+      errorMessage: getErrorMessage(err),
+    });
     return true;
   }
 
@@ -208,25 +240,31 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
     discordMessageId: interaction.message.id,
   });
   logAttendanceInteraction('Attendance vote persistence completed', {
-    sessionId: parsed.sessionId,
-    discordUserId: interaction.user.id,
+    ...interactionContext,
     voteMs: Date.now() - voteStartedAt,
   });
 
   if (result.status !== 200) {
     await interaction.editReply({ content: result.body.error || 'Không thể ghi nhận điểm danh.' }).catch(err => {
-      console.warn('[Discord Bot] Attendance button error reply failed:', err instanceof Error ? err.message : err);
+      console.warn('[Discord Bot] Attendance button error reply failed:', {
+        ...interactionContext,
+        errorCode: getErrorCode(err),
+        errorMessage: getErrorMessage(err),
+      });
     });
     return true;
   }
 
   const label = parsed.choice === 'GO' ? 'Tham gia' : 'Không tham gia';
   await interaction.editReply({ content: `Đã ghi nhận lựa chọn: ${label}.` }).catch(err => {
-    console.warn('[Discord Bot] Attendance button success reply failed:', err instanceof Error ? err.message : err);
+    console.warn('[Discord Bot] Attendance button success reply failed:', {
+      ...interactionContext,
+      errorCode: getErrorCode(err),
+      errorMessage: getErrorMessage(err),
+    });
   });
   logAttendanceInteraction('Attendance button interaction acknowledged', {
-    sessionId: parsed.sessionId,
-    discordUserId: interaction.user.id,
+    ...interactionContext,
     totalMs: Date.now() - interactionStartedAt,
   });
 
@@ -238,7 +276,7 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
   });
 
   if (!queued) {
-    console.warn('[Discord Bot] Attendance message refresh skipped: missing channel or message id');
+    console.warn('[Discord Bot] Attendance message refresh skipped: missing channel or message id', interactionContext);
   }
   return true;
 }

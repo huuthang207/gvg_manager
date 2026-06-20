@@ -35,6 +35,7 @@ Docker workflow local đọc các file env cục bộ sau, được tạo từ `
 
 Các giá trị này ưu tiên local container workflow. Nếu cần OAuth hoặc Discord bot đầy đủ, hãy cập nhật các biến sau trong `backend/.env.docker`:
 - `DISCORD_BOT_TOKEN`
+- `DISCORD_BOT_ENABLED`
 - `DISCORD_CLIENT_ID`
 - `DISCORD_CLIENT_SECRET`
 - `FIXED_GUILD_DISCORD_ID`
@@ -78,6 +79,8 @@ Backend đã hỗ trợ `PORT` động qua `process.env.PORT`. Với deployment-
 - cung cấp các Discord/OAuth secrets cần thiết
 - chạy `npm run prisma:migrate:deploy` ở release step hoặc trước startup theo workflow của bạn
 - giữ `RUN_DB_MIGRATIONS=false` nếu không muốn migration tự chạy mỗi lần container start
+- chỉ đúng **một** replica/service nên để `DISCORD_BOT_ENABLED=true`
+- các replica API bổ sung hoặc service phụ nên để `DISCORD_BOT_ENABLED=false` để tránh nhiều instance cùng consume Discord interactions
 
 ### Frontend on Railway
 
