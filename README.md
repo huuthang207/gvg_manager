@@ -48,6 +48,7 @@ Local Compose bao gồm PostgreSQL container để stack có thể chạy end-to
 Backend container dùng các nguyên tắc sau:
 - `npx prisma generate` được chạy trong container lifecycle
 - local Compose đặt `RUN_DB_MIGRATIONS=true`, nên backend sẽ chạy `npm run prisma:migrate:deploy` trước khi start
+- nếu không set `RUN_DB_MIGRATIONS`, production runtime (`NODE_ENV=production`) sẽ tự chạy `npm run prisma:migrate:deploy` trước khi start
 - nếu cần reset dữ liệu local, có thể xóa volume Docker tương ứng
 
 ### 5. Development vs deployment-oriented runtime
@@ -77,10 +78,30 @@ Recommended layout:
 Backend đã hỗ trợ `PORT` động qua `process.env.PORT`. Với deployment-oriented runtime:
 - cung cấp `DATABASE_URL`
 - cung cấp các Discord/OAuth secrets cần thiết
-- chạy `npm run prisma:migrate:deploy` ở release step hoặc trước startup theo workflow của bạn
-- giữ `RUN_DB_MIGRATIONS=false` nếu không muốn migration tự chạy mỗi lần container start
+- backend container production hiện mặc định chạy `npm run prisma:migrate:deploy` trước khi start nếu bạn không override `RUN_DB_MIGRATIONS`
+- nếu muốn tắt behavior đó, set `RUN_DB_MIGRATIONS=false` rõ ràng
+- nếu bạn dùng release step riêng cho migration, có thể vẫn giữ release step đó và để `RUN_DB_MIGRATIONS=false` ở runtime để tránh chạy lặp lại
 - chỉ đúng **một** replica/service nên để `DISCORD_BOT_ENABLED=true`
 - các replica API bổ sung hoặc service phụ nên để `DISCORD_BOT_ENABLED=false` để tránh nhiều instance cùng consume Discord interactions
+
+Khuyến nghị tối thiểu trên Railway cho backend service:
+- `NODE_ENV=production`
+- `RUN_DB_MIGRATIONS=true` (hoặc bỏ trống để dùng mặc định production hiện tại)
+- `DISCORD_BOT_ENABLED=true` chỉ trên đúng một service xử lý bot
+- mọi service/replica khác dùng cùng codebase nhưng không xử lý bot nên set `DISCORD_BOT_ENABLED=false`
+- nếu scale backend > 1 replica, chỉ một replica nên được phép xử lý Discord interactions
+
+Nếu bạn vừa deploy code mới có schema mới như `AttendanceVoteJob`, hãy chắc rằng migration đã được áp dụng trước khi worker chạy; nếu không bạn sẽ gặp lỗi `The table public.AttendanceVoteJob does not exist`.
+
+Ví dụ start flow an toàn trên Railway:
+- release step: `npm --prefix backend run prisma:migrate:deploy`
+- runtime/start: dùng backend Docker image hoặc `npm --prefix backend start`
+- hoặc chỉ dùng runtime Docker image với `RUN_DB_MIGRATIONS=true`
+
+Để tránh race với Discord bot:
+- local, staging, production không nên dùng chung bot token nếu cùng online
+- nếu bắt buộc dùng chung token, chỉ được có đúng một môi trường bật bot tại một thời điểm
+- tốt nhất dùng bot token riêng cho từng môi trường
 
 ### Frontend on Railway
 
