@@ -30,6 +30,13 @@ enum AttendanceSessionStatus {
   CANCELLED
 }
 
+enum AttendanceVoteJobStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
 model User {
   id            String   @id @default(cuid())
   discordUserId String   @unique
@@ -163,11 +170,38 @@ model AttendanceSession {
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
 
-  guild Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  votes AttendanceVote[]
+  guild    Guild                @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  votes    AttendanceVote[]
+  voteJobs AttendanceVoteJob[]
 
   @@index([guildId, status])
   @@index([guildId, openedAt])
+}
+
+model AttendanceVoteJob {
+  id               String                  @id @default(cuid())
+  sessionId        String
+  guildId          String
+  discordGuildId   String
+  discordUserId    String
+  discordMessageId String?
+  choice           AttendanceChoice
+  status           AttendanceVoteJobStatus @default(PENDING)
+  attempts         Int                     @default(0)
+  availableAt      DateTime                @default(now())
+  lockedAt         DateTime?
+  lockedBy         String?
+  processedAt      DateTime?
+  lastError        String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, discordUserId])
+  @@index([status, availableAt, createdAt])
+  @@index([sessionId, status, createdAt])
+  @@index([guildId, status, availableAt])
 }
 
 model AttendanceVote {

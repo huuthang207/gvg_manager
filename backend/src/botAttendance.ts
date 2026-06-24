@@ -1,4 +1,5 @@
 import {
+  ButtonInteraction,
   ChatInputCommandInteraction,
   Interaction,
   MessageFlags,
@@ -10,17 +11,16 @@ import { hasPermission } from './permissions.js';
 import {
   closeAttendanceSession,
   openAttendanceSession,
-  persistAttendanceVote,
   refreshAttendanceSession,
   setAttendanceChannel,
 } from './services/attendanceService.js';
 import {
   editAttendanceDiscordMessage,
   parseAttendanceButtonCustomId,
-  queueAttendanceDiscordMessageRefresh,
   sendAttendanceDiscordMessage,
   setAttendanceDiscordClient,
 } from './services/attendanceDiscordService.js';
+import { enqueueAttendanceVoteJob } from './services/attendanceVoteQueueService.js';
 
 const attendanceInteractionDebugEnabled = process.env.DISCORD_ATTENDANCE_DEBUG === 'true' || process.env.DISCORD_REALTIME_DEBUG === 'true';
 
@@ -111,6 +111,62 @@ async function replyServiceError(interaction: ChatInputCommandInteraction, resul
     return;
   }
   await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+}
+
+async function acknowledgeAttendanceButtonInteraction(interaction: ButtonInteraction, interactionContext: Record<string, unknown>, interactionStartedAt: number) {
+  try {
+    logAttendanceInteraction('Attempting to acknowledge attendance button interaction', {
+      ...interactionContext,
+      ackType: 'deferUpdate',
+    });
+    await interaction.deferUpdate();
+    logAttendanceInteraction('Acknowledged attendance button interaction', {
+      ...interactionContext,
+      ackType: 'deferUpdate',
+      ackMs: Date.now() - interactionStartedAt,
+    });
+    return true;
+  } catch (err) {
+    console.warn('[Discord Bot] Attendance button acknowledge failed:', {
+      ...interactionContext,
+      ackType: 'deferUpdate',
+      elapsedMs: Date.now() - interactionStartedAt,
+      errorCode: getErrorCode(err),
+      errorMessage: getErrorMessage(err),
+    });
+    return false;
+  }
+}
+
+async function sendAttendanceButtonFeedback(interaction: ButtonInteraction, input: {
+  content: string;
+  feedbackType: 'success' | 'error';
+  interactionContext: Record<string, unknown>;
+  interactionStartedAt: number;
+}) {
+  const feedbackStartedAt = Date.now();
+
+  try {
+    await interaction.followUp({
+      content: input.content,
+      flags: MessageFlags.Ephemeral,
+    });
+    logAttendanceInteraction('Sent attendance button follow-up', {
+      ...input.interactionContext,
+      feedbackType: input.feedbackType,
+      feedbackMs: Date.now() - feedbackStartedAt,
+      totalMs: Date.now() - input.interactionStartedAt,
+    });
+  } catch (err) {
+    console.warn('[Discord Bot] Attendance button follow-up failed:', {
+      ...input.interactionContext,
+      feedbackType: input.feedbackType,
+      feedbackMs: Date.now() - feedbackStartedAt,
+      totalMs: Date.now() - input.interactionStartedAt,
+      errorCode: getErrorCode(err),
+      errorMessage: getErrorMessage(err),
+    });
+  }
 }
 
 export async function handleAttendanceInteraction(interaction: Interaction) {
@@ -214,69 +270,62 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
 
   logAttendanceInteraction('Received attendance button interaction', interactionContext);
 
+  const acknowledged = await acknowledgeAttendanceButtonInteraction(interaction, interactionContext, interactionStartedAt);
+  if (!acknowledged) {
+    return true;
+  }
+
+  const enqueueStartedAt = Date.now();
+  let enqueueResult: Awaited<ReturnType<typeof enqueueAttendanceVoteJob>>;
+
   try {
-    logAttendanceInteraction('Attempting to defer attendance button interaction', interactionContext);
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    logAttendanceInteraction('Deferred attendance button interaction', {
-      ...interactionContext,
-      deferMs: Date.now() - interactionStartedAt,
+    enqueueResult = await enqueueAttendanceVoteJob({
+      sessionId: parsed.sessionId,
+      discordGuildId: interaction.guildId,
+      discordUserId: interaction.user.id,
+      choice: parsed.choice,
+      discordMessageId: interaction.message.id,
     });
   } catch (err) {
-    console.warn('[Discord Bot] Attendance button defer failed:', {
+    console.warn('[Discord Bot] Attendance vote enqueue failed:', {
       ...interactionContext,
-      elapsedMs: Date.now() - interactionStartedAt,
+      enqueueMs: Date.now() - enqueueStartedAt,
+      totalMs: Date.now() - interactionStartedAt,
       errorCode: getErrorCode(err),
       errorMessage: getErrorMessage(err),
+    });
+    await sendAttendanceButtonFeedback(interaction, {
+      content: 'Không thể xếp hàng xử lý điểm danh lúc này. Vui lòng thử lại sau.',
+      feedbackType: 'error',
+      interactionContext,
+      interactionStartedAt,
     });
     return true;
   }
 
-  const voteStartedAt = Date.now();
-  const result = await persistAttendanceVote({
-    discordGuildId: interaction.guildId,
-    discordUserId: interaction.user.id,
-    sessionId: parsed.sessionId,
-    choice: parsed.choice,
-    discordMessageId: interaction.message.id,
-  });
-  logAttendanceInteraction('Attendance vote persistence completed', {
+  logAttendanceInteraction('Attendance vote job enqueue completed', {
     ...interactionContext,
-    voteMs: Date.now() - voteStartedAt,
+    enqueueMs: Date.now() - enqueueStartedAt,
+    enqueueStatus: enqueueResult.status,
+    totalMsToQueue: Date.now() - interactionStartedAt,
   });
 
-  if (result.status !== 200) {
-    await interaction.editReply({ content: result.body.error || 'Không thể ghi nhận điểm danh.' }).catch(err => {
-      console.warn('[Discord Bot] Attendance button error reply failed:', {
-        ...interactionContext,
-        errorCode: getErrorCode(err),
-        errorMessage: getErrorMessage(err),
-      });
+  if (enqueueResult.status !== 202) {
+    await sendAttendanceButtonFeedback(interaction, {
+      content: enqueueResult.body.error || 'Không thể xếp hàng xử lý điểm danh lúc này. Vui lòng thử lại sau.',
+      feedbackType: 'error',
+      interactionContext,
+      interactionStartedAt,
     });
     return true;
   }
 
   const label = parsed.choice === 'GO' ? 'Tham gia' : 'Không tham gia';
-  await interaction.editReply({ content: `Đã ghi nhận lựa chọn: ${label}.` }).catch(err => {
-    console.warn('[Discord Bot] Attendance button success reply failed:', {
-      ...interactionContext,
-      errorCode: getErrorCode(err),
-      errorMessage: getErrorMessage(err),
-    });
+  await sendAttendanceButtonFeedback(interaction, {
+    content: `Đã nhận lựa chọn: ${label}. Đang cập nhật điểm danh.`,
+    feedbackType: 'success',
+    interactionContext,
+    interactionStartedAt,
   });
-  logAttendanceInteraction('Attendance button interaction acknowledged', {
-    ...interactionContext,
-    totalMs: Date.now() - interactionStartedAt,
-  });
-
-  const queued = queueAttendanceDiscordMessageRefresh({
-    sessionId: result.body.refreshTarget.sessionId,
-    discordChannelId: result.body.refreshTarget.discordChannelId,
-    discordMessageId: result.body.refreshTarget.discordMessageId,
-    closed: false,
-  });
-
-  if (!queued) {
-    console.warn('[Discord Bot] Attendance message refresh skipped: missing channel or message id', interactionContext);
-  }
   return true;
 }
