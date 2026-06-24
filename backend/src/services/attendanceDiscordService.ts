@@ -19,6 +19,8 @@ const attendanceRefreshPending = new Map<string, {
   messageId: string | null;
   closed: boolean;
   queuedAt: number;
+  reason: 'vote' | 'close' | 'manual_refresh' | 'unknown';
+  interactionId: string | null;
 }>();
 
 export const setAttendanceDiscordClient = setDiscordClient;
@@ -137,23 +139,33 @@ async function runQueuedAttendanceDiscordRefresh(sessionId: string) {
     logAttendanceRefresh('Completed queued refresh', {
       sessionId,
       refreshed,
+      reason: pending.reason,
+      interactionId: pending.interactionId,
       queueWaitMs: Date.now() - pending.queuedAt,
     });
   } catch (err) {
     logAttendanceRefresh('Queued refresh failed', {
       sessionId,
+      reason: pending.reason,
+      interactionId: pending.interactionId,
       error: err instanceof Error ? err.message : String(err),
     });
     throw err;
   } finally {
     attendanceRefreshRunning.delete(sessionId);
     if (attendanceRefreshPending.has(sessionId)) {
-      logAttendanceRefresh('Scheduling pending rerun', { sessionId });
+      logAttendanceRefresh('Scheduling pending rerun', {
+        sessionId,
+        reason: attendanceRefreshPending.get(sessionId)?.reason ?? 'unknown',
+        interactionId: attendanceRefreshPending.get(sessionId)?.interactionId ?? null,
+      });
       queueAttendanceDiscordMessageRefresh({
         sessionId,
         discordChannelId: attendanceRefreshPending.get(sessionId)?.channelId ?? null,
         discordMessageId: attendanceRefreshPending.get(sessionId)?.messageId ?? null,
         closed: attendanceRefreshPending.get(sessionId)?.closed ?? false,
+        reason: attendanceRefreshPending.get(sessionId)?.reason ?? 'unknown',
+        interactionId: attendanceRefreshPending.get(sessionId)?.interactionId ?? null,
         delayMs: 0,
       });
     }
@@ -165,21 +177,29 @@ export function queueAttendanceDiscordMessageRefresh(input: {
   discordChannelId: string | null;
   discordMessageId: string | null;
   closed?: boolean;
+  reason?: 'vote' | 'close' | 'manual_refresh' | 'unknown';
+  interactionId?: string | null;
   delayMs?: number;
 }) {
   if (!input.discordChannelId || !input.discordMessageId) return false;
 
+  const queuedAt = Date.now();
   attendanceRefreshPending.set(input.sessionId, {
     channelId: input.discordChannelId,
     messageId: input.discordMessageId,
     closed: input.closed ?? false,
-    queuedAt: Date.now(),
+    queuedAt,
+    reason: input.reason ?? 'unknown',
+    interactionId: input.interactionId ?? null,
   });
 
   if (attendanceRefreshRunning.has(input.sessionId)) {
     logAttendanceRefresh('Coalesced refresh while active', {
       sessionId: input.sessionId,
       closed: input.closed ?? false,
+      reason: input.reason ?? 'unknown',
+      interactionId: input.interactionId ?? null,
+      queuedAt,
     });
     return true;
   }
@@ -201,7 +221,11 @@ export function queueAttendanceDiscordMessageRefresh(input: {
   logAttendanceRefresh('Queued attendance refresh', {
     sessionId: input.sessionId,
     closed: input.closed ?? false,
+    reason: input.reason ?? 'unknown',
+    interactionId: input.interactionId ?? null,
     delayMs,
+    queuedAt,
+    replacedExistingTimer: Boolean(currentTimer),
   });
   return true;
 }

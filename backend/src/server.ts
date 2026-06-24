@@ -15,6 +15,7 @@ import { createAttendanceRoutes } from './routes/attendanceRoutes.js';
 import { createGvgParticipationRoutes } from './routes/gvgParticipationRoutes.js';
 import { syncAllPersistedGuilds } from './services/syncService.js';
 import { attachRealtimeGateway } from './services/realtimeGateway.js';
+import { startAttendanceVoteWorker } from './services/attendanceVoteQueueService.js';
 import { deleteExpiredSessions } from './session.js';
 
 dotenv.config();
@@ -89,4 +90,6 @@ server.listen(PORT, () => {
       console.error('[Discord Sync] Fallback sync failed:', err?.message || err);
     });
   }, Math.max(60000, fallbackIntervalMs));
+
+  startAttendanceVoteWorker();
 });
