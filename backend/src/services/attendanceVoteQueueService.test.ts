@@ -28,6 +28,7 @@ function createJob(overrides: Record<string, unknown> = {}) {
     discordGuildId: '123456789012345678',
     discordUserId: '345678901234567890',
     discordMessageId: '456789012345678901',
+    type: 'GVG',
     choice: 'GO',
     status: 'PENDING',
     attempts: 0,

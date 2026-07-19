@@ -54,7 +54,7 @@ function isRetryableAttendanceVoteResult(result: { status: number }) {
 
 export async function enqueueAttendanceVoteJob(input: {
   sessionId: string;
-  type: AttendanceType;
+  type?: AttendanceType;
   discordGuildId: string;
   discordUserId: string;
   choice: AttendanceChoice;
@@ -74,7 +74,8 @@ export async function enqueueAttendanceVoteJob(input: {
     },
   });
 
-  if (!session || session.guild.discordGuildId !== input.discordGuildId || session.type !== input.type) {
+  const type = input.type ?? session?.type ?? 'GVG';
+  if (!session || session.guild.discordGuildId !== input.discordGuildId || session.type !== type) {
     return { status: 404 as const, body: { error: 'Phiên điểm danh không tồn tại, không thuộc server Discord hiện tại, hoặc sai loại.' } };
   }
 
@@ -90,7 +91,7 @@ export async function enqueueAttendanceVoteJob(input: {
       discordGuildId: input.discordGuildId,
       guildId: session.guildId,
       discordMessageId: input.discordMessageId ?? null,
-      type: input.type,
+      type,
       choice: input.choice,
       status: AttendanceVoteJobStatus.PENDING,
       availableAt: now,
@@ -105,7 +106,7 @@ export async function enqueueAttendanceVoteJob(input: {
       discordGuildId: input.discordGuildId,
       discordUserId: input.discordUserId,
       discordMessageId: input.discordMessageId ?? null,
-      type: input.type,
+      type,
       choice: input.choice,
       status: AttendanceVoteJobStatus.PENDING,
       availableAt: now,
