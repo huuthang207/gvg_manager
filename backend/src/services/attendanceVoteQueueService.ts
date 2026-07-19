@@ -74,9 +74,10 @@ export async function enqueueAttendanceVoteJob(input: {
     },
   });
 
-  const type = input.type ?? session?.type ?? 'GVG';
-  if (!session || session.guild.discordGuildId !== input.discordGuildId || session.type !== type) {
-    return { status: 404 as const, body: { error: 'Phiên điểm danh không tồn tại, không thuộc server Discord hiện tại, hoặc sai loại.' } };
+  const sessionType = session?.type ?? 'GVG';
+  const type = input.type ?? sessionType;
+  if (!session || session.guild.discordGuildId !== input.discordGuildId || sessionType !== type) {
+    return { status: 404 as const, body: { error: 'Phiên điểm danh không tồn tại hoặc không thuộc server Discord hiện tại (hoặc sai loại).' } };
   }
 
   const now = new Date();
