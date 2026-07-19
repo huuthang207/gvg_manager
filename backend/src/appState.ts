@@ -1,10 +1,9 @@
 import { prisma } from './db.js';
 import { getAccessibleGuildForUser } from './permissions.js';
 import { serializeMembers } from './serializers/memberSerializer.js';
-import { serializeDivisions, serializeSquadGroups } from './serializers/squadSerializer.js';
 import { getAttendanceStateForGuild } from './services/attendanceService.js';
 import { getGvgParticipationStats } from './services/gvgParticipationService.js';
-import { getLineupEditLock } from './services/lineupEditLockService.js';
+import { ensureGvgLineup } from './services/gvgLineupService.js';
 
 export interface AppStateGuildContext {
   guildId: string;
@@ -13,10 +12,7 @@ export interface AppStateGuildContext {
 }
 
 export async function getUserAppState(userId: string, activeGuildId?: string | null) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-  });
-
+  const user = await prisma.user.findUnique({ where: { id: userId } });
   const access = await getAccessibleGuildForUser(userId, activeGuildId);
   const guild = access ? await prisma.guild.findUnique({
     where: { id: access.guild.id },
@@ -24,28 +20,8 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
       members: {
         where: { active: true },
         orderBy: { displayName: 'asc' },
-        include: {
-          roles: true,
-          memberSkills: true,
-        },
+        include: { roles: true },
       },
-      teams: {
-        orderBy: [
-          { divisionType: 'asc' },
-          { orderIndex: 'asc' },
-        ],
-        include: { slots: true },
-      },
-      squadGroups: {
-        orderBy: { orderIndex: 'asc' },
-        include: {
-          teams: {
-            orderBy: { orderIndex: 'asc' },
-            include: { slots: true },
-          },
-        },
-      },
-      skills: true,
       classRoleMappings: true,
       requiredRoles: true,
       accessRoles: true,
@@ -57,48 +33,29 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
       user: user ? serializeUser(user) : null,
       guild: null,
       members: [],
-      divisions: null,
-      squadGroups: [],
-      skills: [],
       attendance: {
-        config: null,
-        activeSession: null,
-        recentSessions: [],
+        gvg: { type: 'GVG', config: null, activeSession: null, recentSessions: [] },
+        scrim: { type: 'SCRIM', config: null, activeSession: null, recentSessions: [] },
       },
       lastSyncedAt: null,
       roleConfig: null,
       currentRole: null,
       permissions: [],
-      lineupLock: null,
+      gvgLineup: null,
     };
   }
 
-  const [attendance, gvgParticipationStats] = await Promise.all([
+  const [attendance, gvgParticipationStats, gvgLineup] = await Promise.all([
     getAttendanceStateForGuild(guild.id),
     getGvgParticipationStats(guild.id),
+    ensureGvgLineup(guild.id),
   ]);
-  const members = guild.members.map(member => ({
-    ...member,
-    gvgParticipationCount: gvgParticipationStats[member.id] ?? 0,
-  }));
+  const members = guild.members.map(member => ({ ...member, gvgParticipationCount: gvgParticipationStats[member.id] ?? 0 }));
 
   return {
     user: serializeUser(user),
-    guild: {
-      id: guild.id,
-      discordGuildId: guild.discordGuildId,
-      name: guild.name,
-      icon: guild.icon,
-    },
+    guild: { id: guild.id, discordGuildId: guild.discordGuildId, name: guild.name, icon: guild.icon },
     members: serializeMembers(members),
-    divisions: serializeDivisions(guild.teams),
-    squadGroups: serializeSquadGroups(guild.squadGroups),
-    skills: guild.skills.map(skill => ({
-      id: skill.id,
-      name: skill.name,
-      logo: skill.logo,
-      description: skill.description ?? undefined,
-    })),
     attendance,
     lastSyncedAt: guild.lastSyncedAt?.toISOString() ?? null,
     roleConfig: {
@@ -111,16 +68,10 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
     },
     currentRole: access?.role ?? null,
     permissions: access?.permissions ?? [],
-    lineupLock: getLineupEditLock(access, user.id),
+    gvgLineup,
   };
 }
 
 function serializeUser(user: { id: string; discordUserId: string; username: string; globalName: string | null; avatar: string | null }) {
-  return {
-    id: user.discordUserId,
-    username: user.username,
-    globalName: user.globalName,
-    avatar: user.avatar,
-  };
+  return { id: user.discordUserId, username: user.username, globalName: user.globalName, avatar: user.avatar };
 }
-

@@ -1,9 +1,9 @@
-export type Tab = 'dashboard' | 'teams' | 'attendance';
+export type Tab = 'dashboard' | 'gvg-lineup' | 'attendance';
 
 const getActiveTabStorageKey = (userId: string, guildId: string) => `gvg_active_tab_${userId}_${guildId}`;
 
 export function isTab(value: string | null): value is Tab {
-  return value === 'dashboard' || value === 'teams' || value === 'attendance';
+  return value === 'dashboard' || value === 'gvg-lineup' || value === 'attendance';
 }
 
 export function readStoredActiveTab(userId: string, guildId: string) {

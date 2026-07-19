@@ -4,7 +4,6 @@ type MemberRow = {
   displayName: string;
   classType: string;
   joinedAt: Date | null;
-  memberSkills: Array<{ skillId: string }>;
   discordUserId: string;
   username: string;
   roles: Array<{ roleName: string }>;
@@ -21,7 +20,6 @@ export function serializeMember(member: MemberRow) {
     discordDisplayName: member.displayName,
     classType: member.classType,
     joinedAt: member.joinedAt?.toISOString() ?? null,
-    assignedSkills: member.memberSkills.map(ms => ms.skillId),
     discordId: member.discordUserId,
     discordUsername: member.username,
     discordRoles: member.roles.map(role => role.roleName),

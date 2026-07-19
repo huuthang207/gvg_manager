@@ -98,23 +98,10 @@ export async function resetCurrentGuildData(userId: string, activeGuildId: strin
     await tx.attendanceChannelConfig.deleteMany({ where: { guildId } });
 
     await tx.gvgParticipationSession.deleteMany({ where: { guildId } });
+    await tx.gvgLineupDivision.deleteMany({ where: { guildId } });
 
-    await tx.lineupSnapshot.deleteMany({ where: { guildId } });
-    await tx.squadGroup.deleteMany({ where: { guildId } });
-    await tx.team.deleteMany({ where: { guildId } });
-
-    const members = await tx.member.findMany({
-      where: { guildId },
-      select: { id: true },
-    });
-    const memberIds = members.map(member => member.id);
-
-    if (memberIds.length > 0) {
-      await tx.memberSkill.deleteMany({ where: { memberId: { in: memberIds } } });
-      await tx.memberRole.deleteMany({ where: { memberId: { in: memberIds } } });
-    }
+    await tx.memberRole.deleteMany({ where: { member: { guildId } } });
     await tx.member.deleteMany({ where: { guildId } });
-    await tx.skill.deleteMany({ where: { guildId } });
     await tx.guild.update({ where: { id: guildId }, data: { lastSyncedAt: null } });
   });
 

@@ -9,10 +9,10 @@ import { createHealthRoutes } from './routes/healthRoutes.js';
 import { createAuthRoutes } from './routes/authRoutes.js';
 import { createGuildRoutes } from './routes/guildRoutes.js';
 import { createMemberRoutes } from './routes/memberRoutes.js';
-import { createLineupRoutes } from './routes/lineupRoutes.js';
 import { createSettingsRoutes } from './routes/settingsRoutes.js';
 import { createAttendanceRoutes } from './routes/attendanceRoutes.js';
 import { createGvgParticipationRoutes } from './routes/gvgParticipationRoutes.js';
+import { createGvgLineupRoutes } from './routes/gvgLineupRoutes.js';
 import { syncAllPersistedGuilds } from './services/syncService.js';
 import { attachRealtimeGateway } from './services/realtimeGateway.js';
 import { startAttendanceVoteWorker } from './services/attendanceVoteQueueService.js';
@@ -40,10 +40,10 @@ app.use(createHealthRoutes());
 app.use(createAuthRoutes());
 app.use(createGuildRoutes());
 app.use(createMemberRoutes());
-app.use(createLineupRoutes());
 app.use(createSettingsRoutes());
 app.use(createAttendanceRoutes());
 app.use(createGvgParticipationRoutes());
+app.use(createGvgLineupRoutes());
 
 function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
   console.error('[Discord API Error]', err.message);

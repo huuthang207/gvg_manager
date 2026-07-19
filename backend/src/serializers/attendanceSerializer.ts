@@ -1,4 +1,4 @@
-import type { AttendanceChoice, AttendanceSessionStatus } from '@prisma/client';
+import type { AttendanceChoice, AttendanceSessionStatus, AttendanceType } from '@prisma/client';
 
 type AttendanceVoteRow = {
   id: string;
@@ -23,6 +23,7 @@ type AttendanceVoteRow = {
 type AttendanceSessionRow = {
   id: string;
   guildId: string;
+  type?: AttendanceType;
   status: AttendanceSessionStatus;
   headerText: string | null;
   discordChannelId: string | null;
@@ -77,6 +78,7 @@ export function serializeAttendanceSession(session: AttendanceSessionRow) {
   return {
     id: session.id,
     guildId: session.guildId,
+    type: session.type ?? 'GVG',
     status: session.status,
     headerText: session.headerText,
     discordChannelId: session.discordChannelId,

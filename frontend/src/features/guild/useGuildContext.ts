@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react';
-import { AccessibleGuild, getAccessibleGuilds, setActiveGuild } from '../../services/discordApi.ts';
+import { getAccessibleGuilds, setActiveGuild } from '../../services/discordApi.ts';
 import { getErrorMessage } from '../../lib/error.ts';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
 
-export function useGuildContext(applyAppState: (state: Awaited<ReturnType<typeof setActiveGuild>>) => Promise<void>, resetSnapshots: () => void) {
+export function useGuildContext(applyAppState: (state: Awaited<ReturnType<typeof setActiveGuild>>) => Promise<void>) {
   const { alert } = useSystemDialog();
-  const [accessibleGuilds, setAccessibleGuilds] = useState<AccessibleGuild[]>([]);
+  const [accessibleGuilds, setAccessibleGuilds] = useState([]);
   const [switchingGuild, setSwitchingGuild] = useState(false);
 
   const loadAccessibleGuilds = useCallback(async () => {
@@ -20,22 +20,14 @@ export function useGuildContext(applyAppState: (state: Awaited<ReturnType<typeof
   const handleGuildSwitch = useCallback(async (guildId: string) => {
     setSwitchingGuild(true);
     try {
-      const state = await setActiveGuild(guildId);
-      await applyAppState(state);
-      resetSnapshots();
+      await applyAppState(await setActiveGuild(guildId));
       await loadAccessibleGuilds();
     } catch (err) {
       void alert({ message: getErrorMessage(err, 'Không thể chuyển server'), variant: 'error' });
     } finally {
       setSwitchingGuild(false);
     }
-  }, [alert, applyAppState, loadAccessibleGuilds, resetSnapshots]);
+  }, [alert, applyAppState, loadAccessibleGuilds]);
 
-  return {
-    accessibleGuilds,
-    switchingGuild,
-    setAccessibleGuilds,
-    loadAccessibleGuilds,
-    handleGuildSwitch,
-  };
+  return { accessibleGuilds, switchingGuild, setAccessibleGuilds, loadAccessibleGuilds, handleGuildSwitch };
 }

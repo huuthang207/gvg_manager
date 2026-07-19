@@ -3,12 +3,9 @@ import { requireAuth } from '../auth.js';
 import { requireInternalBotToken } from '../http/requireInternalBotToken.js';
 import { validateIngameName } from '../http/validators.js';
 import {
-  assignSkillToMember,
-  clearSkillsFromMembers,
   deleteInactiveMemberFromDatabase,
   deleteInactiveMembersFromDatabase,
   removeBangVienRoleFromMember,
-  removeSkillFromMember,
   updateBotMemberIngameName,
   updateMemberClassRoleForManager,
   updateMemberIngameNameForManager,
@@ -144,45 +141,6 @@ export function createMemberRoutes() {
       }
 
       const result = await updateMyIngameName(auth.user.id, auth.user.discordUserId, auth.session.activeGuildId, ingameName);
-      res.status(result.status).json(result.body);
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/api/members/:memberId/skills/:skillId', async (req, res, next) => {
-    try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const { memberId, skillId } = req.params;
-      const result = await assignSkillToMember(auth.user.id, auth.session.activeGuildId, memberId, skillId, req.body?.skill);
-      res.status(result.status).json(result.body);
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.delete('/api/members/:memberId/skills/:skillId', async (req, res, next) => {
-    try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const { memberId, skillId } = req.params;
-      const result = await removeSkillFromMember(auth.user.id, auth.session.activeGuildId, memberId, skillId);
-      res.status(result.status).json(result.body);
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post('/api/members/skills/clear', async (req, res, next) => {
-    try {
-      const auth = await requireAuth(req, res);
-      if (!auth) return;
-
-      const memberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds : [];
-      const result = await clearSkillsFromMembers(auth.user.id, auth.session.activeGuildId, memberIds);
       res.status(result.status).json(result.body);
     } catch (err) {
       next(err);

@@ -24,6 +24,7 @@ const guild = {
 const channelConfig = {
   id: 'config-1',
   guildId: guild.id,
+  type: 'GVG' as const,
   discordChannelId: '234567890123456789',
   createdAt: now,
   updatedAt: now,
@@ -47,6 +48,7 @@ function createSession(overrides: Record<string, unknown> = {}) {
   return {
     id: 'session-1',
     guildId: guild.id,
+    type: 'GVG' as const,
     status: 'OPEN',
     headerText: null,
     discordChannelId: channelConfig.discordChannelId,
@@ -99,6 +101,7 @@ beforeEach(() => {
     update: async () => ({
       id: 'session-1',
       guildId: guild.id,
+      type: 'GVG' as const,
       discordChannelId: channelConfig.discordChannelId,
       discordMessageId: '456789012345678901',
     }),
@@ -124,9 +127,9 @@ describe('attendanceService', () => {
     const result = await setAttendanceChannel(guild.discordGuildId, channelConfig.discordChannelId);
 
     assert.equal(result.status, 200);
-    assert.deepEqual(upsertArgs.where, { guildId: guild.id });
+    assert.deepEqual(upsertArgs.where, { guildId_type: { guildId: guild.id, type: 'GVG' } });
     assert.deepEqual(upsertArgs.update, { discordChannelId: channelConfig.discordChannelId });
-    assert.deepEqual(upsertArgs.create, { guildId: guild.id, discordChannelId: channelConfig.discordChannelId });
+    assert.deepEqual(upsertArgs.create, { guildId: guild.id, type: 'GVG', discordChannelId: channelConfig.discordChannelId });
   });
 
   it('rejects invalid attendance channel ids', async () => {
@@ -172,7 +175,30 @@ describe('attendanceService', () => {
     assert.match(result.body.error, /Chưa cấu hình kênh điểm danh/);
   });
 
-  it('rejects opening a second active session', async () => {
+  it('allows a Scrim session while a GvG session is open', async () => {
+    let createArgs: any = null;
+    mockPrisma('attendanceChannelConfig', {
+      findUnique: async () => ({ ...channelConfig, id: 'scrim-config', type: 'SCRIM' as const }),
+    });
+    mockPrisma('attendanceSession', {
+      findFirst: async (args: any) => args.where.type === 'GVG' ? createSession() : null,
+      create: async (args: any) => {
+        createArgs = args;
+        return createSession({ type: 'SCRIM' as const, headerText: args.data.headerText });
+      },
+    });
+
+    const result = await openAttendanceSession({
+      discordGuildId: guild.discordGuildId,
+      openedByDiscordUserId: member.discordUserId,
+      type: 'SCRIM',
+    });
+
+    assert.equal(result.status, 201);
+    assert.equal(createArgs.data.type, 'SCRIM');
+  });
+
+  it('rejects opening a second active session of the same type', async () => {
     mockPrisma('attendanceSession', {
       findFirst: async () => createSession(),
     });

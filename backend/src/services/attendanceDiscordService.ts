@@ -3,6 +3,8 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
+import type { AttendanceType } from '@prisma/client';
+import type { AttendanceRenderOptions } from './attendanceRenderService.js';
 import {
   attachAttendanceMessage,
   getAttendanceRenderPayload,
@@ -15,6 +17,7 @@ const attendanceRefreshDebugEnabled = process.env.DISCORD_ATTENDANCE_DEBUG === '
 const attendanceRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const attendanceRefreshRunning = new Set<string>();
 const attendanceRefreshPending = new Map<string, {
+  type: AttendanceType;
   channelId: string | null;
   messageId: string | null;
   closed: boolean;
@@ -30,6 +33,14 @@ function getAttendanceRefreshDebounceMs() {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 400;
 }
 
+function getRefreshKey(type: AttendanceType, sessionId: string) {
+  return `${type}:${sessionId}`;
+}
+
+function getSessionIdFromRefreshKey(key: string) {
+  return key.slice(key.indexOf(':') + 1);
+}
+
 function logAttendanceRefresh(message: string, details?: Record<string, unknown>) {
   if (!attendanceRefreshDebugEnabled) return;
   if (details) {
@@ -39,30 +50,37 @@ function logAttendanceRefresh(message: string, details?: Record<string, unknown>
   console.log(`[Attendance Refresh] ${message}`);
 }
 
-export function buildAttendanceButtons(sessionId: string, disabled = false) {
+export function buildAttendanceButtons(sessionId: string, type: AttendanceType = 'GVG', disabled = false) {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:GO:${sessionId}`)
+      .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:${type}:GO:${sessionId}`)
       .setLabel('Tham gia')
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled),
     new ButtonBuilder()
-      .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:NOGO:${sessionId}`)
+      .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:${type}:NOGO:${sessionId}`)
       .setLabel('Không tham gia')
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled),
   );
 }
 
-export function parseAttendanceButtonCustomId(customId: string) {
-  const [prefix, choice, sessionId] = customId.split(':');
-  if (prefix !== ATTENDANCE_BUTTON_PREFIX) return null;
-  if (choice !== 'GO' && choice !== 'NOGO') return null;
-  if (!sessionId) return null;
-  return { choice, sessionId };
+export function parseAttendanceButtonCustomId(customId: string): { type: AttendanceType; choice: 'GO' | 'NOGO'; sessionId: string } | null {
+  const parts = customId.split(':');
+  if (parts[0] !== ATTENDANCE_BUTTON_PREFIX) return null;
+
+  if (parts.length === 3) {
+    const [, choice, sessionId] = parts;
+    if ((choice !== 'GO' && choice !== 'NOGO') || !sessionId) return null;
+    return { type: 'GVG', choice, sessionId };
+  }
+
+  const [, type, choice, sessionId] = parts;
+  if ((type !== 'GVG' && type !== 'SCRIM') || (choice !== 'GO' && choice !== 'NOGO') || !sessionId) return null;
+  return { type, choice, sessionId };
 }
 
-export async function sendAttendanceDiscordMessage(sessionId: string, channelId: string | null) {
+export async function sendAttendanceDiscordMessage(sessionId: string, channelId: string | null, type: AttendanceType = 'GVG') {
   if (!channelId) return false;
 
   const renderStartedAt = Date.now();
@@ -74,11 +92,12 @@ export async function sendAttendanceDiscordMessage(sessionId: string, channelId:
 
   const message = await channel.send({
     content: renderResult.body.content,
-    components: [buildAttendanceButtons(sessionId)],
+    components: [buildAttendanceButtons(sessionId, type)],
   });
   await attachAttendanceMessage({ sessionId, discordMessageId: message.id });
   logAttendanceRefresh('Sent attendance message', {
     sessionId,
+    type,
     channelId,
     messageId: message.id,
     elapsedMs: Date.now() - renderStartedAt,
@@ -86,12 +105,19 @@ export async function sendAttendanceDiscordMessage(sessionId: string, channelId:
   return true;
 }
 
-export async function editAttendanceDiscordMessage(sessionId: string, channelId: string | null, messageId: string | null, closed = false) {
+export async function editAttendanceDiscordMessage(
+  sessionId: string,
+  channelId: string | null,
+  messageId: string | null,
+  closed = false,
+  type: AttendanceType = 'GVG',
+  renderOptions?: AttendanceRenderOptions,
+) {
   if (!channelId || !messageId) return false;
 
   const refreshStartedAt = Date.now();
   const renderStartedAt = Date.now();
-  const renderResult = await getAttendanceRenderPayload(sessionId);
+  const renderResult = await getAttendanceRenderPayload(sessionId, renderOptions);
   if (renderResult.status !== 200) return false;
 
   const channelFetchStartedAt = Date.now();
@@ -105,12 +131,13 @@ export async function editAttendanceDiscordMessage(sessionId: string, channelId:
   const editStartedAt = Date.now();
   await message.edit({
     content: renderResult.body.content,
-    components: [buildAttendanceButtons(sessionId, closed)],
+    components: [buildAttendanceButtons(sessionId, type, closed)],
   });
   await markAttendanceRendered(sessionId);
 
   logAttendanceRefresh('Edited attendance message', {
     sessionId,
+    type,
     channelId,
     messageId,
     closed,
@@ -125,19 +152,22 @@ export async function editAttendanceDiscordMessage(sessionId: string, channelId:
   return true;
 }
 
-async function runQueuedAttendanceDiscordRefresh(sessionId: string) {
-  if (attendanceRefreshRunning.has(sessionId)) return;
+async function runQueuedAttendanceDiscordRefresh(key: string) {
+  if (attendanceRefreshRunning.has(key)) return;
 
-  const pending = attendanceRefreshPending.get(sessionId);
+  const pending = attendanceRefreshPending.get(key);
   if (!pending) return;
 
-  attendanceRefreshPending.delete(sessionId);
-  attendanceRefreshRunning.add(sessionId);
+  attendanceRefreshPending.delete(key);
+  attendanceRefreshRunning.add(key);
 
+  const sessionId = getSessionIdFromRefreshKey(key);
   try {
-    const refreshed = await editAttendanceDiscordMessage(sessionId, pending.channelId, pending.messageId, pending.closed);
+    const refreshed = await editAttendanceDiscordMessage(sessionId, pending.channelId, pending.messageId, pending.closed, pending.type);
     logAttendanceRefresh('Completed queued refresh', {
+      key,
       sessionId,
+      type: pending.type,
       refreshed,
       reason: pending.reason,
       interactionId: pending.interactionId,
@@ -145,27 +175,33 @@ async function runQueuedAttendanceDiscordRefresh(sessionId: string) {
     });
   } catch (err) {
     logAttendanceRefresh('Queued refresh failed', {
+      key,
       sessionId,
+      type: pending.type,
       reason: pending.reason,
       interactionId: pending.interactionId,
       error: err instanceof Error ? err.message : String(err),
     });
     throw err;
   } finally {
-    attendanceRefreshRunning.delete(sessionId);
-    if (attendanceRefreshPending.has(sessionId)) {
+    attendanceRefreshRunning.delete(key);
+    const nextPending = attendanceRefreshPending.get(key);
+    if (nextPending) {
       logAttendanceRefresh('Scheduling pending rerun', {
+        key,
         sessionId,
-        reason: attendanceRefreshPending.get(sessionId)?.reason ?? 'unknown',
-        interactionId: attendanceRefreshPending.get(sessionId)?.interactionId ?? null,
+        type: nextPending.type,
+        reason: nextPending.reason,
+        interactionId: nextPending.interactionId,
       });
       queueAttendanceDiscordMessageRefresh({
         sessionId,
-        discordChannelId: attendanceRefreshPending.get(sessionId)?.channelId ?? null,
-        discordMessageId: attendanceRefreshPending.get(sessionId)?.messageId ?? null,
-        closed: attendanceRefreshPending.get(sessionId)?.closed ?? false,
-        reason: attendanceRefreshPending.get(sessionId)?.reason ?? 'unknown',
-        interactionId: attendanceRefreshPending.get(sessionId)?.interactionId ?? null,
+        type: nextPending.type,
+        discordChannelId: nextPending.channelId,
+        discordMessageId: nextPending.messageId,
+        closed: nextPending.closed,
+        reason: nextPending.reason,
+        interactionId: nextPending.interactionId,
         delayMs: 0,
       });
     }
@@ -174,6 +210,7 @@ async function runQueuedAttendanceDiscordRefresh(sessionId: string) {
 
 export function queueAttendanceDiscordMessageRefresh(input: {
   sessionId: string;
+  type?: AttendanceType;
   discordChannelId: string | null;
   discordMessageId: string | null;
   closed?: boolean;
@@ -183,46 +220,52 @@ export function queueAttendanceDiscordMessageRefresh(input: {
 }) {
   if (!input.discordChannelId || !input.discordMessageId) return false;
 
+  const type = input.type ?? 'GVG';
+  const key = getRefreshKey(type, input.sessionId);
   const queuedAt = Date.now();
-  attendanceRefreshPending.set(input.sessionId, {
+  const pending = {
+    type,
     channelId: input.discordChannelId,
     messageId: input.discordMessageId,
     closed: input.closed ?? false,
     queuedAt,
-    reason: input.reason ?? 'unknown',
+    reason: input.reason ?? 'unknown' as const,
     interactionId: input.interactionId ?? null,
-  });
+  };
+  attendanceRefreshPending.set(key, pending);
 
-  if (attendanceRefreshRunning.has(input.sessionId)) {
+  if (attendanceRefreshRunning.has(key)) {
     logAttendanceRefresh('Coalesced refresh while active', {
+      key,
       sessionId: input.sessionId,
-      closed: input.closed ?? false,
-      reason: input.reason ?? 'unknown',
-      interactionId: input.interactionId ?? null,
+      type,
+      closed: pending.closed,
+      reason: pending.reason,
+      interactionId: pending.interactionId,
       queuedAt,
     });
     return true;
   }
 
-  const currentTimer = attendanceRefreshTimers.get(input.sessionId);
-  if (currentTimer) {
-    clearTimeout(currentTimer);
-  }
+  const currentTimer = attendanceRefreshTimers.get(key);
+  if (currentTimer) clearTimeout(currentTimer);
 
   const delayMs = Math.max(0, input.delayMs ?? getAttendanceRefreshDebounceMs());
   const timer = setTimeout(() => {
-    attendanceRefreshTimers.delete(input.sessionId);
-    void runQueuedAttendanceDiscordRefresh(input.sessionId).catch(err => {
+    attendanceRefreshTimers.delete(key);
+    void runQueuedAttendanceDiscordRefresh(key).catch(err => {
       console.warn('[Attendance Refresh] Queued refresh failed:', err instanceof Error ? err.message : err);
     });
   }, delayMs);
 
-  attendanceRefreshTimers.set(input.sessionId, timer);
+  attendanceRefreshTimers.set(key, timer);
   logAttendanceRefresh('Queued attendance refresh', {
+    key,
     sessionId: input.sessionId,
-    closed: input.closed ?? false,
-    reason: input.reason ?? 'unknown',
-    interactionId: input.interactionId ?? null,
+    type,
+    closed: pending.closed,
+    reason: pending.reason,
+    interactionId: pending.interactionId,
     delayMs,
     queuedAt,
     replacedExistingTimer: Boolean(currentTimer),

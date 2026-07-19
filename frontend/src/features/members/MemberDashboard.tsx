@@ -825,7 +825,7 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, canResetG
                     <div>
                       <label className="text-[10px] font-bold text-red-300 uppercase tracking-wider block">Khu vực nguy hiểm</label>
                       <p className="mt-1 text-[11px] text-red-100/80">
-                        Reset sẽ xóa dữ liệu server hiện tại: thành viên đã import, đội hình, kỹ năng, đội hình đã lưu và điểm danh. Cấu hình role và quyền owner được giữ lại để có thể đồng bộ lại.
+                        Reset sẽ xóa dữ liệu server hiện tại: thành viên đã import, điểm danh và dữ liệu Bang Chiến. Cấu hình role và quyền owner được giữ lại để có thể đồng bộ lại.
                       </p>
                     </div>
                   </div>
@@ -943,6 +943,7 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
   const [selectedClass, setSelectedClass] = useState<ClassType>(member.classType);
   const [saving, setSaving] = useState(false);
   const [savingClass, setSavingClass] = useState(false);
+  const backdropPointerDownRef = useRef(false);
   const trimmedName = ingameName.trim();
   const mappedClassRole = roleConfig?.classRoleMap[selectedClass] || '';
   const canSave = trimmedName.length > 0 && trimmedName !== (member.ingameName || member.name);
@@ -970,92 +971,113 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
     }
   };
 
+  const handleBackdropPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    backdropPointerDownRef.current = event.target === event.currentTarget;
+  };
+
+  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (backdropPointerDownRef.current && event.target === event.currentTarget) onClose();
+    backdropPointerDownRef.current = false;
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-md lg:p-6"
+      onPointerDown={handleBackdropPointerDown}
+      onPointerCancel={() => { backdropPointerDownRef.current = false; }}
+      onClick={handleBackdropClick}
+    >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-700/80 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 shadow-2xl shadow-slate-950/60"
-        onClick={e => e.stopPropagation()}
+        className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-950 shadow-2xl shadow-slate-950/60"
+        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="member-detail-title"
       >
-        <div className="relative overflow-hidden border-b border-slate-800/80 bg-gradient-to-br from-sky-500/15 via-slate-900/70 to-indigo-500/10 px-6 py-5">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 bg-gradient-to-r from-slate-900/95 to-slate-950/90 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-sky-400/25 bg-sky-500/10 text-sky-200">
+              <UserCircle size={18} />
+            </span>
+            <div className="min-w-0">
+              <h3 id="member-detail-title" className="truncate text-base font-black text-white">Chi tiết thành viên</h3>
+              <p className="mt-0.5 truncate text-xs font-bold text-slate-500">Quản lý hồ sơ, phái và Discord role.</p>
+            </div>
+          </div>
           <button
+            type="button"
             onClick={onClose}
-            className="absolute right-4 top-4 rounded-lg border border-slate-700/80 bg-slate-950/45 p-2 text-slate-400 transition-colors hover:border-slate-500 hover:bg-slate-900 hover:text-slate-100"
+            aria-label="Đóng chi tiết thành viên"
+            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-slate-700/80 bg-slate-950/45 text-slate-400 transition-colors hover:border-slate-500 hover:bg-slate-900 hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
           >
             <X size={16} />
           </button>
-
-          <div className="pr-12">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-sky-200/80">Chi tiết thành viên</p>
-            <div className="mt-4 flex items-center gap-4">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-sky-300/20 bg-slate-900/80 shadow-xl shadow-slate-950/35">
-                {member.avatar ? (
-                  <img
-                    src={`https://cdn.discordapp.com/avatars/${member.discordId}/${member.avatar}.png?size=128`}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <span className="text-2xl font-black text-sky-100">
-                    {member.name[0]?.toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <h3 className="truncate text-xl font-black text-slate-100">{member.name}</h3>
-                {member.discordId && (
-                  <p className="mt-1 truncate text-xs font-medium text-slate-400">@{member.discordUsername || 'discord'}</p>
-                )}
-                <span
-                  className="mt-3 inline-flex max-w-full items-center rounded-full border px-3 py-1 text-[11px] font-black"
-                  style={{
-                    backgroundColor: `${CLASS_COLORS[member.classType]}18`,
-                    borderColor: `${CLASS_COLORS[member.classType]}55`,
-                    color: CLASS_COLORS[member.classType],
-                  }}
-                >
-                  <span className="truncate">{member.classType}</span>
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="max-h-[65vh] space-y-4 overflow-y-auto p-5 custom-scrollbar">
-          <section className="space-y-3 rounded-xl border border-slate-800/80 bg-slate-950/35 p-4 shadow-sm shadow-slate-950/20">
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Tên ingame
-            </label>
-            <div className="flex gap-2">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 custom-scrollbar sm:p-4">
+          <section className="app-surface-soft flex items-center gap-3 rounded-2xl border border-slate-800/80 p-3">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/70 shadow-sm shadow-slate-950/30">
+              {member.avatar ? (
+                <img
+                  src={`https://cdn.discordapp.com/avatars/${member.discordId}/${member.avatar}.png?size=128`}
+                  alt={`Avatar của ${member.discordDisplayName || member.name}`}
+                  className="h-full w-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="text-lg font-black text-sky-100">
+                  {member.name[0]?.toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-black text-slate-100">{member.discordDisplayName || member.name}</p>
+              {member.discordUsername && <p className="mt-0.5 truncate text-xs font-bold text-slate-500">@{member.discordUsername}</p>}
+              <span
+                className="mt-2 inline-flex max-w-full items-center rounded-full border px-2.5 py-0.5 text-[11px] font-black"
+                style={{
+                  backgroundColor: `${CLASS_COLORS[member.classType]}18`,
+                  borderColor: `${CLASS_COLORS[member.classType]}55`,
+                  color: CLASS_COLORS[member.classType],
+                }}
+              >
+                <span className="truncate">{member.classType}</span>
+              </span>
+            </div>
+          </section>
+
+          <section className="app-surface-soft space-y-3 rounded-2xl border border-slate-800/80 p-3">
+            <div>
+              <label htmlFor="member-detail-ingame-name" className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Tên ingame</label>
+              <p className="mt-0.5 text-[11px] font-medium text-slate-500">Tên hiển thị trong danh sách bang chiến.</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
+                id="member-detail-ingame-name"
                 value={ingameName}
-                onChange={e => setIngameName(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-xs font-medium text-slate-200 placeholder:text-slate-500 focus:border-sky-400/70 focus:outline-none"
+                onChange={event => setIngameName(event.target.value)}
+                className="min-w-0 flex-1 rounded-lg border border-slate-700/80 bg-slate-950/60 px-3 py-2 text-xs font-medium text-slate-200 placeholder:text-slate-500 transition-colors focus:border-sky-400/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/30"
                 placeholder="Nhập tên ingame"
               />
               <button
+                type="button"
                 onClick={handleSaveIngameName}
                 disabled={!canSave || saving}
-                className="rounded-lg bg-sky-500 px-4 py-2 text-xs font-black text-white shadow-sm shadow-sky-950/20 transition-colors hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-sky-500"
+                className="app-button-primary shrink-0 cursor-pointer rounded-lg px-4 py-2 text-xs font-black focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 disabled:cursor-not-allowed"
               >
-                {saving ? 'Đang lưu...' : 'Lưu'}
+                {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
             </div>
           </section>
 
-          <section className="space-y-3 rounded-xl border border-slate-800/80 bg-slate-950/35 p-4 shadow-sm shadow-slate-950/20">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Thông tin Discord</p>
-            <div className="space-y-2">
-              <MyInfoRow label="Tên Discord" value={member.discordDisplayName || member.name} />
-              {member.discordUsername && <MyInfoRow label="Username" value={`@${member.discordUsername}`} />}
-            </div>
-          </section>
-
-          <section className="space-y-3 rounded-xl border border-slate-800/80 bg-slate-950/35 p-4 shadow-sm shadow-slate-950/20">
+          <section className="app-surface-soft space-y-3 rounded-2xl border border-slate-800/80 p-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quản lý phái</p>
+              <div>
+                <label htmlFor="member-detail-class" className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Quản lý phái</label>
+                <p className="mt-0.5 text-[11px] font-medium text-slate-500">Cập nhật role Discord tương ứng.</p>
+              </div>
               <span
-                className="max-w-[180px] truncate rounded-full border px-2.5 py-1 text-[11px] font-black"
+                className="max-w-[150px] truncate rounded-full border px-2.5 py-0.5 text-[11px] font-black"
                 style={{
                   backgroundColor: `${CLASS_COLORS[member.classType]}18`,
                   borderColor: `${CLASS_COLORS[member.classType]}55`,
@@ -1065,8 +1087,9 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
                 {member.classType}
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <AppSelect
+                id="member-detail-class"
                 value={selectedClass}
                 onChange={event => setSelectedClass(event.target.value as ClassType)}
                 className="flex-1"
@@ -1076,26 +1099,38 @@ const MemberDetailModal: React.FC<MemberDetailModalProps> = ({ member, roleConfi
                 ))}
               </AppSelect>
               <button
+                type="button"
                 onClick={handleSaveClassRole}
                 disabled={!canSaveClass || savingClass}
-                className="rounded-lg bg-sky-500 px-4 py-2 text-xs font-black text-white shadow-sm shadow-sky-950/20 transition-colors hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-sky-500"
+                className="app-button-primary shrink-0 cursor-pointer rounded-lg px-4 py-2 text-xs font-black focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 disabled:cursor-not-allowed"
               >
-                {savingClass ? 'Đang lưu...' : 'Đổi phái'}
+                {savingClass ? 'Đang lưu...' : 'Cập nhật phái'}
               </button>
             </div>
             <p className={cn('text-[11px] font-medium', mappedClassRole ? 'text-slate-500' : 'text-amber-300')}>
               {mappedClassRole ? `Discord role sẽ đồng bộ: ${mappedClassRole}` : 'Chưa cấu hình Discord role cho phái này.'}
             </p>
           </section>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onDelete}
+              className="app-button-danger flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-black focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70"
+            >
+              <Trash2 size={13} />
+              Gỡ role Bang Viên
+            </button>
+          </div>
         </div>
 
-        <div className="flex justify-end border-t border-slate-800/80 bg-slate-950/45 px-5 py-4">
+        <div className="flex justify-end border-t border-slate-800/80 bg-slate-950/60 px-4 py-3">
           <button
-            onClick={onDelete}
-            className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/15 px-4 py-2 text-xs font-black text-red-300 transition-colors hover:bg-red-500/25 hover:text-red-200"
+            type="button"
+            onClick={onClose}
+            className="app-button-secondary cursor-pointer rounded-xl px-4 py-2 text-xs font-black focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
           >
-            <Trash2 size={14} />
-            Gỡ role Bang Viên
+            Đóng
           </button>
         </div>
       </div>

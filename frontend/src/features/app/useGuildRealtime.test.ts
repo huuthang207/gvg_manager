@@ -80,9 +80,7 @@ test('coalesces attendance update refreshes while a realtime request is already 
       setLastSyncedAt: () => true as any,
       mergeMemberDelta: () => undefined,
       replaceMemberPool: () => undefined,
-      refreshLineupLock: async () => undefined,
       refreshGvgParticipationStats: async () => undefined,
-      refreshSnapshots: async () => undefined,
       realtimeDebugEnabled: false,
     });
     return null;

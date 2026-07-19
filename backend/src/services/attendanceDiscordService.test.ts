@@ -2,6 +2,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { prisma } from '../db.js';
 import {
+  editAttendanceDiscordMessage,
   queueAttendanceDiscordMessageRefresh,
   setAttendanceDiscordClient,
 } from './attendanceDiscordService.js';
@@ -60,6 +61,73 @@ afterEach(async () => {
     },
   } as any);
   await wait(20);
+});
+
+test('edits a refresh message with current member identity without changing vote snapshots', async () => {
+  let editContent = '';
+  let voteWriteCount = 0;
+
+  mockPrisma('attendanceSession', {
+    findUnique: async () => ({
+      ...createSession(),
+      votes: [
+        {
+          id: 'vote-1',
+          memberId: 'member-1',
+          choice: 'GO',
+          snapshotIngameName: 'Tên snapshot',
+          snapshotClassType: 'Tố Vấn',
+          votedAt: now,
+          updatedAt: now,
+          member: {
+            id: 'member-1',
+            discordUserId: '111111111111111111',
+            username: 'discord-user',
+            displayName: 'Discord Name',
+            ingameName: 'Tên hiện tại',
+            classType: 'Huyết Hà',
+            avatar: null,
+            active: true,
+          },
+        },
+      ],
+    }),
+    update: async () => createSession(),
+  });
+  mockPrisma('attendanceVote', {
+    upsert: async () => {
+      voteWriteCount += 1;
+      return {};
+    },
+  });
+  setAttendanceDiscordClient({
+    channels: {
+      fetch: async () => ({
+        isTextBased: () => true,
+        messages: {
+          fetch: async () => ({
+            edit: async (payload: { content: string }) => {
+              editContent = payload.content;
+            },
+          }),
+        },
+      }),
+    },
+  } as any);
+
+  const edited = await editAttendanceDiscordMessage(
+    'session-1',
+    '234567890123456789',
+    '456789012345678901',
+    false,
+    'GVG',
+    { identitySource: 'live_member' },
+  );
+
+  assert.equal(edited, true);
+  assert.match(editContent, /Huyết Hà \(1\)\n1\. Tên hiện tại/);
+  assert.doesNotMatch(editContent, /Tên snapshot/);
+  assert.equal(voteWriteCount, 0);
 });
 
 test('coalesces repeated refresh requests before the debounce window elapses', async () => {

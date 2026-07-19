@@ -1,4 +1,4 @@
-import type { AttendanceChoice, AttendanceSessionStatus } from '@prisma/client';
+import type { AttendanceChoice, AttendanceSessionStatus, AttendanceType } from '@prisma/client';
 
 const CLASS_ORDER = [
   'Toái Mộng',
@@ -23,6 +23,7 @@ type RenderVote = {
 };
 
 type RenderSession = {
+  type?: AttendanceType;
   headerText: string | null;
   status: AttendanceSessionStatus;
   lastRenderedAt: Date | null;
@@ -30,11 +31,21 @@ type RenderSession = {
   updatedAt: Date;
 };
 
-function getVoteName(vote: RenderVote) {
+export type AttendanceRenderOptions = {
+  identitySource?: 'vote_snapshot' | 'live_member';
+};
+
+function getVoteName(vote: RenderVote, options: AttendanceRenderOptions = {}) {
+  if (options.identitySource === 'live_member') {
+    return vote.member?.ingameName || vote.member?.displayName || vote.snapshotIngameName || 'Unknown';
+  }
   return vote.snapshotIngameName || vote.member?.ingameName || vote.member?.displayName || 'Unknown';
 }
 
-function getVoteClass(vote: RenderVote) {
+function getVoteClass(vote: RenderVote, options: AttendanceRenderOptions = {}) {
+  if (options.identitySource === 'live_member') {
+    return vote.member?.classType || vote.snapshotClassType || 'Unknown';
+  }
   return vote.snapshotClassType || vote.member?.classType || 'Unknown';
 }
 
@@ -64,29 +75,17 @@ export function summarizeAttendanceRenderVotes(votes: RenderVote[]) {
 
 function renderSummary(votes: RenderVote[]) {
   const summary = summarizeAttendanceRenderVotes(votes);
-  const classCounts = new Map<string, number>();
-
-  votes.forEach(vote => {
-    const classType = getVoteClass(vote);
-    classCounts.set(classType, (classCounts.get(classType) ?? 0) + 1);
-  });
-
-  const sortedClasses = sortClasses(Array.from(classCounts.keys()));
-  const classLine = sortedClasses.length
-    ? `⚔️ Theo phái: ${sortedClasses.map(classType => `${classType}:${classCounts.get(classType)}`).join(' | ')}`
-    : 'Theo phái: (chưa có)';
 
   return [
     '```txt',
-    `Tổng vote: ${summary.total}`,
+    `🗳️ Tổng vote: ${summary.total}`,
     `✅ Tham gia: ${summary.go}`,
     `❌ Không tham gia: ${summary.nogo}`,
-    classLine,
     '```',
   ].join('\n');
 }
 
-function renderGoList(votes: RenderVote[]) {
+function renderGoList(votes: RenderVote[], options: AttendanceRenderOptions) {
   const goVotes = votes
     .filter(vote => vote.choice === 'GO')
     .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
@@ -95,7 +94,7 @@ function renderGoList(votes: RenderVote[]) {
 
   const groups = new Map<string, RenderVote[]>();
   goVotes.forEach(vote => {
-    const classType = getVoteClass(vote);
+    const classType = getVoteClass(vote, options);
     groups.set(classType, [...(groups.get(classType) ?? []), vote]);
   });
 
@@ -106,7 +105,7 @@ function renderGoList(votes: RenderVote[]) {
     const classVotes = groups.get(classType) ?? [];
     lines.push(`${classType} (${classVotes.length})`);
     classVotes.forEach((vote, index) => {
-      lines.push(`${index + 1}. ${getVoteName(vote)}`);
+      lines.push(`${index + 1}. ${getVoteName(vote, options)}`);
     });
     if (classIndex !== sortedClasses.length - 1) lines.push('');
   });
@@ -115,7 +114,7 @@ function renderGoList(votes: RenderVote[]) {
   return lines.join('\n');
 }
 
-function renderChoiceList(votes: RenderVote[], choice: AttendanceChoice, emptyText: string) {
+function renderChoiceList(votes: RenderVote[], choice: AttendanceChoice, emptyText: string, options: AttendanceRenderOptions) {
   const choiceVotes = votes
     .filter(vote => vote.choice === choice)
     .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
@@ -124,13 +123,13 @@ function renderChoiceList(votes: RenderVote[], choice: AttendanceChoice, emptyTe
 
   return [
     '```txt',
-    ...choiceVotes.map((vote, index) => `${index + 1}. ${getVoteName(vote)} - ${getVoteClass(vote)}`),
+    ...choiceVotes.map((vote, index) => `${index + 1}. ${getVoteName(vote, options)} - ${getVoteClass(vote, options)}`),
     '```',
   ].join('\n');
 }
 
-export function renderAttendancePublicContent(session: RenderSession, votes: RenderVote[]) {
-  const header = session.headerText?.trim() || 'Điểm danh Bang Chiến';
+export function renderAttendancePublicContent(session: RenderSession, votes: RenderVote[], options: AttendanceRenderOptions = {}) {
+  const header = session.headerText?.trim() || (session.type === 'SCRIM' ? 'Điểm danh Scrim' : 'Điểm danh Bang Chiến');
   const statusLine = session.status === 'OPEN' ? '🟢 **Đang mở điểm danh**' : '🔒 **Đã đóng điểm danh**';
   const lastUpdate = session.lastRenderedAt ?? session.lastVoteAt ?? session.updatedAt;
 
@@ -140,9 +139,9 @@ export function renderAttendancePublicContent(session: RenderSession, votes: Ren
     '',
     renderSummary(votes),
     '**Danh sách tham gia:**',
-    renderGoList(votes),
+    renderGoList(votes, options),
     '**Danh sách không tham gia:**',
-    renderChoiceList(votes, 'NOGO', "Chưa có ai chọn 'Không tham gia'."),
+    renderChoiceList(votes, 'NOGO', "Chưa có ai chọn 'Không tham gia'.", options),
     `**Cập nhật lần cuối:** **${formatVietnameseDate(lastUpdate)}**`,
   ].join('\n');
 }

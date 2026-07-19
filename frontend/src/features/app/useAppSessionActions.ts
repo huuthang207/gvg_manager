@@ -1,53 +1,29 @@
 import React from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { Member, Skill, SquadGroup } from '../../types.ts';
-import type { AppStateResponse, DiscordUser } from '../../services/apiTypes.ts';
-import { AccessibleGuild, logoutDiscord } from '../../services/discordApi.ts';
+import type { Member } from '../../types.ts';
+import type { AppStateResponse, GvgLineup } from '../../services/apiTypes.ts';
+import type { AccessibleGuild, DiscordUser } from '../../services/discordApi.ts';
+import { logoutDiscord } from '../../services/discordApi.ts';
 
 interface UseAppSessionActionsParams {
   closeRealtimeConnection: () => void;
   clearActiveTabState: () => void;
-  clearLineupWorkspaceUiState: () => void;
-  releaseHeldLineupLock: () => void;
-  resetSnapshots: () => void;
   setIsAuthenticated: Dispatch<SetStateAction<boolean>>;
   setCurrentUser: Dispatch<SetStateAction<DiscordUser | null>>;
   setMemberPool: Dispatch<SetStateAction<Member[]>>;
-  setSkills: Dispatch<SetStateAction<Skill[]>>;
   setRoleConfig: Dispatch<SetStateAction<AppStateResponse['roleConfig']>>;
   setCurrentGuild: Dispatch<SetStateAction<AppStateResponse['guild'] | null>>;
   setCurrentRole: Dispatch<SetStateAction<AppStateResponse['currentRole']>>;
   setPermissions: Dispatch<SetStateAction<string[]>>;
-  setLineupLock: Dispatch<SetStateAction<AppStateResponse['lineupLock']>>;
   setGvgParticipationStats: Dispatch<SetStateAction<Record<string, number>>>;
-  setSquadGroups: Dispatch<SetStateAction<SquadGroup[]>>;
-  setAccessibleGuilds: Dispatch<SetStateAction<AccessibleGuild[]>>;
+  setGvgLineup: Dispatch<SetStateAction<GvgLineup | null>>;
+  setAccessibleGuilds?: Dispatch<SetStateAction<AccessibleGuild[]>>;
 }
 
-export function useAppSessionActions({
-  closeRealtimeConnection,
-  clearActiveTabState,
-  clearLineupWorkspaceUiState,
-  releaseHeldLineupLock,
-  resetSnapshots,
-  setIsAuthenticated,
-  setCurrentUser,
-  setMemberPool,
-  setSkills,
-  setRoleConfig,
-  setCurrentGuild,
-  setCurrentRole,
-  setPermissions,
-  setLineupLock,
-  setGvgParticipationStats,
-  setSquadGroups,
-  setAccessibleGuilds,
-}: UseAppSessionActionsParams) {
+export function useAppSessionActions({ closeRealtimeConnection, clearActiveTabState, setIsAuthenticated, setCurrentUser, setMemberPool, setRoleConfig, setCurrentGuild, setCurrentRole, setPermissions, setGvgParticipationStats, setGvgLineup, setAccessibleGuilds }: UseAppSessionActionsParams) {
   const handleLogout = React.useCallback(async () => {
     closeRealtimeConnection();
     clearActiveTabState();
-    clearLineupWorkspaceUiState();
-    releaseHeldLineupLock();
     try {
       await logoutDiscord();
     } catch (err) {
@@ -56,36 +32,15 @@ export function useAppSessionActions({
       setIsAuthenticated(false);
       setCurrentUser(null);
       setMemberPool([]);
-      setSkills([]);
       setRoleConfig(null);
       setCurrentGuild(null);
       setCurrentRole(null);
       setPermissions([]);
-      setLineupLock(null);
       setGvgParticipationStats({});
-      setSquadGroups([]);
-      setAccessibleGuilds([]);
-      resetSnapshots();
+      setGvgLineup(null);
+      setAccessibleGuilds?.([]);
     }
-  }, [
-    clearActiveTabState,
-    clearLineupWorkspaceUiState,
-    closeRealtimeConnection,
-    releaseHeldLineupLock,
-    resetSnapshots,
-    setAccessibleGuilds,
-    setCurrentGuild,
-    setCurrentRole,
-    setCurrentUser,
-    setGvgParticipationStats,
-    setIsAuthenticated,
-    setLineupLock,
-    setMemberPool,
-    setPermissions,
-    setRoleConfig,
-    setSkills,
-    setSquadGroups,
-  ]);
+  }, [clearActiveTabState, closeRealtimeConnection, setAccessibleGuilds, setCurrentGuild, setCurrentRole, setCurrentUser, setGvgLineup, setGvgParticipationStats, setIsAuthenticated, setMemberPool, setPermissions, setRoleConfig]);
 
   return { handleLogout };
 }

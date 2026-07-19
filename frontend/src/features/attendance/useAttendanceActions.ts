@@ -1,5 +1,6 @@
 import React from 'react';
 import type { AppStateResponse } from '../../services/apiTypes.ts';
+import type { AttendanceType } from '../../shared/types/auth.ts';
 import {
   closeActiveAttendanceSession,
   deleteGvgParticipationSessionsForMonth,
@@ -36,21 +37,21 @@ export function useAttendanceActions({
     }
   }, [alert, applyAppState, setAttendanceActionLoading]);
 
-  const handleSetAttendanceChannel = React.useCallback((discordChannelId: string) => {
+  const handleSetAttendanceChannel = React.useCallback((discordChannelId: string, type: AttendanceType) => {
     void runAttendanceAction(
-      () => updateAttendanceChannel(discordChannelId.trim()),
+      () => updateAttendanceChannel(discordChannelId.trim(), type),
       'Không thể lưu kênh điểm danh',
     );
   }, [runAttendanceAction]);
 
-  const handleOpenAttendanceSession = React.useCallback((headerText: string) => {
+  const handleOpenAttendanceSession = React.useCallback((headerText: string, type: AttendanceType) => {
     void runAttendanceAction(
-      () => openAttendanceSession(headerText.trim()),
+      () => openAttendanceSession(headerText.trim(), type),
       'Không thể mở phiên điểm danh',
     );
   }, [runAttendanceAction]);
 
-  const handleCloseAttendanceSession = React.useCallback(async () => {
+  const handleCloseAttendanceSession = React.useCallback(async (type: AttendanceType) => {
     const confirmed = await confirm({
       message: 'Bạn có chắc muốn đóng phiên điểm danh hiện tại?',
       variant: 'danger',
@@ -59,14 +60,14 @@ export function useAttendanceActions({
     if (!confirmed) return;
 
     void runAttendanceAction(
-      closeActiveAttendanceSession,
+      () => closeActiveAttendanceSession(type),
       'Không thể đóng phiên điểm danh',
     );
   }, [confirm, runAttendanceAction]);
 
-  const handleRefreshAttendanceSession = React.useCallback(() => {
+  const handleRefreshAttendanceSession = React.useCallback((type: AttendanceType) => {
     void runAttendanceAction(
-      refreshActiveAttendanceSession,
+      () => refreshActiveAttendanceSession(type),
       'Không thể refresh phiên điểm danh',
     );
   }, [runAttendanceAction]);

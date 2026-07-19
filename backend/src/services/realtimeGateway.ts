@@ -17,13 +17,9 @@ export type GuildAppStateChangeReason =
   | 'member_removed'
   | 'access_updated'
   | 'settings_updated'
-  | 'lineup_updated'
-  | 'lineup_lock_changed'
   | 'attendance_updated'
   | 'gvg_participation_updated'
-  | 'snapshot_saved'
-  | 'snapshot_restored'
-  | 'snapshot_deleted';
+  | 'gvg_lineup_updated';
 
 type ServerMessage =
   | { type: 'subscribed'; guildId: string }

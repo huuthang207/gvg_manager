@@ -1,4 +1,4 @@
-import { AttendanceVoteJobStatus, type AttendanceChoice } from '@prisma/client';
+import { AttendanceVoteJobStatus, type AttendanceChoice, type AttendanceType } from '@prisma/client';
 import { prisma } from '../db.js';
 import { queueAttendanceDiscordMessageRefresh } from './attendanceDiscordService.js';
 import { persistAttendanceVote } from './attendanceService.js';
@@ -54,6 +54,7 @@ function isRetryableAttendanceVoteResult(result: { status: number }) {
 
 export async function enqueueAttendanceVoteJob(input: {
   sessionId: string;
+  type: AttendanceType;
   discordGuildId: string;
   discordUserId: string;
   choice: AttendanceChoice;
@@ -64,6 +65,7 @@ export async function enqueueAttendanceVoteJob(input: {
     select: {
       id: true,
       guildId: true,
+      type: true,
       guild: {
         select: {
           discordGuildId: true,
@@ -72,8 +74,8 @@ export async function enqueueAttendanceVoteJob(input: {
     },
   });
 
-  if (!session || session.guild.discordGuildId !== input.discordGuildId) {
-    return { status: 404 as const, body: { error: 'Phiên điểm danh không tồn tại hoặc không thuộc server Discord hiện tại.' } };
+  if (!session || session.guild.discordGuildId !== input.discordGuildId || session.type !== input.type) {
+    return { status: 404 as const, body: { error: 'Phiên điểm danh không tồn tại, không thuộc server Discord hiện tại, hoặc sai loại.' } };
   }
 
   const now = new Date();
@@ -88,6 +90,7 @@ export async function enqueueAttendanceVoteJob(input: {
       discordGuildId: input.discordGuildId,
       guildId: session.guildId,
       discordMessageId: input.discordMessageId ?? null,
+      type: input.type,
       choice: input.choice,
       status: AttendanceVoteJobStatus.PENDING,
       availableAt: now,
@@ -102,6 +105,7 @@ export async function enqueueAttendanceVoteJob(input: {
       discordGuildId: input.discordGuildId,
       discordUserId: input.discordUserId,
       discordMessageId: input.discordMessageId ?? null,
+      type: input.type,
       choice: input.choice,
       status: AttendanceVoteJobStatus.PENDING,
       availableAt: now,
@@ -201,6 +205,7 @@ export async function processAttendanceVoteJob(job: {
   discordGuildId: string;
   discordUserId: string;
   discordMessageId: string | null;
+  type: AttendanceType;
   choice: AttendanceChoice;
   attempts: number;
 }, workerId = getAttendanceVoteWorkerId()) {
@@ -209,6 +214,7 @@ export async function processAttendanceVoteJob(job: {
       discordGuildId: job.discordGuildId,
       discordUserId: job.discordUserId,
       sessionId: job.sessionId,
+      type: job.type,
       choice: job.choice,
       discordMessageId: job.discordMessageId,
     });
@@ -227,6 +233,7 @@ export async function processAttendanceVoteJob(job: {
 
       queueAttendanceDiscordMessageRefresh({
         sessionId: result.body.refreshTarget.sessionId,
+        type: result.body.refreshTarget.type,
         discordChannelId: result.body.refreshTarget.discordChannelId,
         discordMessageId: result.body.refreshTarget.discordMessageId,
         closed: false,

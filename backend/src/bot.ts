@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, MessageFlags, REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { prisma } from './db.js';
-import { attendanceCommand, handleAttendanceInteraction, setAttendanceChannelCommand } from './botAttendance.js';
+import { attendanceCommand, handleAttendanceInteraction, scrimAttendanceCommand, setAttendanceChannelCommand, setScrimAttendanceChannelCommand } from './botAttendance.js';
 import { setAttendanceDiscordClient } from './services/attendanceDiscordService.js';
 import { publishGuildAppStateChanged } from './services/realtimeGateway.js';
 import { queueGuildSync } from './services/syncService.js';
@@ -77,7 +77,7 @@ export async function startDiscordBot() {
   const rest = new REST({ version: '10' }).setToken(token);
   await rest.put(
     Routes.applicationGuildCommands(clientId, guildId),
-    { body: [setNameCommand.toJSON(), setAttendanceChannelCommand.toJSON(), attendanceCommand.toJSON()] }
+    { body: [setNameCommand.toJSON(), setAttendanceChannelCommand.toJSON(), setScrimAttendanceChannelCommand.toJSON(), attendanceCommand.toJSON(), scrimAttendanceCommand.toJSON()] }
   );
   console.log(`[Discord Bot] Guild slash commands registered for guild ${guildId}`);
 

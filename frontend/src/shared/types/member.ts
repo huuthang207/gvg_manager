@@ -9,13 +9,6 @@ export type ClassType =
   | 'Chưa xác định'
   | 'Xung đột role phái';
 
-export interface Skill {
-  id: string;
-  name: string;
-  logo: string;
-  description?: string;
-}
-
 export interface Member {
   id: string;
   name: string;
@@ -26,8 +19,6 @@ export interface Member {
   active?: boolean;
   level?: number;
   power?: number;
-  assignedSkills?: string[];
-  assignedTeamId?: string;
   discordId?: string;
   discordUsername?: string;
   discordRoles?: string[];

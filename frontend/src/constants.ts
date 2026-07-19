@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ClassType, Member, DivisionType } from './types.ts';
+import { ClassType, Member } from './types.ts';
 
 export const UNKNOWN_CLASS: ClassType = 'Chưa xác định';
 export const CONFLICT_CLASS: ClassType = 'Xung đột role phái';
@@ -50,9 +50,3 @@ export function getClassIcon(classType: string) {
 
 // Mock data for guild members
 export const MOCK_MEMBERS: Member[] = [];
-
-export const INITIAL_DIVISIONS: Record<DivisionType, { teams: number }> = {
-  'Thủ': { teams: 5 },
-  'Công': { teams: 3 },
-  'Trợ': { teams: 2 },
-};

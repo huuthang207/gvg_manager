@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { AttendanceChoice } from '@prisma/client';
+import type { AttendanceChoice, AttendanceType } from '@prisma/client';
 import { getUserAppState } from '../appState.js';
 import { requireGuildAccess } from '../http/requireGuildAccess.js';
 import {
@@ -9,6 +9,7 @@ import {
   getAttendanceSessionById,
   getAttendanceStateForGuild,
   listAttendanceSessions,
+  normalizeAttendanceType,
   openAttendanceSession,
   refreshAttendanceSession,
   setAttendanceChannel,
@@ -21,6 +22,10 @@ import {
 
 function parseAttendanceChoice(value: unknown): AttendanceChoice | null {
   return value === 'GO' || value === 'NOGO' ? value : null;
+}
+
+function parseAttendanceType(value: unknown): AttendanceType {
+  return normalizeAttendanceType(value);
 }
 
 function isDiscordSnowflake(value: string) {
@@ -46,213 +51,131 @@ export function createAttendanceRoutes() {
 
   router.get('/api/attendance', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'view:guild', {
-        forbidden: 'Bạn không có quyền xem điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'view:guild', { forbidden: 'Bạn không có quyền xem điểm danh.' });
       if (!context) return;
-      const { access } = context;
-
-      const attendance = await getAttendanceStateForGuild(access.guild.id);
-      res.json(attendance);
-    } catch (err) {
-      next(err);
-    }
+      res.json(await getAttendanceStateForGuild(context.access.guild.id));
+    } catch (err) { next(err); }
   });
 
   router.get('/api/attendance/history', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'view:guild', {
-        forbidden: 'Bạn không có quyền xem điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'view:guild', { forbidden: 'Bạn không có quyền xem điểm danh.' });
       if (!context) return;
-      const { access } = context;
-
-      const result = await listAttendanceSessions(access.guild.discordGuildId, parseHistoryLimit(req.query.limit), parseHistoryOffset(req.query.offset));
+      const result = await listAttendanceSessions(context.access.guild.discordGuildId, parseHistoryLimit(req.query.limit), parseHistoryOffset(req.query.offset), parseAttendanceType(req.query.type));
       res.status(result.status).json(result.body);
-    } catch (err) {
-      next(err);
-    }
+    } catch (err) { next(err); }
   });
 
   router.get('/api/attendance/history/:sessionId', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'view:guild', {
-        forbidden: 'Bạn không có quyền xem điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'view:guild', { forbidden: 'Bạn không có quyền xem điểm danh.' });
       if (!context) return;
-      const { access } = context;
-
-      const result = await getAttendanceSessionById(access.guild.discordGuildId, req.params.sessionId);
+      const result = await getAttendanceSessionById(context.access.guild.discordGuildId, req.params.sessionId, parseAttendanceType(req.query.type));
       res.status(result.status).json(result.body);
-    } catch (err) {
-      next(err);
-    }
+    } catch (err) { next(err); }
   });
 
   router.delete('/api/attendance/history/:sessionId', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'manage:lineup', {
-        forbidden: 'Bạn không có quyền xóa lịch sử điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'manage:attendance', { forbidden: 'Bạn không có quyền xóa lịch sử điểm danh.' });
       if (!context) return;
-      const { access } = context;
-
-      const result = await deleteAttendanceSession(access.guild.discordGuildId, req.params.sessionId);
+      const result = await deleteAttendanceSession(context.access.guild.discordGuildId, req.params.sessionId, parseAttendanceType(req.query.type));
       res.status(result.status).json(result.body);
-    } catch (err) {
-      next(err);
-    }
+    } catch (err) { next(err); }
   });
 
   router.put('/api/attendance/config/channel', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'manage:lineup', {
-        forbidden: 'Bạn không có quyền cấu hình điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'manage:attendance', { forbidden: 'Bạn không có quyền cấu hình điểm danh.' });
       if (!context) return;
-      const { auth, access } = context;
-
       const discordChannelId = typeof req.body?.discordChannelId === 'string' ? req.body.discordChannelId.trim() : '';
       if (!isDiscordSnowflake(discordChannelId)) {
         res.status(400).json({ error: 'Discord channel id không hợp lệ.' });
         return;
       }
-
-      const result = await setAttendanceChannel(access.guild.discordGuildId, discordChannelId);
+      const result = await setAttendanceChannel(context.access.guild.discordGuildId, discordChannelId, parseAttendanceType(req.body?.type));
       if (result.status !== 200) {
         res.status(result.status).json(result.body);
         return;
       }
-
-      const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
-      res.json(state);
-    } catch (err) {
-      next(err);
-    }
+      res.json(await getUserAppState(context.auth.user.id, context.auth.session.activeGuildId));
+    } catch (err) { next(err); }
   });
 
   router.post('/api/attendance/sessions/open', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'manage:lineup', {
-        forbidden: 'Bạn không có quyền mở điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'manage:attendance', { forbidden: 'Bạn không có quyền mở điểm danh.' });
       if (!context) return;
-      const { auth, access } = context;
-
+      const type = parseAttendanceType(req.body?.type);
       const headerText = typeof req.body?.headerText === 'string' ? req.body.headerText : null;
-      const result = await openAttendanceSession({
-        discordGuildId: access.guild.discordGuildId,
-        openedByDiscordUserId: auth.user.discordUserId,
-        headerText,
-      });
-
+      const result = await openAttendanceSession({ discordGuildId: context.access.guild.discordGuildId, openedByDiscordUserId: context.auth.user.discordUserId, headerText, type });
       if (result.status !== 201) {
         res.status(result.status).json(result.body);
         return;
       }
-
-      await sendAttendanceDiscordMessage(result.body.session.id, result.body.session.discordChannelId);
-
-      const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
-      res.status(201).json(state);
-    } catch (err) {
-      next(err);
-    }
+      await sendAttendanceDiscordMessage(result.body.session.id, result.body.session.discordChannelId, type);
+      res.status(201).json(await getUserAppState(context.auth.user.id, context.auth.session.activeGuildId));
+    } catch (err) { next(err); }
   });
 
   router.post('/api/attendance/sessions/active/close', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'manage:lineup', {
-        forbidden: 'Bạn không có quyền đóng điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'manage:attendance', { forbidden: 'Bạn không có quyền đóng điểm danh.' });
       if (!context) return;
-      const { auth, access } = context;
-
-      const result = await closeAttendanceSession({
-        discordGuildId: access.guild.discordGuildId,
-        closedByDiscordUserId: auth.user.discordUserId,
-      });
-
+      const result = await closeAttendanceSession({ discordGuildId: context.access.guild.discordGuildId, closedByDiscordUserId: context.auth.user.discordUserId, type: parseAttendanceType(req.body?.type) });
       if (result.status !== 200) {
         res.status(result.status).json(result.body);
         return;
       }
-
-      await editAttendanceDiscordMessage(result.body.session.id, result.body.session.discordChannelId, result.body.session.discordMessageId, true);
-
-      const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
-      res.json(state);
-    } catch (err) {
-      next(err);
-    }
+      const session = result.body.session;
+      await editAttendanceDiscordMessage(session.id, session.discordChannelId, session.discordMessageId, true, session.type);
+      res.json(await getUserAppState(context.auth.user.id, context.auth.session.activeGuildId));
+    } catch (err) { next(err); }
   });
 
   router.post('/api/attendance/sessions/active/refresh', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'manage:lineup', {
-        forbidden: 'Bạn không có quyền refresh điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'manage:attendance', { forbidden: 'Bạn không có quyền refresh điểm danh.' });
       if (!context) return;
-      const { auth, access } = context;
-
-      const result = await refreshAttendanceSession(access.guild.discordGuildId);
+      const result = await refreshAttendanceSession(context.access.guild.discordGuildId, parseAttendanceType(req.body?.type));
       if (result.status !== 200) {
         res.status(result.status).json(result.body);
         return;
       }
-
       const session = result.body.session;
-      const edited = await editAttendanceDiscordMessage(session.id, session.discordChannelId, session.discordMessageId, false);
+      const edited = await editAttendanceDiscordMessage(session.id, session.discordChannelId, session.discordMessageId, false, session.type, { identitySource: 'live_member' });
       if (!edited) {
         res.status(404).json({ error: 'Không tìm thấy message Discord để refresh.' });
         return;
       }
-
-      const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
-      res.json(state);
-    } catch (err) {
-      next(err);
-    }
+      res.json(await getUserAppState(context.auth.user.id, context.auth.session.activeGuildId));
+    } catch (err) { next(err); }
   });
 
   router.post('/api/attendance/sessions/:sessionId/votes', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'view:guild', {
-        forbidden: 'Bạn không có quyền điểm danh.',
-      });
+      const context = await requireGuildAccess(req, res, 'view:guild', { forbidden: 'Bạn không có quyền điểm danh.' });
       if (!context) return;
-      const { auth, access } = context;
-
       const choice = parseAttendanceChoice(req.body?.choice);
       if (!choice) {
         res.status(400).json({ error: 'Lựa chọn điểm danh không hợp lệ.' });
         return;
       }
-
       const result = await castAttendanceVote({
-        discordGuildId: access.guild.discordGuildId,
-        discordUserId: auth.user.discordUserId,
+        discordGuildId: context.access.guild.discordGuildId,
+        discordUserId: context.auth.user.discordUserId,
         sessionId: req.params.sessionId,
         choice,
+        type: parseAttendanceType(req.body?.type),
       });
-
       if (result.status !== 200) {
         res.status(result.status).json(result.body);
         return;
       }
-
-      queueAttendanceDiscordMessageRefresh({
-        sessionId: result.body.session.id,
-        discordChannelId: result.body.session.discordChannelId,
-        discordMessageId: result.body.session.discordMessageId,
-        closed: false,
-      });
-
-      const state = await getUserAppState(auth.user.id, auth.session.activeGuildId);
-      res.json(state);
-    } catch (err) {
-      next(err);
-    }
+      const session = result.body.session;
+      queueAttendanceDiscordMessageRefresh({ sessionId: session.id, type: session.type, discordChannelId: session.discordChannelId, discordMessageId: session.discordMessageId, closed: false });
+      res.json(await getUserAppState(context.auth.user.id, context.auth.session.activeGuildId));
+    } catch (err) { next(err); }
   });
 
   return router;

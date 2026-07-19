@@ -18,13 +18,17 @@ export function useGuildActiveTab({ currentUser, currentGuild, permissions }: Us
       return;
     }
 
-    const canManageAttendance = permissions.includes('manage:lineup');
+    const canManageAttendance = permissions.includes('manage:attendance');
     const storedTab = readStoredActiveTab(currentUser.id, currentGuild.id);
-    setActiveTab(storedTab && (storedTab !== 'attendance' || canManageAttendance) ? storedTab : 'dashboard');
-  }, [currentGuild?.id, currentUser?.id]);
+    const nextTab = storedTab && (storedTab !== 'attendance' || canManageAttendance) ? storedTab : 'dashboard';
+    setActiveTab(nextTab);
+    if (storedTab !== nextTab) {
+      writeStoredActiveTab(currentUser.id, currentGuild.id, nextTab);
+    }
+  }, [currentGuild?.id, currentUser?.id, permissions]);
 
   const updateActiveTab = React.useCallback((tab: Tab) => {
-    if (tab === 'attendance' && !permissions.includes('manage:lineup')) return;
+    if (tab === 'attendance' && !permissions.includes('manage:attendance')) return;
 
     setActiveTab(tab);
     if (currentUser && currentGuild) {

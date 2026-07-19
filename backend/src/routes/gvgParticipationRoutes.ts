@@ -45,7 +45,7 @@ export function createGvgParticipationRoutes() {
 
   router.post('/api/gvg-participation/sessions/finalize', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+      const context = await requireGuildAccess(req, res, 'manage:attendance', {
         forbidden: 'Bạn không có quyền chốt tham gia bang chiến.',
       });
       if (!context) return;
@@ -75,7 +75,7 @@ export function createGvgParticipationRoutes() {
 
   router.delete('/api/gvg-participation/sessions/month', async (req, res, next) => {
     try {
-      const context = await requireGuildAccess(req, res, 'manage:lineup', {
+      const context = await requireGuildAccess(req, res, 'manage:attendance', {
         forbidden: 'Bạn không có quyền xoá dữ liệu bang chiến.',
       });
       if (!context) return;

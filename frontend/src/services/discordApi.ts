@@ -1,22 +1,17 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 export type {
   DiscordRoleMapping,
   DiscordMemberPreview,
   ImportResponse,
-  LineupSnapshotData,
-  LineupSnapshotSummary,
-  LineupSnapshotDetail,
   AppStateResponse,
-  LineupEditLock,
   DiscordGuild,
   GuildsResponse,
   AccessibleGuild,
   AccessibleGuildsResponse,
   DiscordUser,
+  GvgLineup,
+  GvgLineupDivision,
+  GvgLineupSquad,
+  GvgLineupSlot,
 } from './apiTypes.ts';
 
 export { loginWithDiscord, checkAuthStatus, logoutDiscord, getBotInviteUrl } from './authApi.ts';
@@ -27,15 +22,13 @@ export {
   updateMemberClassRole,
   updateMyIngameName,
   deleteMember,
-  assignMemberSkill,
-  removeMemberSkill,
-  clearMemberSkills,
   syncDiscordMembers,
   fetchDiscordRoles,
   fetchCurrentDiscordRoles,
 } from './memberApi.ts';
-export { saveSquadLayout, getLineupEditLock, acquireLineupEditLock, heartbeatLineupEditLock, releaseLineupEditLock, overrideLineupEditLock, getLineupSnapshots, createLineupSnapshot, updateLineupSnapshot, getLineupSnapshot, restoreLineupSnapshot, deleteLineupSnapshot } from './lineupApi.ts';
 export { resetCurrentGuildData, updateAccessRoles, updateRoleConfig } from './settingsApi.ts';
 export { updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, getAttendanceHistory, getAttendanceSession, deleteAttendanceHistorySession } from './attendanceApi.ts';
 export { getGvgParticipationSessions, getGvgParticipationStats, deleteGvgParticipationSessionsForMonth, finalizeGvgParticipationSession } from './gvgParticipationApi.ts';
+export { getGvgLineup, saveGvgLineup, clearGvgLineupSquad } from './gvgLineupApi.ts';
+export type { GvgLineupSavePayload } from './gvgLineupApi.ts';
 export type { GvgParticipationSession, GvgParticipationStats } from './gvgParticipationApi.ts';

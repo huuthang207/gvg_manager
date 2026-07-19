@@ -4,16 +4,14 @@ export type GuildRole = 'owner' | 'manager' | 'member';
 
 export type Permission =
   | 'view:guild'
-  | 'manage:lineup'
-  | 'manage:snapshots'
-  | 'restore:snapshots'
+  | 'manage:attendance'
   | 'manage:members'
   | 'manage:settings'
   | 'reset:guild-data';
 
 const ROLE_PERMISSIONS: Record<GuildRole, Permission[]> = {
-  owner: ['view:guild', 'manage:lineup', 'manage:snapshots', 'restore:snapshots', 'manage:members', 'manage:settings', 'reset:guild-data'],
-  manager: ['view:guild', 'manage:lineup', 'manage:snapshots', 'restore:snapshots', 'manage:members'],
+  owner: ['view:guild', 'manage:attendance', 'manage:members', 'manage:settings', 'reset:guild-data'],
+  manager: ['view:guild', 'manage:attendance', 'manage:members'],
   member: ['view:guild'],
 };
 

@@ -4,14 +4,11 @@ export type {
   ImportResponse,
   AppStateResponse,
   DiscordUser,
-  LineupEditLock,
+  GvgLineup,
+  GvgLineupDivision,
+  GvgLineupSquad,
+  GvgLineupSlot,
 } from '../shared/types/auth.ts';
-
-export type {
-  LineupSnapshotData,
-  LineupSnapshotSummary,
-  LineupSnapshotDetail,
-} from '../shared/types/lineup.ts';
 
 export type {
   DiscordGuild,

@@ -21,24 +21,12 @@ export function sortMembersByDisplayName(members: Member[]) {
 
 export function mergeMemberDeltaIntoPool(prev: Member[], upsertMembers: MemberLike[], removedMemberIds: string[]) {
   const map = new Map<string, Member>(prev.map(member => [member.id, member]));
-  upsertMembers.forEach(member => {
-    const previous = map.get(member.id);
-    map.set(member.id, {
-      ...normalizeMember(member),
-      assignedSkills: member.assignedSkills ?? previous?.assignedSkills ?? [],
-    });
-  });
-  removedMemberIds.forEach(id => {
-    map.delete(id);
-  });
+  upsertMembers.forEach(member => map.set(member.id, normalizeMember(member)));
+  removedMemberIds.forEach(id => map.delete(id));
   return sortMembersByDisplayName(Array.from(map.values()));
 }
 
-export function replaceMemberPoolPreservingSkills(prev: Member[], members: MemberLike[]) {
-  const previousSkillsByMemberId = new Map(prev.map(member => [member.id, member.assignedSkills || []]));
-
-  return members.map(member => ({
-    ...normalizeMember(member),
-    assignedSkills: member.assignedSkills ?? previousSkillsByMemberId.get(member.id) ?? [],
-  }));
+export function replaceMemberPool(prev: Member[], members: MemberLike[]) {
+  void prev;
+  return members.map(normalizeMember);
 }
