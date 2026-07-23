@@ -49,6 +49,21 @@ export function moveSquadToNewDivision(lineup: GvgLineup, squadNumber: number) {
   return { divisions: normalizeDivisions(divisions) };
 }
 
+export function reorderSquadsWithinDivision(lineup: GvgLineup, divisionId: string, sourceIndex: number, targetIndex: number) {
+  const division = lineup.divisions.find(item => item.id === divisionId);
+  if (!division || sourceIndex < 0 || targetIndex < 0 || sourceIndex >= division.squads.length || targetIndex >= division.squads.length || sourceIndex === targetIndex) return lineup;
+
+  const squads = [...division.squads];
+  const [squad] = squads.splice(sourceIndex, 1);
+  squads.splice(targetIndex, 0, squad);
+  return {
+    divisions: lineup.divisions.map(item => item.id !== divisionId ? item : {
+      ...item,
+      squads: squads.map((current, orderIndex) => ({ ...current, orderIndex })),
+    }),
+  };
+}
+
 export function getAssignedMemberIds(lineup: GvgLineup) {
   return new Set(lineup.divisions.flatMap(division => division.squads.flatMap(squad => squad.slots.flatMap(slot => slot.memberId ? [slot.memberId] : []))));
 }

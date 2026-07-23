@@ -102,6 +102,8 @@ export default function App() {
     handleUpdateRoleConfig,
   } = useMemberActions({ applyAppState, loadAppState, setSyncing, updateActiveTab, alert });
 
+  const gvgLineupMutationPendingRef = React.useRef(false);
+
   const { closeRealtimeConnection } = useGuildRealtime({
     isAuthenticated,
     isAuthorized,
@@ -114,6 +116,7 @@ export default function App() {
     mergeMemberDelta,
     replaceMemberPool: replaceMemberPoolState,
     refreshGvgParticipationStats,
+    shouldIgnoreGvgLineupRealtimeUpdate: () => gvgLineupMutationPendingRef.current,
     realtimeDebugEnabled,
   });
 
@@ -161,7 +164,7 @@ export default function App() {
         <AppHeader activeTab={activeTab} />
         <div className="min-h-0 flex flex-1 flex-col overflow-hidden">
           {activeTab === 'dashboard' && <MemberDashboard members={dashboardMembers} gvgParticipationMonth={gvgParticipationMonth} onGvgParticipationMonthChange={setGvgParticipationMonth} onImport={handleDiscordImport} onDelete={handleDeleteMember} onUpdateIngameName={handleUpdateIngameName} onUpdateMemberClassRole={handleUpdateMemberClassRole} onUpdateMyIngameName={handleUpdateMyIngameName} currentUser={currentUser} currentRole={currentRole} canManageMembers={canManageMembers} canManageSettings={canManageSettings} canSelfService={canSelfService} roleConfig={roleConfig} onUpdateRoleConfig={handleUpdateRoleConfig} onResetCurrentGuildData={handleResetCurrentGuildData} lastSyncedAt={lastSyncedAt} />}
-          {activeTab === 'gvg-lineup' && <GvgLineupWorkspace lineup={gvgLineup} members={memberPool} canEdit={currentRole === 'owner'} onLineupChange={setGvgLineup} onReload={async () => { await loadAppState(); }} />}
+          {activeTab === 'gvg-lineup' && <GvgLineupWorkspace lineup={gvgLineup} members={memberPool} canEdit={currentRole === 'owner'} onLineupChange={setGvgLineup} onLineupMutationPendingChange={pending => { gvgLineupMutationPendingRef.current = pending; }} onReload={async () => { await loadAppState(); }} />}
           {activeTab === 'attendance' && canManageAttendance && <AttendanceView attendance={attendance} members={memberPool} actionLoading={attendanceActionLoading} onSetChannel={handleSetAttendanceChannel} onOpenSession={handleOpenAttendanceSession} onCloseSession={handleCloseAttendanceSession} onRefreshSession={handleRefreshAttendanceSession} onDeleteGvgParticipationMonth={handleDeleteGvgParticipationMonth} />}
         </div>
       </div>

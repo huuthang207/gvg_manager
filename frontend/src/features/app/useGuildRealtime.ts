@@ -31,13 +31,14 @@ interface UseGuildRealtimeParams {
   mergeMemberDelta: (upsertMembers: Member[], removedMemberIds: string[]) => void;
   replaceMemberPool: (members: Member[]) => void;
   refreshGvgParticipationStats: () => Promise<void>;
+  shouldIgnoreGvgLineupRealtimeUpdate: () => boolean;
   realtimeDebugEnabled: boolean;
 }
 
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 30000];
 const ATTENDANCE_REALTIME_DEBOUNCE_MS = 300;
 
-export function useGuildRealtime({ isAuthenticated, isAuthorized, currentGuild, lastSyncedAt, applyAppState, setIsAuthorized, setBlockedReason, setLastSyncedAt, mergeMemberDelta, replaceMemberPool, refreshGvgParticipationStats, realtimeDebugEnabled }: UseGuildRealtimeParams) {
+export function useGuildRealtime({ isAuthenticated, isAuthorized, currentGuild, lastSyncedAt, applyAppState, setIsAuthorized, setBlockedReason, setLastSyncedAt, mergeMemberDelta, replaceMemberPool, refreshGvgParticipationStats, shouldIgnoreGvgLineupRealtimeUpdate, realtimeDebugEnabled }: UseGuildRealtimeParams) {
   const wsRef = React.useRef<WebSocket | null>(null);
   const reconnectTimerRef = React.useRef<number | null>(null);
   const reconnectAttemptRef = React.useRef(0);
@@ -122,6 +123,10 @@ export function useGuildRealtime({ isAuthenticated, isAuthorized, currentGuild, 
           replaceMemberPool(payload.members);
           setLastSyncedAt(payload.lastSyncedAt ?? null);
         } else if (payload.type === 'guild_app_state_changed') {
+          if (payload.reason === 'gvg_lineup_updated' && shouldIgnoreGvgLineupRealtimeUpdate()) {
+            logRealtime('[WS] Ignored local GvG lineup update');
+            return;
+          }
           if (payload.reason === 'attendance_updated') scheduleAttendanceRefresh();
           else void refreshAppStateFromRealtime(payload.reason ?? 'poll');
           if (payload.reason === 'gvg_participation_updated') void refreshGvgParticipationStats();
@@ -136,7 +141,7 @@ export function useGuildRealtime({ isAuthenticated, isAuthorized, currentGuild, 
       clearReconnectTimer();
       reconnectTimerRef.current = window.setTimeout(connectWebSocket, delay);
     };
-  }, [clearReconnectTimer, currentGuild, isAuthenticated, isAuthorized, logRealtime, mergeMemberDelta, refreshAppStateFromRealtime, refreshGvgParticipationStats, replaceMemberPool, scheduleAttendanceRefresh, setLastSyncedAt, subscribeCurrentGuild]);
+  }, [clearReconnectTimer, currentGuild, isAuthenticated, isAuthorized, logRealtime, mergeMemberDelta, refreshAppStateFromRealtime, refreshGvgParticipationStats, replaceMemberPool, scheduleAttendanceRefresh, setLastSyncedAt, shouldIgnoreGvgLineupRealtimeUpdate, subscribeCurrentGuild]);
 
   const closeRealtimeConnection = React.useCallback(() => {
     clearReconnectTimer();
