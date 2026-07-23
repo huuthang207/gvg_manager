@@ -1,64 +1,258 @@
 import React from 'react';
-import { DndContext, DragEndEvent, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from '@dnd-kit/core';
-import { GripVertical, Plus, Trash2, UserMinus } from 'lucide-react';
-import type { GvgLineup, GvgLineupDivision, GvgLineupSquad } from '../../services/apiTypes.ts';
+import { Check, ChevronDown, Minus, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
+import type { GvgLineup, GvgLineupSquad } from '../../services/apiTypes.ts';
 import type { Member } from '../../shared/types/member.ts';
-import { clearGvgLineupSquad, saveGvgLineup } from '../../services/gvgLineupApi.ts';
-import { getClassColor, getClassIcon } from '../../constants.ts';
+import {
+  createGvgLineupDivision,
+  createGvgLineupSquad,
+  deleteGvgLineupDivision,
+  deleteGvgLineupSquad,
+  updateGvgLineupDivisionNote,
+  updateGvgLineupSquadName,
+  updateGvgLineupSquadSlots,
+} from '../../services/gvgLineupApi.ts';
+import { CLASSES, getClassColor, getClassIcon } from '../../constants.ts';
 import { useSystemDialog } from '../app/SystemDialogProvider.tsx';
-import { clearSquadLocal, moveSquad, moveSquadToNewDivision, setSquadMember, SQUADS_PER_DIVISION, toSavePayload } from './gvgLineupLayout.ts';
+import {
+  filterGvgMembersByName,
+  getAvailableGvgMembers,
+  getEffectiveGvgClass,
+} from './gvgLineupLayout.ts';
 
-interface Props {
+const MAX_SQUADS = 5;
+const SLOT_COUNT = 6;
+
+type Props = {
   lineup: GvgLineup | null;
   members: Member[];
   canEdit: boolean;
   onLineupChange: (lineup: GvgLineup) => void;
   onReload: () => Promise<unknown>;
+};
+
+type SlotClasses = Record<string, string>;
+
+function getSlotKey(squadId: string, slotIndex: number) {
+  return `${squadId}:${slotIndex}`;
 }
 
-function SquadCard({ squad, divisionIndex, squadIndex, members, canEdit, onClear, onMemberChange }: {
+function ClassIcon({ classType }: { classType: string | null }) {
+  const icon = classType ? getClassIcon(classType) : null;
+  if (icon) return <img src={icon} alt="" className="h-5 w-5 shrink-0 object-contain" />;
+  return <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-dashed border-slate-600 text-slate-500"><Plus size={12} /></span>;
+}
+
+function SquadCard({
+  squad,
+  members,
+  assignedMemberIds,
+  slotClasses,
+  openClassSlot,
+  canEdit,
+  saving,
+  onClassChange,
+  onOpenClassSlotChange,
+  onUpdate,
+  onDelete,
+}: {
   key?: React.Key;
   squad: GvgLineupSquad;
-  divisionIndex: number;
-  squadIndex: number;
   members: Member[];
+  assignedMemberIds: Set<string>;
+  slotClasses: SlotClasses;
+  openClassSlot: string | null;
   canEdit: boolean;
-  onClear: () => void | Promise<void>;
-  onMemberChange: (slotIndex: number, memberId: string) => void | Promise<void>;
+  saving: boolean;
+  onClassChange: (slotKey: string, classType: string | null) => void;
+  onOpenClassSlotChange: (slotKey: string | null) => void;
+  onUpdate: (memberIds: Array<string | null>) => Promise<void>;
+  onDelete: () => Promise<void>;
 }) {
-  const draggable = useDraggable({ id: `squad-${squad.squadNumber}`, data: { squadNumber: squad.squadNumber, divisionIndex, squadIndex } });
-  const dropTarget = useDroppable({ id: `squad-drop-${squad.squadNumber}`, data: { divisionIndex, squadIndex } });
-  const { attributes, listeners, setNodeRef, transform, isDragging } = draggable;
-  const setCardRef = React.useCallback((node: HTMLElement | null) => {
-    setNodeRef(node);
-    dropTarget.setNodeRef(node);
-  }, [dropTarget, setNodeRef]);
-  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
-  const assignedMemberIds = new Set(squad.slots.map(slot => slot.memberId).filter(Boolean));
+  const { alert } = useSystemDialog();
+  const [editingName, setEditingName] = React.useState(false);
+  const [nameDraft, setNameDraft] = React.useState(squad.name);
+  const [renaming, setRenaming] = React.useState(false);
+  const [openSlot, setOpenSlot] = React.useState<number | null>(null);
+  const [memberQuery, setMemberQuery] = React.useState('');
+  const cardRef = React.useRef<HTMLElement | null>(null);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!cardRef.current?.contains(event.target as Node)) {
+        setOpenSlot(null);
+        onOpenClassSlotChange(null);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [onOpenClassSlotChange]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenSlot(null);
+        onOpenClassSlotChange(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onOpenClassSlotChange]);
+
+  React.useEffect(() => { if (!editingName) setNameDraft(squad.name); }, [editingName, squad.name]);
+  React.useEffect(() => { if (editingName) inputRef.current?.select(); }, [editingName]);
+  React.useEffect(() => { if (openSlot === null) setMemberQuery(''); }, [openSlot]);
+
+  const saveName = async () => {
+    const name = nameDraft.trim();
+    if (!name || name.length > 32 || renaming) return;
+    setRenaming(true);
+    try {
+      const next = await updateGvgLineupSquadName(squad.squadNumber, name);
+      window.dispatchEvent(new CustomEvent('gvg-lineup-local-update', { detail: next }));
+      setEditingName(false);
+    } catch (error) {
+      await alert({ title: 'Không thể đổi tên tổ đội', message: error instanceof Error ? error.message : 'Vui lòng thử lại.', variant: 'error' });
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  const chooseMember = async (slotIndex: number, memberId: string | null) => {
+    if (!memberId) onClassChange(getSlotKey(squad.id, slotIndex), null);
+    const next = squad.slots.map((slot, index) => index === slotIndex ? memberId : slot.memberId);
+    setOpenSlot(null);
+    await onUpdate(next);
+  };
 
   return (
-    <article ref={setCardRef} style={style} className={`w-72 shrink-0 rounded-xl border bg-slate-900/85 shadow-xl shadow-black/15 ${dropTarget.isOver ? 'border-sky-400 ring-2 ring-sky-400/20' : 'border-slate-700/80'} ${isDragging ? 'opacity-35' : ''}`}>
-      <header className="flex items-center justify-between border-b border-slate-800 px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          {canEdit && <button type="button" {...attributes} {...listeners} className="cursor-grab rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200" aria-label={`Kéo Tổ đội ${squad.squadNumber}`}><GripVertical size={16} /></button>}
-          <h3 className="text-sm font-black uppercase tracking-wider text-white">Tổ đội {squad.squadNumber}</h3>
+    <article ref={cardRef} className="min-w-0 rounded-xl border border-slate-700/80 bg-slate-900/85 shadow-xl shadow-black/15">
+      <header className="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {editingName ? (
+            <input
+              ref={inputRef}
+              value={nameDraft}
+              onChange={event => setNameDraft(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') void saveName();
+                if (event.key === 'Escape') setEditingName(false);
+              }}
+              maxLength={32}
+              disabled={renaming}
+              aria-label={`Tên tổ đội ${squad.squadNumber}`}
+              className="w-full min-w-0 rounded border border-sky-400/60 bg-slate-950 px-2 py-1 text-sm font-black text-white outline-none focus:ring-2 focus:ring-sky-400/70"
+            />
+          ) : <h3 className="truncate text-sm font-black uppercase tracking-wider text-white" title={squad.name}>{squad.name}</h3>}
+          {canEdit && <button type="button" onClick={() => editingName ? void saveName() : setEditingName(true)} disabled={saving || renaming || (editingName && !nameDraft.trim())} className="rounded p-1 text-slate-500 hover:bg-sky-500/10 hover:text-sky-200 focus:outline-none focus:ring-2 focus:ring-sky-400/70 disabled:opacity-50" aria-label={editingName ? 'Lưu tên tổ đội' : 'Đổi tên tổ đội'}>{editingName ? <Check size={14} /> : <Pencil size={14} />}</button>}
         </div>
-        {canEdit && <button type="button" onClick={onClear} className="rounded p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-300" title="Làm trống tổ đội"><Trash2 size={15} /></button>}
+        {canEdit && <button type="button" onClick={() => void onDelete()} disabled={saving} className="rounded p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50" title="Xóa tổ đội" aria-label="Xóa tổ đội"><Trash2 size={15} /></button>}
       </header>
+
       <div className="space-y-1.5 p-3">
-        {squad.slots.map((slot, slotIndex) => {
-          const icon = slot.member ? getClassIcon(slot.member.classType) : null;
-          const availableMembers = members.filter(member => member.id === slot.memberId || !assignedMemberIds.has(member.id));
+        {Array.from({ length: SLOT_COUNT }, (_, slotIndex) => {
+          const slot = squad.slots[slotIndex] ?? { memberId: null, member: null };
+          const slotKey = getSlotKey(squad.id, slotIndex);
+          const selectedClass = slotClasses[slotKey] ?? null;
+          const effectiveClass = getEffectiveGvgClass(selectedClass, slot.member?.classType);
+          const color = effectiveClass ? getClassColor(effectiveClass) : null;
+          const availableMembers = effectiveClass
+            ? filterGvgMembersByName(getAvailableGvgMembers(members, assignedMemberIds, slot.memberId, effectiveClass), memberQuery)
+            : [];
+          const classMenuOpen = openClassSlot === slotKey;
+
           return (
-            <div key={slotIndex} className="flex min-h-9 items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/45 px-2">
-              {slot.member ? icon ? <img src={icon} className="h-5 w-5 object-contain" alt="" /> : <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: getClassColor(slot.member.classType) }} /> : <span className="h-5 w-5 rounded border border-dashed border-slate-700" />}
+            <div
+              key={slotIndex}
+              className="relative flex min-h-10 items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/35 px-2"
+              style={color ? { borderColor: `${color}a8`, backgroundColor: `${color}18` } : undefined}
+            >
+              <div className="relative shrink-0">
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenClassSlotChange(classMenuOpen ? null : slotKey)}
+                    onKeyDown={event => { if (event.key === 'Escape') onOpenClassSlotChange(null); }}
+                    aria-label={effectiveClass ? `Chọn phái, đang chọn ${effectiveClass}` : 'Chọn phái'}
+                    aria-expanded={classMenuOpen}
+                    title={effectiveClass ? `Phái: ${effectiveClass}` : 'Chọn phái'}
+                    className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-slate-900/40 focus:outline-none focus:ring-2 focus:ring-sky-400/70"
+                  >
+                    <ClassIcon classType={effectiveClass} />
+                  </button>
+                ) : <ClassIcon classType={slot.member?.classType ?? null} />}
+
+                {canEdit && classMenuOpen && (
+                  <div onPointerDown={event => event.stopPropagation()} className="absolute left-0 top-[calc(100%+0.25rem)] z-30 grid w-36 grid-cols-3 gap-1 rounded-xl border border-slate-700/90 bg-slate-950/98 p-1.5 shadow-2xl shadow-black/60">
+                    {CLASSES.map(classType => (
+                      <button
+                        key={classType}
+                        type="button"
+                        onClick={() => {
+                          onClassChange(slotKey, classType);
+                          onOpenClassSlotChange(null);
+                          setMemberQuery('');
+                          setOpenSlot(slotIndex);
+                        }}
+                        aria-label={`Chọn phái ${classType}`}
+                        title={classType}
+                        className={`flex h-9 w-full items-center justify-center rounded-lg transition-colors ${effectiveClass === classType ? 'text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                        style={effectiveClass === classType ? { backgroundColor: `${getClassColor(classType)}55` } : undefined}
+                      >
+                        <ClassIcon classType={classType} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {canEdit ? (
-                <select value={slot.memberId ?? ''} onChange={event => onMemberChange(slotIndex, event.target.value)} className="min-w-0 flex-1 appearance-none bg-transparent text-xs text-slate-200 outline-none">
-                  <option value="">Vị trí trống</option>
-                  {availableMembers.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
-                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!effectiveClass) {
+                      setOpenSlot(null);
+                      onOpenClassSlotChange(slotKey);
+                      return;
+                    }
+                    setOpenSlot(openSlot === slotIndex ? null : slotIndex);
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs text-slate-200"
+                  aria-label={slot.member?.name ? `Chọn thành viên, hiện tại ${slot.member.name}` : effectiveClass ? `Chọn thành viên phái ${effectiveClass}` : 'Chọn phái'}
+                  aria-expanded={openSlot === slotIndex}
+                >
+                  {slot.member && <span className="min-w-0 flex-1 truncate">{slot.member.name}</span>}
+                  <ChevronDown size={14} className="ml-auto text-slate-500" />
+                </button>
               ) : <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{slot.member?.name ?? 'Vị trí trống'}</span>}
-              {canEdit && slot.member && <button type="button" onClick={() => onMemberChange(slotIndex, '')} className="text-slate-600 hover:text-red-300" aria-label="Gỡ thành viên"><UserMinus size={13} /></button>}
+              {canEdit && slot.member && <button type="button" onClick={() => void chooseMember(slotIndex, null)} className="rounded p-1 text-slate-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Gỡ thành viên"><Minus size={12} /></button>}
+
+              {canEdit && openSlot === slotIndex && (
+                <div className="absolute left-0 top-[calc(100%+0.25rem)] z-20 w-full overflow-hidden rounded-xl border border-slate-700/90 bg-slate-950/98 p-1.5 shadow-2xl shadow-black/60">
+                  {effectiveClass ? (
+                    <>
+                      <div className="border-b border-slate-800 px-1.5 pb-2 pt-0.5">
+                        <div className="relative">
+                          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                          <input
+                            autoFocus
+                            value={memberQuery}
+                            onChange={event => setMemberQuery(event.target.value)}
+                            placeholder={`Tìm ${effectiveClass}...`}
+                            className="w-full rounded-lg border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20"
+                          />
+                        </div>
+                        {slot.member && slot.member.classType !== effectiveClass && <p className="mt-1.5 text-[10px] text-amber-200">Thành viên hiện tại vẫn được giữ đến khi bạn chọn người thay thế.</p>}
+                      </div>
+                      <div className="max-h-64 overflow-y-auto pt-1 custom-scrollbar">
+                        <button type="button" onClick={() => void chooseMember(slotIndex, null)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-bold text-slate-400 hover:bg-slate-800"><Users size={15} />Vị trí trống</button>
+                        {availableMembers.map(member => <button key={member.id} type="button" onClick={() => void chooseMember(slotIndex, member.id)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-bold text-slate-200 hover:bg-slate-800"><ClassIcon classType={member.classType} /><span className="min-w-0 flex-1 truncate">{member.name}</span><span className="text-[10px]" style={{ color: getClassColor(member.classType) }}>{member.classType}</span></button>)}
+                        {!availableMembers.length && <p className="px-2.5 py-3 text-center text-xs text-slate-500">Không có thành viên {effectiveClass} phù hợp.</p>}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              )}
             </div>
           );
         })}
@@ -67,64 +261,140 @@ function SquadCard({ squad, divisionIndex, squadIndex, members, canEdit, onClear
   );
 }
 
-function DivisionLane({ division, index, children }: { key?: React.Key; division: GvgLineupDivision; index: number; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `division-${index}`, data: { divisionIndex: index } });
-  return <section ref={setNodeRef} className={`app-surface rounded-2xl border p-4 ${isOver ? 'border-sky-400/70 ring-2 ring-sky-400/20' : 'border-slate-700/70'}`}>
-    <div className="mb-3 flex items-center justify-between"><h2 className="font-black uppercase tracking-widest text-sky-200">Đoàn {index + 1}</h2><span className="rounded-full border border-slate-700 bg-slate-950/60 px-2 py-1 text-[11px] font-bold text-slate-400">{division.squads.length}/{SQUADS_PER_DIVISION} tổ đội</span></div>
-    <div className="custom-scrollbar flex min-h-[310px] gap-3 overflow-x-auto pb-2">{children}</div>
-  </section>;
-}
-
-function NewDivisionDropZone() {
-  const { setNodeRef, isOver } = useDroppable({ id: 'new-division' });
-  return <div ref={setNodeRef} className={`flex min-h-24 items-center justify-center rounded-2xl border border-dashed px-4 text-sm font-bold transition-colors ${isOver ? 'border-sky-300 bg-sky-500/15 text-sky-100' : 'border-slate-600 bg-slate-900/35 text-slate-400'}`}><Plus size={18} className="mr-2" />Kéo tổ đội vào đây để tạo đoàn mới</div>;
-}
-
 export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, onReload }: Props) {
   const { alert, confirm } = useSystemDialog();
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-  const [activeSquad, setActiveSquad] = React.useState<number | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [slotClasses, setSlotClasses] = React.useState<SlotClasses>({});
+  const [openClassSlot, setOpenClassSlot] = React.useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = React.useState('');
+  const [noteDraftDivisionId, setNoteDraftDivisionId] = React.useState<string | null>(null);
+  const [noteDirty, setNoteDirty] = React.useState(false);
 
-  const persist = React.useCallback(async (next: GvgLineup) => {
-    onLineupChange(next);
-    if (!canEdit) return;
-    setSaving(true);
-    try {
-      onLineupChange(await saveGvgLineup(toSavePayload(next)));
-    } catch (error) {
-      await alert({ title: 'Không thể lưu đội hình', message: error instanceof Error ? error.message : 'Vui lòng thử lại.', variant: 'error' });
-      await onReload();
-    } finally { setSaving(false); }
-  }, [alert, canEdit, onLineupChange, onReload]);
+  React.useEffect(() => {
+    const update = (event: Event) => onLineupChange((event as CustomEvent<GvgLineup>).detail);
+    window.addEventListener('gvg-lineup-local-update', update);
+    return () => window.removeEventListener('gvg-lineup-local-update', update);
+  }, [onLineupChange]);
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    setActiveSquad(null);
-    if (!lineup || !canEdit || !event.active.data.current) return;
-    const squadNumber = event.active.data.current.squadNumber as number;
-    if (event.over?.id === 'new-division') {
-      const next = moveSquadToNewDivision(lineup, squadNumber);
-      if (next !== lineup) await persist(next);
-      return;
-    }
-    const targetDivisionIndex = event.over?.data.current?.divisionIndex;
-    if (typeof targetDivisionIndex !== 'number') return;
-    const targetSquadIndex = typeof event.over?.data.current?.squadIndex === 'number'
-      ? event.over.data.current.squadIndex
-      : lineup.divisions[targetDivisionIndex].squads.length;
-    const next = moveSquad(lineup, squadNumber, targetDivisionIndex, targetSquadIndex);
-    if (next !== lineup) await persist(next);
-  };
+  React.useEffect(() => {
+    if (!lineup) return;
+    setSelectedId(current => current && lineup.divisions.some(division => division.id === current) ? current : lineup.divisions[0]?.id ?? null);
+
+    const validSlotKeys = new Set(lineup.divisions.flatMap(division => division.squads.flatMap(squad => Array.from({ length: SLOT_COUNT }, (_, slotIndex) => getSlotKey(squad.id, slotIndex)))));
+    setSlotClasses(current => {
+      const next = Object.fromEntries(Object.entries(current).filter(([slotKey]) => validSlotKeys.has(slotKey)));
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+    setOpenClassSlot(current => current && validSlotKeys.has(current) ? current : null);
+  }, [lineup]);
+
+  React.useEffect(() => {
+    if (!lineup || !selectedId) return;
+    const division = lineup.divisions.find(item => item.id === selectedId);
+    if (!division || (noteDirty && noteDraftDivisionId === division.id)) return;
+    setNoteDraft(division.note ?? '');
+    setNoteDraftDivisionId(division.id);
+    setNoteDirty(false);
+  }, [lineup, noteDirty, noteDraftDivisionId, selectedId]);
 
   if (!lineup) return <div className="flex h-full items-center justify-center text-slate-400">Đang tải đội hình Bang Chiến...</div>;
 
-  return <div className="custom-scrollbar h-full overflow-y-auto p-4 sm:p-6"><div className="mx-auto max-w-[1600px] space-y-4">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-sky-300">Bang Chiến</p><h1 className="mt-1 text-2xl font-black text-white">Đội hình Bang Chiến</h1><p className="mt-1 text-sm text-slate-400">10 tổ đội cố định · {lineup.divisions.length}/5 đoàn · Mỗi tổ tối đa 6 thành viên</p></div>{saving && <span className="text-xs font-bold text-sky-300">Đang lưu...</span>}</div>
-    {!canEdit && <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">Chỉ bang chủ có quyền chỉnh sửa đội hình.</p>}
-    <DndContext sensors={sensors} onDragStart={event => setActiveSquad(event.active.data.current?.squadNumber as number)} onDragCancel={() => setActiveSquad(null)} onDragEnd={handleDragEnd}>
-      <div className="space-y-4">{lineup.divisions.map((division, divisionIndex) => <DivisionLane key={division.id} division={division} index={divisionIndex}>{division.squads.map((squad, squadIndex) => <SquadCard key={squad.id} squad={squad} divisionIndex={divisionIndex} squadIndex={squadIndex} members={members} canEdit={canEdit} onMemberChange={async (slotIndex, memberId) => { const member = members.find(item => item.id === memberId) ?? null; await persist(setSquadMember(lineup, squad.squadNumber, slotIndex, member ? { id: member.id, name: member.name, classType: member.classType } : null)); }} onClear={async () => { if (!await confirm({ title: `Làm trống Tổ đội ${squad.squadNumber}?`, message: 'Tất cả thành viên sẽ được gỡ khỏi tổ đội. Tổ đội và vị trí trong đoàn vẫn được giữ.', variant: 'danger', confirmLabel: 'Làm trống' })) return; setSaving(true); try { onLineupChange(await clearGvgLineupSquad(squad.squadNumber)); } catch (error) { await alert({ message: error instanceof Error ? error.message : 'Không thể làm trống tổ đội.', variant: 'error' }); } finally { setSaving(false); } }} />)}</DivisionLane>)}</div>
-      {canEdit && lineup.divisions.length < 5 && <NewDivisionDropZone />}
-      <DragOverlay>{activeSquad ? <div className="rounded-lg border border-sky-300 bg-slate-900 px-4 py-2 text-sm font-black text-white shadow-2xl">Tổ đội {activeSquad}</div> : null}</DragOverlay>
-    </DndContext>
-  </div></div>;
+  const selectedIndex = Math.max(0, lineup.divisions.findIndex(division => division.id === selectedId));
+  const selectedDivision = lineup.divisions[selectedIndex] ?? null;
+  const squadCount = lineup.divisions.flatMap(division => division.squads).length;
+  const assignedMemberIds = new Set(lineup.divisions.flatMap(division => division.squads.flatMap(squad => squad.slots.flatMap(slot => slot.memberId ? [slot.memberId] : []))));
+
+  const apply = async (action: () => Promise<GvgLineup>) => {
+    setSaving(true);
+    try {
+      onLineupChange(await action());
+      return true;
+    } catch (error) {
+      await alert({ title: 'Không thể cập nhật đội hình', message: error instanceof Error ? error.message : 'Vui lòng thử lại.', variant: 'error' });
+      await onReload();
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createDivision = async () => {
+    await apply(async () => {
+      const next = await createGvgLineupDivision();
+      setSelectedId(next.divisions.at(-1)?.id ?? null);
+      return next;
+    });
+  };
+
+  const saveDivisionNote = async (division: NonNullable<typeof selectedDivision>) => {
+    if (!noteDirty || noteDraftDivisionId !== division.id || saving) return;
+    if (await apply(() => updateGvgLineupDivisionNote(division.id, noteDraft))) setNoteDirty(false);
+  };
+
+  return (
+    <div className="custom-scrollbar h-full overflow-y-auto p-4 sm:p-6">
+      <div className="mx-auto max-w-[1600px] space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          {saving && <span className="text-xs font-bold text-sky-300">Đang lưu...</span>}
+        </div>
+
+        {!canEdit && <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">Chỉ bang chủ có quyền chỉnh sửa đội hình.</p>}
+
+        <div className="flex flex-wrap items-end gap-1 border-b border-slate-700/80 px-1" role="tablist" aria-label="Chọn đoàn Bang Chiến">
+          {lineup.divisions.map((division, index) => <button key={division.id} type="button" role="tab" aria-selected={division.id === selectedDivision?.id} onClick={() => setSelectedId(division.id)} className={`relative mb-[-1px] h-10 rounded-t-xl border px-3 text-xs font-black transition-colors ${division.id === selectedDivision?.id ? 'border-slate-600 border-b-slate-900 bg-slate-900 text-sky-100' : 'border-transparent bg-slate-950/35 text-slate-500 hover:border-slate-700 hover:bg-slate-900/55 hover:text-slate-300'}`}>Đoàn {index + 1}</button>)}
+          {canEdit && <button type="button" onClick={() => void createDivision()} disabled={saving || lineup.divisions.length >= 5} className="mb-1 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/55 text-slate-400 hover:border-sky-400/50 hover:bg-sky-500/15 hover:text-sky-100 disabled:opacity-40" aria-label="Tạo đoàn mới" title="Tạo đoàn mới"><Plus size={16} /></button>}
+        </div>
+
+        {selectedDivision ? (
+          <section className="app-surface rounded-2xl border p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-black uppercase tracking-widest text-sky-200">Đoàn {selectedIndex + 1}</h2>
+                <p className="mt-1 text-xs text-slate-500">{selectedDivision.squads.length}/5 tổ đội</p>
+              </div>
+              <div className="flex gap-2">
+                {canEdit && selectedDivision.squads.length < MAX_SQUADS && <button type="button" onClick={() => void apply(() => createGvgLineupSquad(selectedDivision.id))} disabled={saving} className="app-button-primary inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold"><Plus size={14} />Tạo tổ đội</button>}
+                {canEdit && <button type="button" onClick={() => void (async () => { if (selectedDivision.squads.length && !await confirm({ title: `Xóa Đoàn ${selectedIndex + 1}?`, message: `Toàn bộ ${selectedDivision.squads.length} tổ đội cùng thành viên trong Đoàn sẽ bị xóa vĩnh viễn.`, variant: 'danger', confirmLabel: 'Xóa đoàn' })) return; await apply(() => deleteGvgLineupDivision(selectedDivision.id)); })()} disabled={saving} className="app-button-danger flex min-h-9 items-center justify-center rounded-lg px-2" aria-label="Xóa đoàn" title="Xóa đoàn"><Trash2 size={14} /></button>}
+              </div>
+            </div>
+            {selectedDivision.squads.length ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+                {selectedDivision.squads.map(squad => <SquadCard key={squad.id} squad={squad} members={members} assignedMemberIds={assignedMemberIds} slotClasses={slotClasses} openClassSlot={openClassSlot} canEdit={canEdit} saving={saving} onClassChange={(slotKey, classType) => setSlotClasses(current => {
+                  if (classType) return { ...current, [slotKey]: classType };
+                  const { [slotKey]: _removedClass, ...next } = current;
+                  return next;
+                })} onOpenClassSlotChange={setOpenClassSlot} onUpdate={async memberIds => { await apply(() => updateGvgLineupSquadSlots(squad.id, memberIds)); }} onDelete={async () => { if (!await confirm({ title: `Xóa ${squad.name}?`, message: 'Tổ đội cùng toàn bộ vị trí và thành viên trong Đoàn sẽ bị xóa vĩnh viễn.', variant: 'danger', confirmLabel: 'Xóa tổ đội' })) return; await apply(() => deleteGvgLineupSquad(squad.id)); }} />)}
+              </div>
+            ) : <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/25 px-5 py-10 text-center text-sm text-slate-500">Đoàn này chưa có tổ đội. {canEdit && 'Dùng nút “Tạo tổ đội” để bắt đầu.'}</div>}
+            <section className="mt-4 rounded-xl border border-slate-800/80 bg-slate-950/35 p-3">
+              <h3 className="text-sm font-black text-slate-100">Ghi chú đoàn</h3>
+              {canEdit ? (
+                <textarea
+                  value={noteDraftDivisionId === selectedDivision.id ? noteDraft : selectedDivision.note ?? ''}
+                  onChange={event => {
+                    setNoteDraft(event.target.value);
+                    setNoteDraftDivisionId(selectedDivision.id);
+                    setNoteDirty(true);
+                  }}
+                  onBlur={() => void saveDivisionNote(selectedDivision)}
+                  placeholder="Viết ghi chú cho đoàn..."
+                  rows={6}
+                  maxLength={2000}
+                  disabled={saving}
+                  className="mt-2 w-full resize-none rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-sky-400/70 disabled:opacity-60"
+                />
+              ) : <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-6 text-slate-300">{selectedDivision.note || 'Không có ghi chú.'}</p>}
+            </section>
+          </section>
+        ) : (
+          <section className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/25 px-6 py-12 text-center">
+            <h2 className="text-lg font-black text-slate-100">Chưa có Đoàn Bang Chiến</h2>
+            <p className="mt-2 text-sm text-slate-500">Tạo Đoàn đầu tiên để bắt đầu xếp đội hình.</p>
+            {canEdit && <button type="button" onClick={() => void createDivision()} disabled={saving} className="app-button-primary mt-5 inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-black"><Plus size={16} />Tạo Đoàn mới</button>}
+          </section>
+        )}
+      </div>
+    </div>
+  );
 }

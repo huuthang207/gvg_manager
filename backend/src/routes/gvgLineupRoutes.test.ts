@@ -4,148 +4,98 @@ import { createServer } from 'node:http';
 import express from 'express';
 import { createGvgLineupRoutes, type GvgLineupRouteDependencies } from './gvgLineupRoutes.js';
 
-type RouteContext = {
-  access: {
-    guild: { id: string };
-    role: string;
-  };
-};
+const ownerContext = { access: { guild: { id: 'guild-1' }, role: 'owner' } };
+const viewerContext = { access: { guild: { id: 'guild-1' }, role: 'member' } };
+const layout = { divisions: [] };
 
-type RouteDependencies = {
-  context: RouteContext | null;
-  lineup?: unknown;
-  saveResult?: { status: number; body: unknown };
-  clearResult?: { status: number; body: unknown };
-};
+type Calls = { published: Parameters<GvgLineupRouteDependencies['publishGuildAppStateChanged']>[0][]; createDivision: string[]; createSquad: Array<{ guildId: string; divisionId: string }>; updateDivisionNote: Array<{ guildId: string; divisionId: string; note: unknown }> };
 
-type RouteCalls = {
-  access: Array<'view:guild'>;
-  save: Array<{ guildId: string; body: unknown }>;
-  clear: Array<{ guildId: string; squadNumber: number }>;
-  published: Parameters<GvgLineupRouteDependencies['publishGuildAppStateChanged']>[0][];
-};
-
-async function withLineupApi(dependencies: RouteDependencies, run: (baseUrl: string, calls: RouteCalls) => Promise<void>) {
-  const calls: RouteCalls = { access: [], save: [], clear: [], published: [] };
-  const routeDependencies: Partial<GvgLineupRouteDependencies> = {
-    requireGuildAccess: async (_req, _res, permission) => {
-      calls.access.push(permission as 'view:guild');
-      return dependencies.context as never;
-    },
-    ensureGvgLineup: async guildId => {
-      assert.equal(guildId, dependencies.context?.access.guild.id);
-      return (dependencies.lineup ?? { divisions: [] }) as never;
-    },
-    saveGvgLineup: async (guildId, body) => {
-      calls.save.push({ guildId, body });
-      return (dependencies.saveResult ?? { status: 200, body: dependencies.lineup ?? { divisions: [] } }) as never;
-    },
-    clearGvgLineupSquad: async (guildId, squadNumber) => {
-      calls.clear.push({ guildId, squadNumber });
-      return (dependencies.clearResult ?? { status: 200, body: dependencies.lineup ?? { divisions: [] } }) as never;
-    },
-    publishGuildAppStateChanged: payload => {
-      calls.published.push(payload);
-    },
+async function withApi(context: typeof ownerContext | typeof viewerContext, run: (baseUrl: string, calls: Calls) => Promise<void>) {
+  const calls: Calls = { published: [], createDivision: [], createSquad: [], updateDivisionNote: [] };
+  const routes: Partial<GvgLineupRouteDependencies> = {
+    requireGuildAccess: async () => context as never,
+    getGvgLineup: async () => layout as never,
+    createGvgLineupDivision: async guildId => { calls.createDivision.push(guildId); return { status: 201, body: layout } as never; },
+    createGvgLineupSquad: async (guildId, divisionId) => { calls.createSquad.push({ guildId, divisionId }); return { status: 201, body: layout } as never; },
+    deleteGvgLineupDivisionResource: async () => ({ status: 200, body: layout } as never),
+    deleteGvgLineupSquad: async () => ({ status: 200, body: layout } as never),
+    moveGvgLineupSquad: async () => ({ status: 200, body: layout } as never),
+    reorderGvgLineupDivisions: async () => ({ status: 200, body: layout } as never),
+    reorderGvgLineupSquads: async () => ({ status: 200, body: layout } as never),
+    updateGvgLineupSquadSlots: async () => ({ status: 200, body: layout } as never),
+    clearGvgLineupSquadById: async () => ({ status: 200, body: layout } as never),
+    updateGvgLineupDivisionNote: async (guildId, divisionId, note) => { calls.updateDivisionNote.push({ guildId, divisionId, note }); return { status: 200, body: layout } as never; },
+    updateGvgLineupSquadName: async () => ({ status: 200, body: layout } as never),
+    publishGuildAppStateChanged: payload => calls.published.push(payload),
   };
   const app = express();
   app.use(express.json());
-  app.use(createGvgLineupRoutes(routeDependencies));
-
+  app.use(createGvgLineupRoutes(routes));
   const server = createServer(app);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
-
-  try {
-    await run(`http://127.0.0.1:${address.port}`, calls);
-  } finally {
-    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-  }
+  if (!address || typeof address === 'string') throw new Error('Expected listener');
+  try { await run(`http://127.0.0.1:${address.port}`, calls); } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 }
 
-const viewerContext: RouteContext = { access: { guild: { id: 'guild-1' }, role: 'member' } };
-const ownerContext: RouteContext = { access: { guild: { id: 'guild-1' }, role: 'owner' } };
-const layout = { divisions: [{ id: 'division-1', orderIndex: 0, squads: [] }] };
-
-test('returns the initialized layout to authorized viewers', async () => {
-  await withLineupApi({ context: viewerContext, lineup: layout }, async (baseUrl, calls) => {
+test('returns an empty uninitialized lineup to viewers', async () => {
+  await withApi(viewerContext, async (baseUrl, calls) => {
     const response = await fetch(`${baseUrl}/api/gvg-lineup`);
-
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), layout);
-    assert.deepEqual(calls.access, ['view:guild']);
-    assert.deepEqual(calls.save, []);
     assert.deepEqual(calls.published, []);
   });
 });
 
-test('saves a valid owner layout and publishes the lineup update', async () => {
-  const body = { divisions: [{ squads: [] }] };
-  await withLineupApi({ context: ownerContext, lineup: layout }, async (baseUrl, calls) => {
-    const response = await fetch(`${baseUrl}/api/gvg-lineup`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), layout);
-    assert.deepEqual(calls.save, [{ guildId: 'guild-1', body }]);
+test('owner creates an empty division and publishes update', async () => {
+  await withApi(ownerContext, async (baseUrl, calls) => {
+    const response = await fetch(`${baseUrl}/api/gvg-lineup/divisions`, { method: 'POST' });
+    assert.equal(response.status, 201);
+    assert.deepEqual(calls.createDivision, ['guild-1']);
     assert.deepEqual(calls.published, [{ guildId: 'guild-1', reason: 'gvg_lineup_updated' }]);
   });
 });
 
-test('rejects non-owner layout saves without persisting or publishing', async () => {
-  await withLineupApi({ context: viewerContext, lineup: layout }, async (baseUrl, calls) => {
-    const response = await fetch(`${baseUrl}/api/gvg-lineup`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ divisions: [] }),
-    });
+test('owner creates a squad inside a division and publishes update', async () => {
+  await withApi(ownerContext, async (baseUrl, calls) => {
+    const response = await fetch(`${baseUrl}/api/gvg-lineup/divisions/division-1/squads`, { method: 'POST' });
+    assert.equal(response.status, 201);
+    assert.deepEqual(calls.createSquad, [{ guildId: 'guild-1', divisionId: 'division-1' }]);
+    assert.deepEqual(calls.published, [{ guildId: 'guild-1', reason: 'gvg_lineup_updated' }]);
+  });
+});
 
+test('owner updates a division note and publishes update', async () => {
+  await withApi(ownerContext, async (baseUrl, calls) => {
+    const response = await fetch(`${baseUrl}/api/gvg-lineup/divisions/division-1/note`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: 'Giữ cổng trái\nKhông tách đội' }),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls.updateDivisionNote, [{ guildId: 'guild-1', divisionId: 'division-1', note: 'Giữ cổng trái\nKhông tách đội' }]);
+    assert.deepEqual(calls.published, [{ guildId: 'guild-1', reason: 'gvg_lineup_updated' }]);
+  });
+});
+
+test('rejects non-owner division-note updates without publishing', async () => {
+  await withApi(viewerContext, async (baseUrl, calls) => {
+    const response = await fetch(`${baseUrl}/api/gvg-lineup/divisions/division-1/note`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: 'Không được phép' }),
+    });
     assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), { error: 'Chỉ bang chủ có quyền chỉnh sửa đội hình Bang Chiến.' });
-    assert.deepEqual(calls.save, []);
+    assert.deepEqual(calls.updateDivisionNote, []);
     assert.deepEqual(calls.published, []);
   });
 });
 
-test('forwards rejected layout saves without publishing', async () => {
-  const result = { status: 400, body: { error: 'Đội hình không hợp lệ.' } };
-  await withLineupApi({ context: ownerContext, saveResult: result }, async (baseUrl, calls) => {
-    const response = await fetch(`${baseUrl}/api/gvg-lineup`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ divisions: [] }),
-    });
-
-    assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), result.body);
-    assert.equal(calls.save.length, 1);
-    assert.deepEqual(calls.published, []);
-  });
-});
-
-test('clears an owner squad and publishes the lineup update', async () => {
-  await withLineupApi({ context: ownerContext, lineup: layout }, async (baseUrl, calls) => {
-    const response = await fetch(`${baseUrl}/api/gvg-lineup/squads/7/clear`, { method: 'POST' });
-
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), layout);
-    assert.deepEqual(calls.clear, [{ guildId: 'guild-1', squadNumber: 7 }]);
-    assert.deepEqual(calls.published, [{ guildId: 'guild-1', reason: 'gvg_lineup_updated' }]);
-  });
-});
-
-test('forwards rejected squad clears without publishing', async () => {
-  const result = { status: 400, body: { error: 'Tổ đội không hợp lệ.' } };
-  await withLineupApi({ context: ownerContext, clearResult: result }, async (baseUrl, calls) => {
-    const response = await fetch(`${baseUrl}/api/gvg-lineup/squads/x/clear`, { method: 'POST' });
-
-    assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), result.body);
-    assert.deepEqual(calls.clear, [{ guildId: 'guild-1', squadNumber: Number.NaN }]);
+test('rejects non-owner creation without publishing', async () => {
+  await withApi(viewerContext, async (baseUrl, calls) => {
+    const response = await fetch(`${baseUrl}/api/gvg-lineup/divisions`, { method: 'POST' });
+    assert.equal(response.status, 403);
+    assert.deepEqual(calls.createDivision, []);
     assert.deepEqual(calls.published, []);
   });
 });
