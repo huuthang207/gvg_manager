@@ -81,6 +81,7 @@ test('coalesces attendance update refreshes while a realtime request is already 
       mergeMemberDelta: () => undefined,
       replaceMemberPool: () => undefined,
       refreshGvgParticipationStats: async () => undefined,
+      shouldIgnoreGvgLineupRealtimeUpdate: () => false,
       realtimeDebugEnabled: false,
     });
     return null;
@@ -104,6 +105,71 @@ test('coalesces attendance update refreshes while a realtime request is already 
 
   assert.equal(fetchCount, 2);
   assert.equal(applyCount, 2);
+
+  root.unmount();
+  container.remove();
+});
+
+test('skips only the initiating client\'s pending GvG lineup refresh', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOMClient.createRoot(container);
+
+  let socket: MockWebSocket | null = null;
+  let ignoreGvgLineupUpdate = true;
+  let fetchCount = 0;
+  let applyCount = 0;
+
+  globalThis.WebSocket = class extends MockWebSocket {
+    constructor(url: string) {
+      super(url);
+      socket = this;
+    }
+  } as any;
+
+  globalThis.fetch = (async () => {
+    fetchCount += 1;
+    return {
+      ok: true,
+      json: async () => ({
+        guild: { id: 'guild-1', discordGuildId: '123456789012345678' },
+        permissions: ['view:guild'],
+      }),
+    } as Response;
+  }) as typeof fetch;
+
+  function Harness() {
+    useGuildRealtime({
+      isAuthenticated: true,
+      isAuthorized: true,
+      currentGuild: { id: 'guild-1', discordGuildId: '123456789012345678', name: 'Guild', icon: null },
+      lastSyncedAt: null,
+      applyAppState: async () => { applyCount += 1; },
+      setIsAuthorized: () => true as any,
+      setBlockedReason: () => true as any,
+      setLastSyncedAt: () => true as any,
+      mergeMemberDelta: () => undefined,
+      replaceMemberPool: () => undefined,
+      refreshGvgParticipationStats: async () => undefined,
+      shouldIgnoreGvgLineupRealtimeUpdate: () => ignoreGvgLineupUpdate,
+      realtimeDebugEnabled: false,
+    });
+    return null;
+  }
+
+  root.render(React.createElement(Harness));
+  await wait(20);
+
+  socket?.emitMessage({ type: 'guild_app_state_changed', guildId: 'guild-1', reason: 'gvg_lineup_updated', updatedAt: new Date().toISOString() });
+  await wait(20);
+  assert.equal(fetchCount, 0);
+  assert.equal(applyCount, 0);
+
+  ignoreGvgLineupUpdate = false;
+  socket?.emitMessage({ type: 'guild_app_state_changed', guildId: 'guild-1', reason: 'gvg_lineup_updated', updatedAt: new Date().toISOString() });
+  await wait(20);
+  assert.equal(fetchCount, 1);
+  assert.equal(applyCount, 1);
 
   root.unmount();
   container.remove();

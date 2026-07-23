@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, ChevronDown, Minus, Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, Search, Trash2, Users } from 'lucide-react';
 import type { GvgLineup, GvgLineupSquad } from '../../services/apiTypes.ts';
 import type { Member } from '../../shared/types/member.ts';
 import {
@@ -7,8 +7,8 @@ import {
   createGvgLineupSquad,
   deleteGvgLineupDivision,
   deleteGvgLineupSquad,
+  reorderGvgLineupSquads,
   updateGvgLineupDivisionNote,
-  updateGvgLineupSquadName,
   updateGvgLineupSquadSlots,
 } from '../../services/gvgLineupApi.ts';
 import { CLASSES, getClassColor, getClassIcon } from '../../constants.ts';
@@ -17,16 +17,44 @@ import {
   filterGvgMembersByName,
   getAvailableGvgMembers,
   getEffectiveGvgClass,
+  reorderSquadsWithinDivision,
 } from './gvgLineupLayout.ts';
 
 const MAX_SQUADS = 5;
 const SLOT_COUNT = 6;
+const SLOT_INDEXES = Array.from({ length: SLOT_COUNT }, (_, slotIndex) => slotIndex);
+
+const squadOrderButtonClass = 'flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-sky-500/10 hover:text-sky-200 focus:outline-none focus:ring-2 focus:ring-sky-400/70 disabled:cursor-not-allowed disabled:opacity-35';
+
+function SquadOrderButtons({
+  disableMoveLeft,
+  disableMoveRight,
+  moveLeftLabel,
+  moveRightLabel,
+  onMoveLeft,
+  onMoveRight,
+}: {
+  disableMoveLeft: boolean;
+  disableMoveRight: boolean;
+  moveLeftLabel: string;
+  moveRightLabel: string;
+  onMoveLeft: () => void;
+  onMoveRight: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" aria-label="Di chuyển tổ đội">
+      <button type="button" onClick={onMoveLeft} disabled={disableMoveLeft} className={squadOrderButtonClass} aria-label={moveLeftLabel} title={moveLeftLabel}><ChevronLeft size={16} /></button>
+      <button type="button" onClick={onMoveRight} disabled={disableMoveRight} className={squadOrderButtonClass} aria-label={moveRightLabel} title={moveRightLabel}><ChevronRight size={16} /></button>
+    </div>
+  );
+}
 
 type Props = {
   lineup: GvgLineup | null;
   members: Member[];
   canEdit: boolean;
   onLineupChange: (lineup: GvgLineup) => void;
+  onLineupMutationPendingChange: (pending: boolean) => void;
   onReload: () => Promise<unknown>;
 };
 
@@ -44,6 +72,9 @@ function ClassIcon({ classType }: { classType: string | null }) {
 
 function SquadCard({
   squad,
+  divisionIndex,
+  squadIndex,
+  squadCount,
   members,
   assignedMemberIds,
   slotClasses,
@@ -52,11 +83,15 @@ function SquadCard({
   saving,
   onClassChange,
   onOpenClassSlotChange,
+  onMoveSquad,
   onUpdate,
   onDelete,
 }: {
   key?: React.Key;
   squad: GvgLineupSquad;
+  divisionIndex: number;
+  squadIndex: number;
+  squadCount: number;
   members: Member[];
   assignedMemberIds: Set<string>;
   slotClasses: SlotClasses;
@@ -65,17 +100,13 @@ function SquadCard({
   saving: boolean;
   onClassChange: (slotKey: string, classType: string | null) => void;
   onOpenClassSlotChange: (slotKey: string | null) => void;
+  onMoveSquad: (sourceIndex: number, targetIndex: number) => void;
   onUpdate: (memberIds: Array<string | null>) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
-  const { alert } = useSystemDialog();
-  const [editingName, setEditingName] = React.useState(false);
-  const [nameDraft, setNameDraft] = React.useState(squad.name);
-  const [renaming, setRenaming] = React.useState(false);
   const [openSlot, setOpenSlot] = React.useState<number | null>(null);
   const [memberQuery, setMemberQuery] = React.useState('');
   const cardRef = React.useRef<HTMLElement | null>(null);
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -99,24 +130,7 @@ function SquadCard({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onOpenClassSlotChange]);
 
-  React.useEffect(() => { if (!editingName) setNameDraft(squad.name); }, [editingName, squad.name]);
-  React.useEffect(() => { if (editingName) inputRef.current?.select(); }, [editingName]);
   React.useEffect(() => { if (openSlot === null) setMemberQuery(''); }, [openSlot]);
-
-  const saveName = async () => {
-    const name = nameDraft.trim();
-    if (!name || name.length > 32 || renaming) return;
-    setRenaming(true);
-    try {
-      const next = await updateGvgLineupSquadName(squad.squadNumber, name);
-      window.dispatchEvent(new CustomEvent('gvg-lineup-local-update', { detail: next }));
-      setEditingName(false);
-    } catch (error) {
-      await alert({ title: 'Không thể đổi tên tổ đội', message: error instanceof Error ? error.message : 'Vui lòng thử lại.', variant: 'error' });
-    } finally {
-      setRenaming(false);
-    }
-  };
 
   const chooseMember = async (slotIndex: number, memberId: string | null) => {
     if (!memberId) onClassChange(getSlotKey(squad.id, slotIndex), null);
@@ -128,29 +142,20 @@ function SquadCard({
   return (
     <article ref={cardRef} className="min-w-0 rounded-xl border border-slate-700/80 bg-slate-900/85 shadow-xl shadow-black/15">
       <header className="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          {editingName ? (
-            <input
-              ref={inputRef}
-              value={nameDraft}
-              onChange={event => setNameDraft(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') void saveName();
-                if (event.key === 'Escape') setEditingName(false);
-              }}
-              maxLength={32}
-              disabled={renaming}
-              aria-label={`Tên tổ đội ${squad.squadNumber}`}
-              className="w-full min-w-0 rounded border border-sky-400/60 bg-slate-950 px-2 py-1 text-sm font-black text-white outline-none focus:ring-2 focus:ring-sky-400/70"
-            />
-          ) : <h3 className="truncate text-sm font-black uppercase tracking-wider text-white" title={squad.name}>{squad.name}</h3>}
-          {canEdit && <button type="button" onClick={() => editingName ? void saveName() : setEditingName(true)} disabled={saving || renaming || (editingName && !nameDraft.trim())} className="rounded p-1 text-slate-500 hover:bg-sky-500/10 hover:text-sky-200 focus:outline-none focus:ring-2 focus:ring-sky-400/70 disabled:opacity-50" aria-label={editingName ? 'Lưu tên tổ đội' : 'Đổi tên tổ đội'}>{editingName ? <Check size={14} /> : <Pencil size={14} />}</button>}
-        </div>
+        <h3 className="min-w-0 flex-1 truncate text-sm font-black uppercase tracking-wider text-white" title={squad.name}>{squad.name}</h3>
+        {canEdit && <SquadOrderButtons
+          disableMoveLeft={saving || squadIndex === 0}
+          disableMoveRight={saving || squadIndex === squadCount - 1}
+          moveLeftLabel={`Đưa toàn bộ ${squad.name} sang trái trong Đoàn ${divisionIndex + 1}`}
+          moveRightLabel={`Đưa toàn bộ ${squad.name} sang phải trong Đoàn ${divisionIndex + 1}`}
+          onMoveLeft={() => onMoveSquad(squadIndex, squadIndex - 1)}
+          onMoveRight={() => onMoveSquad(squadIndex, squadIndex + 1)}
+        />}
         {canEdit && <button type="button" onClick={() => void onDelete()} disabled={saving} className="rounded p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50" title="Xóa tổ đội" aria-label="Xóa tổ đội"><Trash2 size={15} /></button>}
       </header>
 
       <div className="space-y-1.5 p-3">
-        {Array.from({ length: SLOT_COUNT }, (_, slotIndex) => {
+          {SLOT_INDEXES.map(slotIndex => {
           const slot = squad.slots[slotIndex] ?? { memberId: null, member: null };
           const slotKey = getSlotKey(squad.id, slotIndex);
           const selectedClass = slotClasses[slotKey] ?? null;
@@ -162,11 +167,11 @@ function SquadCard({
           const classMenuOpen = openClassSlot === slotKey;
 
           return (
-            <div
-              key={slotIndex}
-              className="relative flex min-h-10 items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/35 px-2"
-              style={color ? { borderColor: `${color}a8`, backgroundColor: `${color}18` } : undefined}
-            >
+                <div
+                  key={slotIndex}
+                  className="relative flex min-h-10 items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/35 px-2"
+                  style={color ? { borderColor: `${color}a8`, backgroundColor: `${color}18` } : undefined}
+                >
               <div className="relative shrink-0">
                 {canEdit ? (
                   <button
@@ -253,7 +258,7 @@ function SquadCard({
                   ) : null}
                 </div>
               )}
-            </div>
+                </div>
           );
         })}
       </div>
@@ -261,7 +266,7 @@ function SquadCard({
   );
 }
 
-export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, onReload }: Props) {
+export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, onLineupMutationPendingChange, onReload }: Props) {
   const { alert, confirm } = useSystemDialog();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -302,10 +307,10 @@ export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, o
 
   const selectedIndex = Math.max(0, lineup.divisions.findIndex(division => division.id === selectedId));
   const selectedDivision = lineup.divisions[selectedIndex] ?? null;
-  const squadCount = lineup.divisions.flatMap(division => division.squads).length;
   const assignedMemberIds = new Set(lineup.divisions.flatMap(division => division.squads.flatMap(squad => squad.slots.flatMap(slot => slot.memberId ? [slot.memberId] : []))));
 
   const apply = async (action: () => Promise<GvgLineup>) => {
+    onLineupMutationPendingChange(true);
     setSaving(true);
     try {
       onLineupChange(await action());
@@ -316,6 +321,7 @@ export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, o
       return false;
     } finally {
       setSaving(false);
+      onLineupMutationPendingChange(false);
     }
   };
 
@@ -332,13 +338,17 @@ export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, o
     if (await apply(() => updateGvgLineupDivisionNote(division.id, noteDraft))) setNoteDirty(false);
   };
 
+  const moveSquad = (sourceIndex: number, targetIndex: number) => {
+    if (!canEdit || saving || !selectedDivision) return;
+    const next = reorderSquadsWithinDivision(lineup, selectedDivision.id, sourceIndex, targetIndex);
+    if (next === lineup) return;
+    onLineupChange(next);
+    void apply(() => reorderGvgLineupSquads(selectedDivision.id, next.divisions.find(division => division.id === selectedDivision.id)?.squads.map(squad => squad.id) ?? []));
+  };
+
   return (
     <div className="custom-scrollbar h-full overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-[1600px] space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          {saving && <span className="text-xs font-bold text-sky-300">Đang lưu...</span>}
-        </div>
-
         {!canEdit && <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">Chỉ bang chủ có quyền chỉnh sửa đội hình.</p>}
 
         <div className="flex flex-wrap items-end gap-1 border-b border-slate-700/80 px-1" role="tablist" aria-label="Chọn đoàn Bang Chiến">
@@ -360,11 +370,11 @@ export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, o
             </div>
             {selectedDivision.squads.length ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-                {selectedDivision.squads.map(squad => <SquadCard key={squad.id} squad={squad} members={members} assignedMemberIds={assignedMemberIds} slotClasses={slotClasses} openClassSlot={openClassSlot} canEdit={canEdit} saving={saving} onClassChange={(slotKey, classType) => setSlotClasses(current => {
+                {selectedDivision.squads.map((squad, squadIndex) => <SquadCard key={squad.id} squad={squad} divisionIndex={selectedIndex} squadIndex={squadIndex} squadCount={selectedDivision.squads.length} members={members} assignedMemberIds={assignedMemberIds} slotClasses={slotClasses} openClassSlot={openClassSlot} canEdit={canEdit} saving={saving} onClassChange={(slotKey, classType) => setSlotClasses(current => {
                   if (classType) return { ...current, [slotKey]: classType };
                   const { [slotKey]: _removedClass, ...next } = current;
                   return next;
-                })} onOpenClassSlotChange={setOpenClassSlot} onUpdate={async memberIds => { await apply(() => updateGvgLineupSquadSlots(squad.id, memberIds)); }} onDelete={async () => { if (!await confirm({ title: `Xóa ${squad.name}?`, message: 'Tổ đội cùng toàn bộ vị trí và thành viên trong Đoàn sẽ bị xóa vĩnh viễn.', variant: 'danger', confirmLabel: 'Xóa tổ đội' })) return; await apply(() => deleteGvgLineupSquad(squad.id)); }} />)}
+                })} onOpenClassSlotChange={setOpenClassSlot} onMoveSquad={moveSquad} onUpdate={async memberIds => { await apply(() => updateGvgLineupSquadSlots(squad.id, memberIds)); }} onDelete={async () => { if (!await confirm({ title: `Xóa ${squad.name}?`, message: 'Tổ đội cùng toàn bộ vị trí và thành viên trong Đoàn sẽ bị xóa vĩnh viễn.', variant: 'danger', confirmLabel: 'Xóa tổ đội' })) return; await apply(() => deleteGvgLineupSquad(squad.id)); }} />)}
               </div>
             ) : <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/25 px-5 py-10 text-center text-sm text-slate-500">Đoàn này chưa có tổ đội. {canEdit && 'Dùng nút “Tạo tổ đội” để bắt đầu.'}</div>}
             <section className="mt-4 rounded-xl border border-slate-800/80 bg-slate-950/35 p-3">

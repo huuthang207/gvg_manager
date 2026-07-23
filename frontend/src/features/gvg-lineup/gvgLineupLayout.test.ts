@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { GvgLineup } from '../../services/apiTypes.ts';
 import type { Member } from '../../shared/types/member.ts';
-import { canSquadCreateGvgDivision, filterGvgMembersByName, getAssignedMemberIds, getAvailableGvgMembers, getEffectiveGvgClass, moveSquadToNewDivision } from './gvgLineupLayout.ts';
+import { canSquadCreateGvgDivision, filterGvgMembersByName, getAssignedMemberIds, getAvailableGvgMembers, getEffectiveGvgClass, moveSquadToNewDivision, reorderSquadsWithinDivision } from './gvgLineupLayout.ts';
 
 const members: Member[] = [
   { id: 'toai-mong', name: 'Toái Mộng', classType: 'Toái Mộng', active: true },
@@ -90,4 +90,26 @@ test('only lets a squad split a division with another squad remaining', () => {
   ] };
   assert.equal(canSquadCreateGvgDivision(singletonSource, 1), false);
   assert.equal(moveSquadToNewDivision(singletonSource, 1), singletonSource);
+});
+
+test('reorders squads within one division without mutating source state', () => {
+  const next = reorderSquadsWithinDivision(lineup, 'division-1', 0, 1);
+  assert.deepEqual(next.divisions[0].squads.map(squad => squad.squadNumber), [2, 1]);
+  assert.deepEqual(next.divisions[0].squads.map(squad => squad.orderIndex), [0, 1]);
+  assert.deepEqual(lineup.divisions[0].squads.map(squad => squad.squadNumber), [1, 2]);
+  assert.equal(reorderSquadsWithinDivision(lineup, 'missing', 0, 1), lineup);
+  assert.equal(reorderSquadsWithinDivision(lineup, 'division-1', 0, 2), lineup);
+});
+
+test('reorders squads in either direction without mutating source state', () => {
+  const movedDown = reorderSquadsWithinDivision(lineup, 'division-1', 0, 1);
+  const movedUp = reorderSquadsWithinDivision(movedDown, 'division-1', 1, 0);
+
+  assert.deepEqual(movedDown.divisions[0].squads.map(squad => squad.squadNumber), [2, 1]);
+  assert.deepEqual(movedDown.divisions[0].squads.map(squad => squad.orderIndex), [0, 1]);
+  assert.deepEqual(movedDown.divisions[0].squads[1].slots, lineup.divisions[0].squads[0].slots);
+  assert.deepEqual(movedUp.divisions[0].squads.map(squad => squad.squadNumber), [1, 2]);
+  assert.deepEqual(lineup.divisions[0].squads.map(squad => squad.squadNumber), [1, 2]);
+  assert.equal(reorderSquadsWithinDivision(lineup, 'division-1', 0, 0), lineup);
+  assert.equal(reorderSquadsWithinDivision(lineup, 'division-1', -1, 0), lineup);
 });
