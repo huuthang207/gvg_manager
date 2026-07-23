@@ -70,6 +70,7 @@ export interface GvgLineupSlot {
 export interface GvgLineupSquad {
   id: string;
   squadNumber: number;
+  name: string;
   orderIndex: number;
   slots: GvgLineupSlot[];
 }
@@ -77,6 +78,7 @@ export interface GvgLineupSquad {
 export interface GvgLineupDivision {
   id: string;
   orderIndex: number;
+  note: string | null;
   squads: GvgLineupSquad[];
 }
 

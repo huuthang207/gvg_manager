@@ -3,7 +3,7 @@ import { getAccessibleGuildForUser } from './permissions.js';
 import { serializeMembers } from './serializers/memberSerializer.js';
 import { getAttendanceStateForGuild } from './services/attendanceService.js';
 import { getGvgParticipationStats } from './services/gvgParticipationService.js';
-import { ensureGvgLineup } from './services/gvgLineupService.js';
+import { getGvgLineup } from './services/gvgLineupService.js';
 
 export interface AppStateGuildContext {
   guildId: string;
@@ -48,7 +48,7 @@ export async function getUserAppState(userId: string, activeGuildId?: string | n
   const [attendance, gvgParticipationStats, gvgLineup] = await Promise.all([
     getAttendanceStateForGuild(guild.id),
     getGvgParticipationStats(guild.id),
-    ensureGvgLineup(guild.id),
+    getGvgLineup(guild.id),
   ]);
   const members = guild.members.map(member => ({ ...member, gvgParticipationCount: gvgParticipationStats[member.id] ?? 0 }));
 

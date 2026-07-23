@@ -81,6 +81,7 @@ model Guild {
   attendanceChannelConfigs AttendanceChannelConfig[]
   attendanceSessions       AttendanceSession[]
   gvgParticipationSessions GvgParticipationSession[]
+  gvgLineupNextSquadNumber Int @default(1)
   gvgLineupDivisions       GvgLineupDivision[]
   gvgLineupSquads          GvgLineupSquad[]
 }
@@ -89,6 +90,7 @@ model GvgLineupDivision {
   id         String   @id @default(cuid())
   guildId    String
   orderIndex Int
+  note       String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -104,6 +106,7 @@ model GvgLineupSquad {
   guildId      String
   divisionId   String
   squadNumber  Int
+  name         String
   orderIndex   Int
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

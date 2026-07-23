@@ -102,7 +102,7 @@ export async function resetCurrentGuildData(userId: string, activeGuildId: strin
 
     await tx.memberRole.deleteMany({ where: { member: { guildId } } });
     await tx.member.deleteMany({ where: { guildId } });
-    await tx.guild.update({ where: { id: guildId }, data: { lastSyncedAt: null } });
+    await tx.guild.update({ where: { id: guildId }, data: { lastSyncedAt: null, gvgLineupNextSquadNumber: 1 } });
   });
 
   publishGuildAppStateChanged({ guildId, reason: 'settings_updated' });

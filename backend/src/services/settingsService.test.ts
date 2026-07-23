@@ -17,6 +17,7 @@ test('guild reset deletes retained domains without querying retired lineup deleg
   const originalMembershipFindMany = membership.findMany;
   const originalMembershipUpsert = membership.upsert;
   const calls: string[] = [];
+  const guildUpdates: unknown[] = [];
 
   client.$transaction = async (callback: (tx: unknown) => Promise<unknown>) => callback({
     attendanceSession: {
@@ -29,7 +30,7 @@ test('guild reset deletes retained domains without querying retired lineup deleg
     gvgLineupDivision: { deleteMany: async () => { calls.push('gvgLineupDivision.deleteMany'); } },
     memberRole: { deleteMany: async () => { calls.push('memberRole.deleteMany'); } },
     member: { deleteMany: async () => { calls.push('member.deleteMany'); } },
-    guild: { update: async () => { calls.push('guild.update'); } },
+    guild: { update: async (input: unknown) => { calls.push('guild.update'); guildUpdates.push(input); } },
   });
   user.findUnique = async () => null;
   guildModel.findMany = async () => [guild];
@@ -51,6 +52,7 @@ test('guild reset deletes retained domains without querying retired lineup deleg
       'member.deleteMany',
       'guild.update',
     ]);
+    assert.deepEqual(guildUpdates, [{ where: { id: guild.id }, data: { lastSyncedAt: null, gvgLineupNextSquadNumber: 1 } }]);
   } finally {
     client.$transaction = originalTransaction;
     user.findUnique = originalUserFindUnique;
