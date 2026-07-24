@@ -14,6 +14,9 @@ export default defineConfig({
     hmr: process.env.DISABLE_HMR !== 'true',
   },
   preview: {
-    allowedHosts: ['resplendent-delight-production.up.railway.app'],
+    allowedHosts: [
+      'resplendent-delight-production.up.railway.app',
+      'gvg-frontend.up.railway.app',
+    ],
   },
 });
