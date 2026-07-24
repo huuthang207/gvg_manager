@@ -13,4 +13,7 @@ export default defineConfig({
   server: {
     hmr: process.env.DISABLE_HMR !== 'true',
   },
+  preview: {
+    allowedHosts: ['resplendent-delight-production.up.railway.app'],
+  },
 });
