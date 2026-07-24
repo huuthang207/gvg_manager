@@ -75,21 +75,50 @@ Recommended layout:
 
 ### Backend on Railway
 
-Backend đã hỗ trợ `PORT` động qua `process.env.PORT`. Với deployment-oriented runtime:
-- cung cấp `DATABASE_URL`
-- cung cấp các Discord/OAuth secrets cần thiết
-- backend container production hiện mặc định chạy `npm run prisma:migrate:deploy` trước khi start nếu bạn không override `RUN_DB_MIGRATIONS`
-- nếu muốn tắt behavior đó, set `RUN_DB_MIGRATIONS=false` rõ ràng
-- nếu bạn dùng release step riêng cho migration, có thể vẫn giữ release step đó và để `RUN_DB_MIGRATIONS=false` ở runtime để tránh chạy lặp lại
-- chỉ đúng **một** replica/service nên để `DISCORD_BOT_ENABLED=true`
-- các replica API bổ sung hoặc service phụ nên để `DISCORD_BOT_ENABLED=false` để tránh nhiều instance cùng consume Discord interactions
+Tạo **một service backend riêng** với Root Directory là `backend` (hoặc Dockerfile path là `backend/Dockerfile`). Không deploy từ repository root nếu Railway không được cấu hình Dockerfile rõ ràng.
 
-Khuyến nghị tối thiểu trên Railway cho backend service:
-- `NODE_ENV=production`
-- `RUN_DB_MIGRATIONS=true` (hoặc bỏ trống để dùng mặc định production hiện tại)
-- `DISCORD_BOT_ENABLED=true` chỉ trên đúng một service xử lý bot
-- mọi service/replica khác dùng cùng codebase nhưng không xử lý bot nên set `DISCORD_BOT_ENABLED=false`
-- nếu scale backend > 1 replica, chỉ một replica nên được phép xử lý Discord interactions
+Backend đã hỗ trợ `PORT` động qua `process.env.PORT`. Không cần và không nên tự đặt biến `PORT` trên Railway. Cấu hình health check của service là:
+
+```text
+/api/health
+```
+
+Khi domain đã trỏ đúng backend, các URL sau phải trả JSON từ Express:
+
+```text
+GET https://api.example.com/
+# {"service":"gvg-manager-backend","health":"/api/health"}
+
+GET https://api.example.com/api/health
+# {"status":"ok","timestamp":"..."}
+```
+
+Biến môi trường tối thiểu cho backend production:
+
+```bash
+NODE_ENV=production
+DATABASE_URL=<Railway PostgreSQL URL>
+FRONTEND_URL=https://app.example.com
+CORS_ORIGINS=https://app.example.com
+DISCORD_REDIRECT_URI=https://api.example.com/api/discord/oauth/callback
+SESSION_COOKIE_SECURE=true
+# Optional: omit to auto-select None when frontend and callback origins differ.
+# Set None explicitly only when the frontend/API are truly cross-site.
+SESSION_COOKIE_SAME_SITE=None
+DISCORD_CLIENT_ID=<Discord client ID>
+DISCORD_CLIENT_SECRET=<Discord client secret>
+DISCORD_BOT_TOKEN=<Discord bot token>
+BOT_INTERNAL_TOKEN=<long random secret>
+FIXED_GUILD_DISCORD_ID=<managed guild ID>
+ADMIN_DISCORD_USER_ID=<bootstrap admin Discord ID>
+RUN_DB_MIGRATIONS=true
+DISCORD_BOT_ENABLED=true
+```
+
+- Đăng ký **đúng y hệt** giá trị `DISCORD_REDIRECT_URI` trong Discord Developer Portal → OAuth2 → Redirects.
+- backend container production hiện mặc định chạy `npm run prisma:migrate:deploy` trước khi start nếu bạn không override `RUN_DB_MIGRATIONS`.
+- nếu dùng release step riêng cho migration, set `RUN_DB_MIGRATIONS=false` ở runtime để tránh chạy lặp lại.
+- chỉ đúng **một** replica/service nên để `DISCORD_BOT_ENABLED=true`; các replica API bổ sung phải dùng `false` để tránh nhiều instance cùng consume Discord interactions.
 
 Nếu bạn vừa deploy code mới có schema mới như `AttendanceVoteJob`, hãy chắc rằng migration đã được áp dụng trước khi worker chạy; nếu không bạn sẽ gặp lỗi `The table public.AttendanceVoteJob does not exist`.
 
@@ -105,13 +134,32 @@ Ví dụ start flow an toàn trên Railway:
 
 ### Frontend on Railway
 
-Frontend cần được build với `VITE_DISCORD_API_URL` trỏ tới public backend URL, ví dụ:
+Tạo **một service frontend riêng** với Root Directory là `frontend` (hoặc Dockerfile path là `frontend/Dockerfile`). Frontend production server sẽ dùng `PORT` do Railway cấp.
+
+Frontend phải được build với `VITE_DISCORD_API_URL` là **public backend origin**, không có `/api` và không có dấu `/` cuối URL:
 
 ```bash
-VITE_DISCORD_API_URL=https://your-backend-service.up.railway.app
+VITE_DISCORD_API_URL=https://api.example.com
 ```
 
+Đây là Docker **build argument**, không chỉ là runtime variable. Vite nhúng `VITE_*` vào static bundle khi chạy `npm run build`; sau khi thay đổi biến này phải force redeploy/rebuild frontend. Cấu hình build argument trên Railway với giá trị backend domain, ví dụ `https://api.nthguild.net`.
+
 Trong local Docker Compose, frontend vẫn dùng `http://localhost:3001` vì browser chạy trên host machine và truy cập backend qua published port.
+
+### Diagnose Railway “Hello World”
+
+`GET /api/discord/oauth/authorize` được xử lý bởi Express và phải redirect sang `discord.com`; source code này không có response `Hello World`. Vì vậy nếu `https://api.example.com/api/health` hoặc URL login trả về trang `Hello World`, request đang đi tới **sai Railway service/domain**, không phải backend này.
+
+Kiểm tra theo thứ tự:
+
+1. Mở generated Railway domain của backend tại `/api/health`; phải nhận health JSON.
+2. Mở custom domain API tại `/api/health`; phải nhận cùng health JSON.
+3. Trong Railway service Settings → Networking, xác nhận custom API domain được gắn vào backend service, không phải frontend, starter service, hay deployment cũ. Gỡ/gắn lại domain nếu cần.
+4. Xác nhận DNS custom domain dùng target Railway hiện tại và không còn CNAME/A record cũ.
+5. Sau khi backend domain hoạt động, rebuild frontend với `VITE_DISCORD_API_URL=https://api.example.com`.
+6. Kiểm tra browser DevTools: Login phải điều hướng tới `https://api.example.com/api/discord/oauth/authorize`, sau đó Discord callback về `https://api.example.com/api/discord/oauth/callback` và redirect lại `FRONTEND_URL`.
+
+Nếu `GET /api/health` trả JSON nhưng OAuth chưa thành công, kiểm tra `DISCORD_CLIENT_ID`, callback URL trong Discord Developer Portal, `CORS_ORIGINS`, và cookie `Secure; SameSite=None`.
 
 ## Manual commands
 

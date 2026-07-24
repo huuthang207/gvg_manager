@@ -11,16 +11,16 @@ EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
 FROM deps AS build
-ARG VITE_DISCORD_API_URL=http://localhost:3001
+ARG VITE_DISCORD_API_URL
 ARG VITE_REALTIME_DEBUG=false
 ENV VITE_DISCORD_API_URL=$VITE_DISCORD_API_URL
 ENV VITE_REALTIME_DEBUG=$VITE_REALTIME_DEBUG
 COPY . .
-RUN npm run build
+RUN test -n "$VITE_DISCORD_API_URL" && npm run build
 
 FROM deps AS prod
 ENV NODE_ENV=production
 COPY --from=build /app/dist ./dist
 COPY . .
 EXPOSE 3000
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["sh", "-c", "npm run preview -- --host 0.0.0.0 --port \"${PORT:-3000}\""]
