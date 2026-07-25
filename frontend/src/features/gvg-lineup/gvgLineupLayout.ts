@@ -72,10 +72,11 @@ export function getEffectiveGvgClass(selectedClass: string | null | undefined, m
   return selectedClass ?? memberClassType ?? null;
 }
 
-export function getAvailableGvgMembers(members: Member[], assignedMemberIds: Set<string>, currentMemberId: string | null, classFilter: string | null) {
+export function getAvailableGvgMembers(members: Member[], assignedMemberIds: Set<string>, currentMemberId: string | null, classFilter: string | null, eligibleMemberIds?: Set<string>) {
   return members.filter(member =>
     member.active !== false
     && (member.id === currentMemberId || !assignedMemberIds.has(member.id))
+    && (!eligibleMemberIds || member.id === currentMemberId || eligibleMemberIds.has(member.id))
     && (!classFilter || member.classType === classFilter),
   );
 }

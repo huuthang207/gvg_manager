@@ -48,6 +48,14 @@ test('filters candidates by active status, global assignment, and class', () => 
   assert.deepEqual(candidates.map(member => member.id), []);
 });
 
+test('limits new candidates to the selected attendance roster while retaining the current slot member', () => {
+  const rosterCandidates = getAvailableGvgMembers(members, getAssignedMemberIds(lineup), null, null, new Set(['cuu-linh']));
+  const retainedCurrent = getAvailableGvgMembers(members, getAssignedMemberIds(lineup), 'toai-mong', 'Toái Mộng', new Set(['cuu-linh']));
+
+  assert.deepEqual(rosterCandidates.map(member => member.id), ['cuu-linh']);
+  assert.deepEqual(retainedCurrent.map(member => member.id), ['toai-mong']);
+});
+
 test('retains the current slot member only when the selected faction matches', () => {
   const sameClassCandidates = getAvailableGvgMembers(members, getAssignedMemberIds(lineup), 'toai-mong', 'Toái Mộng');
   const changedClassCandidates = getAvailableGvgMembers(members, getAssignedMemberIds(lineup), 'toai-mong', 'Cửu Linh');

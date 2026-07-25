@@ -8,10 +8,10 @@ const ownerContext = { access: { guild: { id: 'guild-1' }, role: 'owner' } };
 const viewerContext = { access: { guild: { id: 'guild-1' }, role: 'member' } };
 const layout = { divisions: [] };
 
-type Calls = { published: Parameters<GvgLineupRouteDependencies['publishGuildAppStateChanged']>[0][]; createDivision: string[]; createSquad: Array<{ guildId: string; divisionId: string }>; updateDivisionNote: Array<{ guildId: string; divisionId: string; note: unknown }> };
+type Calls = { published: Parameters<GvgLineupRouteDependencies['publishGuildAppStateChanged']>[0][]; createDivision: string[]; createSquad: Array<{ guildId: string; divisionId: string }>; updateDivisionNote: Array<{ guildId: string; divisionId: string; note: unknown }>; updateRosterSource: Array<{ guildId: string; attendanceSessionId: unknown }> };
 
 async function withApi(context: typeof ownerContext | typeof viewerContext, run: (baseUrl: string, calls: Calls) => Promise<void>) {
-  const calls: Calls = { published: [], createDivision: [], createSquad: [], updateDivisionNote: [] };
+  const calls: Calls = { published: [], createDivision: [], createSquad: [], updateDivisionNote: [], updateRosterSource: [] };
   const routes: Partial<GvgLineupRouteDependencies> = {
     requireGuildAccess: async () => context as never,
     getGvgLineup: async () => layout as never,
@@ -25,6 +25,7 @@ async function withApi(context: typeof ownerContext | typeof viewerContext, run:
     updateGvgLineupSquadSlots: async () => ({ status: 200, body: layout } as never),
     clearGvgLineupSquadById: async () => ({ status: 200, body: layout } as never),
     updateGvgLineupDivisionNote: async (guildId, divisionId, note) => { calls.updateDivisionNote.push({ guildId, divisionId, note }); return { status: 200, body: layout } as never; },
+    updateGvgLineupRosterSource: async (guildId, attendanceSessionId) => { calls.updateRosterSource.push({ guildId, attendanceSessionId }); return { status: 200, body: layout } as never; },
     updateGvgLineupSquadName: async () => ({ status: 200, body: layout } as never),
     publishGuildAppStateChanged: payload => calls.published.push(payload),
   };
@@ -74,6 +75,19 @@ test('owner updates a division note and publishes update', async () => {
     });
     assert.equal(response.status, 200);
     assert.deepEqual(calls.updateDivisionNote, [{ guildId: 'guild-1', divisionId: 'division-1', note: 'Giữ cổng trái\nKhông tách đội' }]);
+    assert.deepEqual(calls.published, [{ guildId: 'guild-1', reason: 'gvg_lineup_updated' }]);
+  });
+});
+
+test('owner changes roster source and publishes update', async () => {
+  await withApi(ownerContext, async (baseUrl, calls) => {
+    const response = await fetch(`${baseUrl}/api/gvg-lineup/roster-source`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attendanceSessionId: 'session-1' }),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls.updateRosterSource, [{ guildId: 'guild-1', attendanceSessionId: 'session-1' }]);
     assert.deepEqual(calls.published, [{ guildId: 'guild-1', reason: 'gvg_lineup_updated' }]);
   });
 });

@@ -2,7 +2,7 @@ export { loginWithDiscord, checkAuthStatus, logoutDiscord, getBotInviteUrl } fro
 export { getAccessibleGuilds, setActiveGuild, getDiscordGuilds, getAppState, checkHealth } from './guildApi.ts';
 export { importDiscordMembers, deleteMember, updateMemberIngameName, updateMyIngameName, updateMemberClassRole, fetchCurrentDiscordRoles } from './memberApi.ts';
 export { getGvgParticipationStats, getGvgParticipationSessions, finalizeGvgParticipationSession, deleteGvgParticipationSessionsForMonth } from './gvgParticipationApi.ts';
-export { getGvgLineup, createGvgLineupDivision, deleteGvgLineupDivision, createGvgLineupSquad, deleteGvgLineupSquad, moveGvgLineupSquad, reorderGvgLineupSquads, updateGvgLineupSquadSlots, clearGvgLineupSquad, updateGvgLineupSquadName } from './gvgLineupApi.ts';
+export { getGvgLineup, createGvgLineupDivision, deleteGvgLineupDivision, createGvgLineupSquad, deleteGvgLineupSquad, moveGvgLineupSquad, reorderGvgLineupSquads, updateGvgLineupDivisionNote, updateGvgLineupRosterSource, updateGvgLineupSquadSlots, clearGvgLineupSquad, updateGvgLineupSquadName } from './gvgLineupApi.ts';
 export { updateAttendanceChannel, openAttendanceSession, closeActiveAttendanceSession, refreshActiveAttendanceSession, getAttendanceHistory, getAttendanceSession, deleteAttendanceHistorySession } from './attendanceApi.ts';
 export { updateAccessRoles, updateRoleConfig, resetCurrentGuildData } from './settingsApi.ts';
 export type { AppStateResponse, DiscordUser, DiscordMemberPreview, DiscordRoleMapping, GvgLineup, GvgLineupDivision, GvgLineupSquad, GvgLineupSlot } from './apiTypes.ts';

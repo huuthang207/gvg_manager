@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, Search, Trash2, Users } from 'lucide-react';
-import type { GvgLineup, GvgLineupSquad } from '../../services/apiTypes.ts';
+import type { AttendanceState, GvgLineup, GvgLineupSquad } from '../../services/apiTypes.ts';
 import type { Member } from '../../shared/types/member.ts';
 import {
   createGvgLineupDivision,
@@ -9,6 +9,7 @@ import {
   deleteGvgLineupSquad,
   reorderGvgLineupSquads,
   updateGvgLineupDivisionNote,
+  updateGvgLineupRosterSource,
   updateGvgLineupSquadSlots,
 } from '../../services/gvgLineupApi.ts';
 import { CLASSES, getClassColor, getClassIcon } from '../../constants.ts';
@@ -52,6 +53,7 @@ function SquadOrderButtons({
 type Props = {
   lineup: GvgLineup | null;
   members: Member[];
+  attendance: AttendanceState;
   canEdit: boolean;
   onLineupChange: (lineup: GvgLineup) => void;
   onLineupMutationPendingChange: (pending: boolean) => void;
@@ -77,6 +79,8 @@ function SquadCard({
   squadCount,
   members,
   assignedMemberIds,
+  eligibleMemberIds,
+  hasRosterSource,
   slotClasses,
   openClassSlot,
   canEdit,
@@ -94,6 +98,8 @@ function SquadCard({
   squadCount: number;
   members: Member[];
   assignedMemberIds: Set<string>;
+  eligibleMemberIds: Set<string> | undefined;
+  hasRosterSource: boolean;
   slotClasses: SlotClasses;
   openClassSlot: string | null;
   canEdit: boolean;
@@ -162,7 +168,7 @@ function SquadCard({
           const effectiveClass = getEffectiveGvgClass(selectedClass, slot.member?.classType);
           const color = effectiveClass ? getClassColor(effectiveClass) : null;
           const availableMembers = effectiveClass
-            ? filterGvgMembersByName(getAvailableGvgMembers(members, assignedMemberIds, slot.memberId, effectiveClass), memberQuery)
+            ? filterGvgMembersByName(getAvailableGvgMembers(members, assignedMemberIds, slot.memberId, effectiveClass, eligibleMemberIds), memberQuery)
             : [];
           const classMenuOpen = openClassSlot === slotKey;
 
@@ -230,6 +236,7 @@ function SquadCard({
                   <ChevronDown size={14} className="ml-auto text-slate-500" />
                 </button>
               ) : <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{slot.member?.name ?? 'Vị trí trống'}</span>}
+              {hasRosterSource && slot.member && eligibleMemberIds && !eligibleMemberIds.has(slot.member.id) && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200" title="Thành viên được giữ nguyên từ đội hình cũ nhưng không còn đủ điều kiện theo roster hiện tại">Không còn GO</span>}
               {canEdit && slot.member && <button type="button" onClick={() => void chooseMember(slotIndex, null)} className="rounded p-1 text-slate-500 hover:bg-red-500/10 hover:text-red-300" aria-label="Gỡ thành viên"><Minus size={12} /></button>}
 
               {canEdit && openSlot === slotIndex && (
@@ -266,7 +273,7 @@ function SquadCard({
   );
 }
 
-export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, onLineupMutationPendingChange, onReload }: Props) {
+export function GvgLineupWorkspace({ lineup, members, attendance, canEdit, onLineupChange, onLineupMutationPendingChange, onReload }: Props) {
   const { alert, confirm } = useSystemDialog();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -308,6 +315,14 @@ export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, o
   const selectedIndex = Math.max(0, lineup.divisions.findIndex(division => division.id === selectedId));
   const selectedDivision = lineup.divisions[selectedIndex] ?? null;
   const assignedMemberIds = new Set(lineup.divisions.flatMap(division => division.squads.flatMap(squad => squad.slots.flatMap(slot => slot.memberId ? [slot.memberId] : []))));
+  const rosterSessions = [attendance.gvg.activeSession, ...attendance.gvg.recentSessions, attendance.scrim.activeSession, ...attendance.scrim.recentSessions]
+    .filter((session): session is NonNullable<typeof session> => Boolean(session))
+    .filter((session, index, sessions) => sessions.findIndex(item => item.id === session.id) === index);
+  const selectedRosterSession = lineup.rosterSource ? rosterSessions.find(session => session.id === lineup.rosterSource?.id) ?? null : null;
+  const eligibleMemberIds = lineup.rosterSource
+    ? new Set(selectedRosterSession?.votes.filter(vote => vote.choice === 'GO').map(vote => vote.memberId) ?? [])
+    : undefined;
+  const eligibleAssignedCount = eligibleMemberIds ? [...assignedMemberIds].filter(memberId => eligibleMemberIds.has(memberId)).length : assignedMemberIds.size;
 
   const apply = async (action: () => Promise<GvgLineup>) => {
     onLineupMutationPendingChange(true);
@@ -351,6 +366,29 @@ export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, o
       <div className="mx-auto max-w-[1600px] space-y-4">
         {!canEdit && <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">Chỉ bang chủ có quyền chỉnh sửa đội hình.</p>}
 
+        <section className="app-surface flex flex-wrap items-end justify-between gap-3 rounded-2xl border p-4">
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-widest text-sky-200">Nguồn roster</h2>
+            <p className="mt-1 text-xs text-slate-400">{lineup.rosterSource ? `${lineup.rosterSource.type === 'GVG' ? 'Bang Chiến' : 'Scrim'} · ${lineup.rosterSource.goCount} đã chọn tham gia` : 'Dùng toàn bộ thành viên đang hoạt động.'}</p>
+            {lineup.rosterSource && !selectedRosterSession && <p className="mt-1 text-xs text-amber-200">Phiên đã chọn không còn trong danh sách điểm danh gần đây. Bạn có thể reset về tất cả thành viên.</p>}
+            {eligibleMemberIds && <p className="mt-1 text-xs text-slate-500">Đủ điều kiện: {eligibleMemberIds.size} · Đã xếp hợp lệ: {eligibleAssignedCount}</p>}
+          </div>
+          {canEdit ? (
+            <label className="flex min-w-60 flex-col gap-1 text-xs font-bold text-slate-300">
+              Chọn phiên điểm danh
+              <select
+                value={lineup.rosterSource?.id ?? ''}
+                disabled={saving}
+                onChange={event => void apply(() => updateGvgLineupRosterSource(event.target.value || null))}
+                className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-slate-100 outline-none focus:border-sky-400/70"
+              >
+                <option value="">Tất cả thành viên đang hoạt động</option>
+                {rosterSessions.map(session => <option key={session.id} value={session.id}>{session.type === 'GVG' ? 'Bang Chiến' : 'Scrim'} · {new Date(session.openedAt).toLocaleString('vi-VN')} · {session.summary.go} GO</option>)}
+              </select>
+            </label>
+          ) : null}
+        </section>
+
         <div className="flex flex-wrap items-end gap-1 border-b border-slate-700/80 px-1" role="tablist" aria-label="Chọn đoàn Bang Chiến">
           {lineup.divisions.map((division, index) => <button key={division.id} type="button" role="tab" aria-selected={division.id === selectedDivision?.id} onClick={() => setSelectedId(division.id)} className={`relative mb-[-1px] h-10 rounded-t-xl border px-3 text-xs font-black transition-colors ${division.id === selectedDivision?.id ? 'border-slate-600 border-b-slate-900 bg-slate-900 text-sky-100' : 'border-transparent bg-slate-950/35 text-slate-500 hover:border-slate-700 hover:bg-slate-900/55 hover:text-slate-300'}`}>Đoàn {index + 1}</button>)}
           {canEdit && <button type="button" onClick={() => void createDivision()} disabled={saving || lineup.divisions.length >= 5} className="mb-1 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/55 text-slate-400 hover:border-sky-400/50 hover:bg-sky-500/15 hover:text-sky-100 disabled:opacity-40" aria-label="Tạo đoàn mới" title="Tạo đoàn mới"><Plus size={16} /></button>}
@@ -370,7 +408,7 @@ export function GvgLineupWorkspace({ lineup, members, canEdit, onLineupChange, o
             </div>
             {selectedDivision.squads.length ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-                {selectedDivision.squads.map((squad, squadIndex) => <SquadCard key={squad.id} squad={squad} divisionIndex={selectedIndex} squadIndex={squadIndex} squadCount={selectedDivision.squads.length} members={members} assignedMemberIds={assignedMemberIds} slotClasses={slotClasses} openClassSlot={openClassSlot} canEdit={canEdit} saving={saving} onClassChange={(slotKey, classType) => setSlotClasses(current => {
+                {selectedDivision.squads.map((squad, squadIndex) => <SquadCard key={squad.id} squad={squad} divisionIndex={selectedIndex} squadIndex={squadIndex} squadCount={selectedDivision.squads.length} members={members} assignedMemberIds={assignedMemberIds} eligibleMemberIds={eligibleMemberIds} hasRosterSource={Boolean(lineup.rosterSource)} slotClasses={slotClasses} openClassSlot={openClassSlot} canEdit={canEdit} saving={saving} onClassChange={(slotKey, classType) => setSlotClasses(current => {
                   if (classType) return { ...current, [slotKey]: classType };
                   const { [slotKey]: _removedClass, ...next } = current;
                   return next;
