@@ -11,6 +11,16 @@ type SlotRecord = {
   member: { id: string; ingameName: string | null; displayName: string; classType: string; active: boolean } | null;
 };
 
+type RosterSourceRecord = {
+  id: string;
+  type: 'GVG' | 'SCRIM';
+  status: 'OPEN' | 'CLOSED' | 'CANCELLED';
+  headerText: string | null;
+  openedAt: Date;
+  closedAt: Date | null;
+  votes: Array<{ id: string }>;
+};
+
 type SquadRecord = {
   id: string;
   guildId: string;
@@ -32,6 +42,16 @@ export type GvgLineupSlot = {
   member: { id: string; name: string; classType: string } | null;
 };
 
+export type GvgLineupRosterSource = {
+  id: string;
+  type: 'GVG' | 'SCRIM';
+  status: 'OPEN' | 'CLOSED' | 'CANCELLED';
+  headerText: string | null;
+  openedAt: string;
+  closedAt: string | null;
+  goCount: number;
+};
+
 export type GvgLineupSquad = {
   id: string;
   squadNumber: number;
@@ -47,7 +67,7 @@ export type GvgLineupDivision = {
   squads: GvgLineupSquad[];
 };
 
-export type GvgLineup = { divisions: GvgLineupDivision[] };
+export type GvgLineup = { rosterSource: GvgLineupRosterSource | null; divisions: GvgLineupDivision[] };
 
 const lineupInclude = {
   squads: {
@@ -74,8 +94,22 @@ function serializeSlots(slots: SlotRecord[]): GvgLineupSlot[] {
   });
 }
 
-export function serializeGvgLineup(divisions: DivisionRecord[]): GvgLineup {
+function serializeRosterSource(source: RosterSourceRecord | null | undefined): GvgLineupRosterSource | null {
+  if (!source) return null;
   return {
+    id: source.id,
+    type: source.type,
+    status: source.status,
+    headerText: source.headerText,
+    openedAt: source.openedAt.toISOString(),
+    closedAt: source.closedAt?.toISOString() ?? null,
+    goCount: source.votes.length,
+  };
+}
+
+export function serializeGvgLineup(divisions: DivisionRecord[], rosterSource: RosterSourceRecord | null = null): GvgLineup {
+  return {
+    rosterSource: serializeRosterSource(rosterSource),
     divisions: [...divisions].sort((a, b) => a.orderIndex - b.orderIndex).map(division => ({
       id: division.id,
       orderIndex: division.orderIndex,
@@ -95,8 +129,29 @@ async function readGvgLineup(guildId: string) {
   return prisma.gvgLineupDivision.findMany({ where: { guildId }, orderBy: { orderIndex: 'asc' }, include: lineupInclude }) as unknown as Promise<DivisionRecord[]>;
 }
 
+async function readGvgLineupRosterSource(guildId: string) {
+  const guild = await prisma.guild.findUnique({
+    where: { id: guildId },
+    select: {
+      gvgLineupRosterSession: {
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          headerText: true,
+          openedAt: true,
+          closedAt: true,
+          votes: { where: { choice: 'GO' }, select: { id: true } },
+        },
+      },
+    },
+  });
+  return guild?.gvgLineupRosterSession as RosterSourceRecord | null | undefined;
+}
+
 export async function getGvgLineup(guildId: string): Promise<GvgLineup> {
-  return serializeGvgLineup(await readGvgLineup(guildId));
+  const [divisions, rosterSource] = await Promise.all([readGvgLineup(guildId), readGvgLineupRosterSource(guildId)]);
+  return serializeGvgLineup(divisions, rosterSource ?? null);
 }
 
 // Kept for compatibility with older app-state callers. Reads never create lineup rows.
@@ -230,20 +285,52 @@ export async function reorderGvgLineupSquads(guildId: string, divisionId: string
 
 export async function updateGvgLineupSquadSlots(guildId: string, squadId: string, memberIds: unknown) {
   if (!Array.isArray(memberIds) || memberIds.length !== GVG_SQUAD_CAPACITY || memberIds.some(memberId => memberId !== null && typeof memberId !== 'string')) return badRequest('Mỗi tổ đội phải có đúng 6 vị trí thành viên.');
-  const squad = await prisma.gvgLineupSquad.findFirst({ where: { id: squadId, guildId }, include: { slots: { select: { id: true, slotIndex: true } } } });
-  if (!squad) return notFound('Không tìm thấy tổ đội.');
   const ids = memberIds.filter((memberId): memberId is string => typeof memberId === 'string');
   if (new Set(ids).size !== ids.length) return badRequest('Một thành viên chỉ được thuộc một tổ đội.');
-  if (ids.length) {
-    const activeMembers = await prisma.member.findMany({ where: { guildId, active: true, id: { in: ids } }, select: { id: true } });
-    if (activeMembers.length !== ids.length) return badRequest('Danh sách thành viên có người không hợp lệ hoặc không còn hoạt động.');
-    const assigned = await prisma.gvgLineupSlot.findMany({ where: { memberId: { in: ids }, squadId: { not: squad.id } }, select: { memberId: true } });
-    if (assigned.length) return badRequest('Một thành viên chỉ được thuộc một tổ đội.');
+
+  const validation = await prisma.$transaction(async tx => {
+    const squad = await tx.gvgLineupSquad.findFirst({ where: { id: squadId, guildId }, include: { slots: { select: { id: true, slotIndex: true, memberId: true } } } });
+    if (!squad) return notFound('Không tìm thấy tổ đội.');
+
+    if (ids.length) {
+      const activeMembers = await tx.member.findMany({ where: { guildId, active: true, id: { in: ids } }, select: { id: true } });
+      if (activeMembers.length !== ids.length) return badRequest('Danh sách thành viên có người không hợp lệ hoặc không còn hoạt động.');
+
+      const assigned = await tx.gvgLineupSlot.findMany({ where: { memberId: { in: ids }, squadId: { not: squad.id } }, select: { memberId: true } });
+      if (assigned.length) return badRequest('Một thành viên chỉ được thuộc một tổ đội.');
+
+      const roster = await tx.guild.findUnique({ where: { id: guildId }, select: { gvgLineupRosterSessionId: true } });
+      if (roster?.gvgLineupRosterSessionId) {
+        const currentIds = new Set(squad.slots.flatMap(slot => slot.memberId ? [slot.memberId] : []));
+        const newIds = ids.filter(id => !currentIds.has(id));
+        if (newIds.length) {
+          const goVotes = await tx.attendanceVote.findMany({
+            where: { sessionId: roster.gvgLineupRosterSessionId, choice: 'GO', memberId: { in: newIds } },
+            select: { memberId: true },
+          });
+          if (goVotes.length !== newIds.length) return badRequest('Chỉ có thể thêm thành viên đã chọn tham gia trong phiên điểm danh roster.');
+        }
+      }
+    }
+
+    await Promise.all(memberIds.map((memberId, slotIndex) => {
+      const slot = squad.slots.find(item => item.slotIndex === slotIndex);
+      return slot ? tx.gvgLineupSlot.update({ where: { id: slot.id }, data: { memberId } }) : tx.gvgLineupSlot.create({ data: { squadId: squad.id, slotIndex, memberId } });
+    }));
+    return null;
+  });
+  if (validation) return validation;
+  return successfulLineup(guildId);
+}
+
+export async function updateGvgLineupRosterSource(guildId: string, rawSessionId: unknown) {
+  if (rawSessionId !== null && typeof rawSessionId !== 'string') return badRequest('Nguồn roster không hợp lệ.');
+  const attendanceSessionId = typeof rawSessionId === 'string' ? rawSessionId.trim() : null;
+  if (attendanceSessionId) {
+    const session = await prisma.attendanceSession.findFirst({ where: { id: attendanceSessionId, guildId }, select: { id: true } });
+    if (!session) return notFound('Không tìm thấy phiên điểm danh thuộc bang hiện tại.');
   }
-  await Promise.all(memberIds.map((memberId, slotIndex) => {
-    const slot = squad.slots.find(item => item.slotIndex === slotIndex);
-    return slot ? prisma.gvgLineupSlot.update({ where: { id: slot.id }, data: { memberId } }) : prisma.gvgLineupSlot.create({ data: { squadId: squad.id, slotIndex, memberId } });
-  }));
+  await prisma.guild.update({ where: { id: guildId }, data: { gvgLineupRosterSessionId: attendanceSessionId || null } });
   return successfulLineup(guildId);
 }
 

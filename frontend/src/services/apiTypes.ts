@@ -1,10 +1,12 @@
 export type {
   DiscordRoleMapping,
   DiscordMemberPreview,
+  AttendanceState,
   ImportResponse,
   AppStateResponse,
   DiscordUser,
   GvgLineup,
+  GvgLineupRosterSource,
   GvgLineupDivision,
   GvgLineupSquad,
   GvgLineupSlot,

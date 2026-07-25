@@ -67,6 +67,16 @@ export interface GvgLineupSlot {
   member: { id: string; name: string; classType: string } | null;
 }
 
+export interface GvgLineupRosterSource {
+  id: string;
+  type: AttendanceType;
+  status: AttendanceSessionStatus;
+  headerText: string | null;
+  openedAt: string;
+  closedAt: string | null;
+  goCount: number;
+}
+
 export interface GvgLineupSquad {
   id: string;
   squadNumber: number;
@@ -83,6 +93,7 @@ export interface GvgLineupDivision {
 }
 
 export interface GvgLineup {
+  rosterSource?: GvgLineupRosterSource | null;
   divisions: GvgLineupDivision[];
 }
 

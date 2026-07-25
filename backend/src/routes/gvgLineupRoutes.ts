@@ -11,6 +11,7 @@ import {
   reorderGvgLineupDivisions,
   reorderGvgLineupSquads,
   updateGvgLineupDivisionNote,
+  updateGvgLineupRosterSource,
   updateGvgLineupSquadName,
   updateGvgLineupSquadSlots,
 } from '../services/gvgLineupService.js';
@@ -35,6 +36,7 @@ export type GvgLineupRouteDependencies = {
   updateGvgLineupSquadSlots: typeof updateGvgLineupSquadSlots;
   clearGvgLineupSquadById: typeof clearGvgLineupSquadById;
   updateGvgLineupDivisionNote: typeof updateGvgLineupDivisionNote;
+  updateGvgLineupRosterSource: typeof updateGvgLineupRosterSource;
   updateGvgLineupSquadName: typeof updateGvgLineupSquadName;
   publishGuildAppStateChanged: typeof publishGuildAppStateChanged;
 };
@@ -53,6 +55,7 @@ export function createGvgLineupRoutes(dependencies: Partial<GvgLineupRouteDepend
     updateGvgLineupSquadSlots: dependencies.updateGvgLineupSquadSlots ?? updateGvgLineupSquadSlots,
     clearGvgLineupSquadById: dependencies.clearGvgLineupSquadById ?? clearGvgLineupSquadById,
     updateGvgLineupDivisionNote: dependencies.updateGvgLineupDivisionNote ?? updateGvgLineupDivisionNote,
+    updateGvgLineupRosterSource: dependencies.updateGvgLineupRosterSource ?? updateGvgLineupRosterSource,
     updateGvgLineupSquadName: dependencies.updateGvgLineupSquadName ?? updateGvgLineupSquadName,
     publish: dependencies.publishGuildAppStateChanged ?? publishGuildAppStateChanged,
   };
@@ -79,6 +82,7 @@ export function createGvgLineupRoutes(dependencies: Partial<GvgLineupRouteDepend
   router.post('/api/gvg-lineup/divisions', ownerMutation(guildId => services.createGvgLineupDivision(guildId), 201));
   router.patch('/api/gvg-lineup/divisions/reorder', ownerMutation((guildId, req) => services.reorderGvgLineupDivisions(guildId, req.body?.divisionIds)));
   router.patch('/api/gvg-lineup/divisions/:divisionId/note', ownerMutation((guildId, req) => services.updateGvgLineupDivisionNote(guildId, req.params.divisionId, req.body?.note)));
+  router.patch('/api/gvg-lineup/roster-source', ownerMutation((guildId, req) => services.updateGvgLineupRosterSource(guildId, req.body?.attendanceSessionId)));
   router.delete('/api/gvg-lineup/divisions/:divisionId', ownerMutation((guildId, req) => services.deleteGvgLineupDivisionResource(guildId, req.params.divisionId)));
   router.post('/api/gvg-lineup/divisions/:divisionId/squads', ownerMutation((guildId, req) => services.createGvgLineupSquad(guildId, req.params.divisionId), 201));
   router.patch('/api/gvg-lineup/divisions/:divisionId/squads/reorder', ownerMutation((guildId, req) => services.reorderGvgLineupSquads(guildId, req.params.divisionId, req.body?.squadIds)));

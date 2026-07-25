@@ -21,6 +21,10 @@ export function updateGvgLineupDivisionNote(divisionId: string, note: string | n
   return lineupRequest(`/divisions/${divisionId}/note`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }) });
 }
 
+export function updateGvgLineupRosterSource(attendanceSessionId: string | null) {
+  return lineupRequest('/roster-source', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attendanceSessionId }) });
+}
+
 export function createGvgLineupSquad(divisionId: string) {
   return lineupRequest(`/divisions/${divisionId}/squads`, { method: 'POST' });
 }

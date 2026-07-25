@@ -80,10 +80,12 @@ model Guild {
   memberships             GuildMembership[]
   attendanceChannelConfigs AttendanceChannelConfig[]
   attendanceSessions       AttendanceSession[]
-  gvgParticipationSessions GvgParticipationSession[]
-  gvgLineupNextSquadNumber Int @default(1)
-  gvgLineupDivisions       GvgLineupDivision[]
-  gvgLineupSquads          GvgLineupSquad[]
+  gvgParticipationSessions    GvgParticipationSession[]
+  gvgLineupNextSquadNumber    Int @default(1)
+  gvgLineupRosterSessionId    String? @unique
+  gvgLineupRosterSession      AttendanceSession? @relation("GvgLineupRosterSource", fields: [gvgLineupRosterSessionId], references: [id], onDelete: SetNull)
+  gvgLineupDivisions          GvgLineupDivision[]
+  gvgLineupSquads             GvgLineupSquad[]
 }
 
 model GvgLineupDivision {
@@ -218,9 +220,10 @@ model AttendanceSession {
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
 
-  guild    Guild                @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  votes    AttendanceVote[]
-  voteJobs AttendanceVoteJob[]
+  guild                     Guild                @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  rosterSourceForGvgLineup Guild? @relation("GvgLineupRosterSource")
+  votes                     AttendanceVote[]
+  voteJobs                  AttendanceVoteJob[]
 
   @@index([guildId, type, status])
   @@index([guildId, type, openedAt])
