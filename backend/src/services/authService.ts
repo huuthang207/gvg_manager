@@ -2,6 +2,7 @@ import { getGuildMembersWithRoles } from '../discord.js';
 import { exchangeCode, getUserGuilds, getUserInfo } from '../oauth2.js';
 import { createSession, getSession } from '../session.js';
 import { prisma } from '../db.js';
+import { hasRequiredRole } from '../requiredRoles.js';
 
 export async function handleOAuthCallback(code: string, redirectUri: string) {
   const tokenData = await exchangeCode(code, redirectUri);
@@ -82,11 +83,8 @@ export async function handleOAuthCallback(code: string, redirectUri: string) {
       authBlockedReason = 'Không tìm thấy thông tin thành viên của bạn trong server bang.';
     } else {
       const requiredRoles = fixedGuild.requiredRoles.map(role => role.roleName);
-      if (requiredRoles.length > 0) {
-        const hasRequiredRoles = requiredRoles.every(roleName => discordMember.roles.includes(roleName));
-        if (!hasRequiredRoles) {
-          authBlockedReason = 'Bạn chưa có đủ role yêu cầu để vào hệ thống.';
-        }
+      if (!hasRequiredRole(discordMember.roles, requiredRoles)) {
+        authBlockedReason = 'Bạn chưa có role yêu cầu để vào hệ thống.';
       }
     }
   }

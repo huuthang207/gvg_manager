@@ -744,8 +744,8 @@ const RoleConfigModal: React.FC<RoleConfigModalProps> = ({ roleConfig, canResetG
             <>
               <section className="space-y-3">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Role bắt buộc / thành viên</label>
-                  <p className="mt-1 text-[11px] text-slate-500">Người dùng phải có các role này để vào webapp; nếu không có role quản lý thì sẽ là thành viên.</p>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Role đủ điều kiện truy cập</label>
+                  <p className="mt-1 text-[11px] text-slate-500">Người dùng chỉ cần có ít nhất một role này để vào webapp; nếu không có role quản lý thì sẽ là thành viên.</p>
                 </div>
                 <div className="flex gap-2">
                   <AppSelect

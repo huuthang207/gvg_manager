@@ -154,7 +154,7 @@ export default function App() {
   }
 
   if (!isAuthorized) {
-    return <div className="app-shell min-h-screen text-slate-100 flex items-center justify-center p-6 font-sans"><div className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-slate-900/75 p-8 text-center shadow-2xl shadow-red-950/20 space-y-4"><h1 className="text-xl font-black uppercase tracking-widest text-white">Không có quyền truy cập</h1><p className="text-sm text-slate-300">{blockedReason || 'Tài khoản của bạn chưa đủ điều kiện vào hệ thống.'}</p><p className="text-xs text-slate-500">Vui lòng liên hệ quản trị bang để được cấp đúng role yêu cầu.</p><button onClick={handleLogout} className="inline-flex items-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs transition-colors">Đăng xuất</button></div></div>;
+    return <div className="app-shell min-h-screen text-slate-100 flex items-center justify-center p-6 font-sans"><div className="w-full max-w-lg rounded-2xl border border-red-400/30 bg-slate-900/75 p-8 text-center shadow-2xl shadow-red-950/20 space-y-4"><h1 className="text-xl font-black uppercase tracking-widest text-white">Không có quyền truy cập</h1><p className="text-sm text-slate-300">{blockedReason || 'Tài khoản của bạn chưa đủ điều kiện vào hệ thống.'}</p><p className="text-xs text-slate-500">Vui lòng liên hệ quản trị bang để được cấp một role đủ điều kiện.</p><button onClick={handleLogout} className="inline-flex items-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs transition-colors">Đăng xuất</button></div></div>;
   }
 
   return (
