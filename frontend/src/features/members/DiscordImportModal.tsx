@@ -111,7 +111,7 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
 
     return members.filter(member => {
       if (required.size === 0) return true;
-      return [...required].every(r => member.roles.includes(r));
+      return [...required].some(r => member.roles.includes(r));
     }).map(member => {
       const matchedClasses = mappedClassRoles
         .filter(({ role }) => member.roles.includes(role))
@@ -455,10 +455,10 @@ export const DiscordImportModal: React.FC<DiscordImportModalProps> = ({ onImport
                   <div className="border-t border-slate-800 pt-5">
                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                       <AlertCircle size={12} className="text-amber-400" />
-                      Điều kiện Role bắt buộc (AND logic)
+                      Điều kiện Role bắt buộc (OR logic)
                     </h4>
                     <p className="text-[11px] text-slate-500 mb-3">
-                      Thành viên phải có <strong className="text-slate-300">TẤT CẢ</strong> các role bên dưới mới được nhập.
+                      Thành viên chỉ cần có <strong className="text-slate-300">ÍT NHẤT MỘT</strong> role bên dưới để được nhập.
                     </p>
 
                     {requiredRoles.length > 0 && (

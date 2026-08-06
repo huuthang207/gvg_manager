@@ -1,6 +1,7 @@
 import { prisma } from './db.js';
 import { getGuildMembersWithRoles } from './discord.js';
 import { mapRolesToClasses } from './roleMapper.js';
+import { hasRequiredRole } from './requiredRoles.js';
 
 export const UNKNOWN_CLASS = 'Chưa xác định';
 export const CONFLICT_CLASS = 'Xung đột role phái';
@@ -13,6 +14,12 @@ interface SyncOptions {
   selectedMemberIds?: string[];
 }
 
+export interface SyncDependencies {
+  getGuildMembersWithRoles: typeof getGuildMembersWithRoles;
+}
+
+const defaultDependencies: SyncDependencies = { getGuildMembersWithRoles };
+
 export function resolveClassFromRoleMap(memberRoles: string[], classRoleMap: Record<string, string>) {
   const matchedClasses = Object.entries(classRoleMap)
     .filter(([, roleName]) => roleName && memberRoles.includes(roleName))
@@ -23,12 +30,11 @@ export function resolveClassFromRoleMap(memberRoles: string[], classRoleMap: Rec
   return CONFLICT_CLASS;
 }
 
-export async function syncGuildMembers(options: SyncOptions) {
+export async function syncGuildMembers(options: SyncOptions, dependencies: SyncDependencies = defaultDependencies) {
   const { guildId, discordGuildId, classRoleMap, requiredRoles, selectedMemberIds } = options;
-  const cachedData = await getGuildMembersWithRoles(discordGuildId);
-  const required = new Set(requiredRoles);
-  const selected = selectedMemberIds ? new Set(selectedMemberIds) : null;
-  const activeDiscordIds = new Set<string>();
+  const cachedData = await dependencies.getGuildMembersWithRoles(discordGuildId);
+  const selected = selectedMemberIds === undefined ? null : new Set(selectedMemberIds);
+  const eligibleDiscordIds = new Set<string>();
 
   const mappedMembers = cachedData.members.map(member => {
     const roleMappings = mapRolesToClasses(member.roles);
@@ -47,7 +53,7 @@ export async function syncGuildMembers(options: SyncOptions) {
 
   for (const member of mappedMembers) {
     if (selected && !selected.has(member.id)) continue;
-    if (required.size > 0 && ![...required].every(role => member.roles.includes(role))) continue;
+    if (!hasRequiredRole(member.roles, requiredRoles)) continue;
 
     const classType = resolveClassFromRoleMap(member.roles, classRoleMap);
 
@@ -77,7 +83,7 @@ export async function syncGuildMembers(options: SyncOptions) {
       },
     });
 
-    activeDiscordIds.add(member.id);
+    eligibleDiscordIds.add(member.id);
     await prisma.memberRole.deleteMany({ where: { memberId: savedMember.id } });
     if (member.roles.length > 0) {
       await prisma.memberRole.createMany({
@@ -86,19 +92,22 @@ export async function syncGuildMembers(options: SyncOptions) {
     }
   }
 
+  const inactiveMemberFilter = selected
+    ? { in: [...selected].filter(discordUserId => !eligibleDiscordIds.has(discordUserId)) }
+    : { notIn: [...eligibleDiscordIds] };
+  const inactiveMemberWhere = {
+    guildId,
+    active: true,
+    discordUserId: inactiveMemberFilter,
+  };
+
   const deactivatedMembers = await prisma.member.findMany({
-    where: {
-      guildId,
-      discordUserId: { notIn: [...activeDiscordIds] },
-    },
+    where: inactiveMemberWhere,
     select: { discordUserId: true },
   });
 
   await prisma.member.updateMany({
-    where: {
-      guildId,
-      discordUserId: { notIn: [...activeDiscordIds] },
-    },
+    where: inactiveMemberWhere,
     data: { active: false },
   });
 
