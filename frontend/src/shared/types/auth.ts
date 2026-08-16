@@ -5,7 +5,7 @@ export interface DiscordUser {
   avatar: string | null;
 }
 
-export type AttendanceChoice = 'GO' | 'NOGO';
+export type AttendanceChoice = 'GO' | 'RESERVE' | 'NOGO';
 export type RawAttendanceChoice = AttendanceChoice | 'MAYBE';
 export type AttendanceType = 'GVG' | 'SCRIM';
 export type AttendanceSessionStatus = 'OPEN' | 'CLOSED' | 'CANCELLED';
@@ -46,7 +46,7 @@ export interface AttendanceSession {
   lastVoteAt: string | null;
   createdAt: string;
   updatedAt: string;
-  summary: { go: number; nogo: number; total: number };
+  summary: { go: number; reserve: number; nogo: number; total: number };
   votes: AttendanceVote[];
 }
 

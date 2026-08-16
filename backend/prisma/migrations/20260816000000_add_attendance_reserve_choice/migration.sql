@@ -1,0 +1,1 @@
+ALTER TYPE "AttendanceChoice" ADD VALUE 'RESERVE';

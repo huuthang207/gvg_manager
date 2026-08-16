@@ -13,6 +13,7 @@ import { GvgParticipationModal } from './GvgParticipationModal.tsx';
 
 const choiceMeta: Record<AttendanceChoice, { label: string; shortLabel: string; icon: React.ReactNode; className: string }> = {
   GO: { label: 'Tham gia', shortLabel: 'Tham gia', icon: <CheckCircle2 size={16} />, className: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25' },
+  RESERVE: { label: 'Dự bị', shortLabel: 'Dự bị', icon: <ShieldCheck size={16} />, className: 'text-violet-300 bg-violet-500/10 border-violet-500/25' },
   NOGO: { label: 'Không tham gia', shortLabel: 'Không tham gia', icon: <XCircle size={16} />, className: 'text-red-300 bg-red-500/10 border-red-500/25' },
 };
 
@@ -34,7 +35,7 @@ function getAttendanceTitle(session: AttendanceSession) {
 }
 
 function isCurrentAttendanceChoice(choice: RawAttendanceChoice): choice is AttendanceChoice {
-  return choice === 'GO' || choice === 'NOGO';
+  return choice === 'GO' || choice === 'RESERVE' || choice === 'NOGO';
 }
 
 function getVoteName(vote: AttendanceVote) {
@@ -169,12 +170,14 @@ function HistoryMetricCard({
 
 function SessionResponseSummary({
   goCount,
+  reserveCount,
   nogoCount,
   respondedCount,
   totalActiveMembers,
   notVotedCount,
 }: {
   goCount: number;
+  reserveCount: number;
   nogoCount: number;
   respondedCount: number;
   totalActiveMembers: number;
@@ -192,7 +195,7 @@ function SessionResponseSummary({
           </div>
           <h3 className="mt-3 text-lg font-black text-white sm:text-xl">Tình hình phản hồi của phiên này</h3>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            Xem nhanh số người tham gia, không tham gia và những thành viên active vẫn chưa phản hồi để review lại phiên attendance đã đóng.
+            Xem nhanh số người tham gia, dự bị, không tham gia và những thành viên active vẫn chưa phản hồi để review lại phiên attendance đã đóng.
           </p>
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between gap-3 text-xs font-bold text-slate-400">
@@ -204,8 +207,9 @@ function SessionResponseSummary({
             </div>
           </div>
         </div>
-        <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+        <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-5">
           <HistoryMetricCard label="Tham gia" value={goCount} helper="Đã chọn GO" className="border-emerald-500/25 bg-emerald-500/10" />
+          <HistoryMetricCard label="Dự bị" value={reserveCount} helper="Đã chọn RESERVE" className="border-violet-500/25 bg-violet-500/10" />
           <HistoryMetricCard label="Không tham gia" value={nogoCount} helper="Đã chọn NOGO" className="border-red-500/25 bg-red-500/10" />
           <HistoryMetricCard label="Chưa điểm danh" value={notVotedCount} helper="Active chưa phản hồi" className="border-amber-500/25 bg-amber-500/10" />
           <HistoryMetricCard label="Tổng active" value={totalActiveMembers} helper="Dùng để tính tiến độ" className="border-slate-700/80 bg-slate-900/70" />
@@ -267,6 +271,7 @@ function SessionDetailsToolbar({
   const filters: Array<{ value: ReviewStatus | 'ALL'; label: string; className: string }> = [
     { value: 'ALL', label: 'Tất cả', className: 'border-slate-700 bg-slate-900/70 text-slate-300' },
     { value: 'GO', label: 'Tham gia', className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' },
+    { value: 'RESERVE', label: 'Dự bị', className: 'border-violet-500/30 bg-violet-500/10 text-violet-200' },
     { value: 'NOGO', label: 'Không tham gia', className: 'border-red-500/30 bg-red-500/10 text-red-200' },
     { value: 'NOT_VOTED', label: 'Chưa phản hồi', className: 'border-amber-500/30 bg-amber-500/10 text-amber-200' },
   ];
@@ -390,6 +395,7 @@ function SessionDetailsPanel({ session, members }: { session: AttendanceSession;
   const statusCounts = useMemo(() => ({
     ALL: reviewRows.length,
     GO: reviewRows.filter(row => row.status === 'GO').length,
+    RESERVE: reviewRows.filter(row => row.status === 'RESERVE').length,
     NOGO: reviewRows.filter(row => row.status === 'NOGO').length,
     NOT_VOTED: reviewRows.filter(row => row.status === 'NOT_VOTED').length,
   }), [reviewRows]);
@@ -411,6 +417,7 @@ function SessionDetailsPanel({ session, members }: { session: AttendanceSession;
       <SessionDetailsHeader session={session} />
       <SessionResponseSummary
         goCount={statusCounts.GO}
+        reserveCount={statusCounts.RESERVE}
         nogoCount={statusCounts.NOGO}
         respondedCount={currentVotes.length}
         totalActiveMembers={activeMembers.length}
@@ -595,7 +602,7 @@ function SessionSummaryCard({
   onRefresh: () => void;
   onClose: () => void;
 }) {
-  const totalVotes = session.summary.go + session.summary.nogo;
+  const totalVotes = session.summary.total;
 
   return (
     <section className="rounded-2xl border border-sky-400/20 bg-gradient-to-br from-sky-500/10 via-slate-900/75 to-indigo-500/10 p-4 shadow-lg shadow-slate-950/25 backdrop-blur-sm">
@@ -624,6 +631,7 @@ function SessionSummaryCard({
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 xl:justify-end">
           <SummaryPill choice="GO" count={session.summary.go} />
+          <SummaryPill choice="RESERVE" count={session.summary.reserve} />
           <SummaryPill choice="NOGO" count={session.summary.nogo} />
         </div>
       </div>
@@ -907,7 +915,7 @@ export function AttendanceView({
           <section className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/25 px-6 py-9 text-center">
             <ClipboardCheck size={38} className="mx-auto mb-3 text-slate-500" />
             <h2 className="text-xl font-black text-white">Chưa có phiên điểm danh {attendanceLabel} đang mở</h2>
-            <p className="mx-auto mt-2 max-w-lg text-sm text-slate-400">Mở phiên mới để gửi lựa chọn Tham gia hoặc Không tham gia đến Discord.</p>
+            <p className="mx-auto mt-2 max-w-lg text-sm text-slate-400">Mở phiên mới để gửi lựa chọn Tham gia, Dự bị hoặc Không tham gia đến Discord.</p>
             <button
               type="button"
               onClick={() => setSetupModal('open')}
@@ -965,6 +973,7 @@ export function AttendanceView({
                   </div>
                   <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
                     <SummaryPill choice="GO" count={session.summary.go} />
+                    <SummaryPill choice="RESERVE" count={session.summary.reserve} />
                     <SummaryPill choice="NOGO" count={session.summary.nogo} />
                   </div>
                 </button>
@@ -1037,6 +1046,7 @@ export function AttendanceView({
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-1.5">
                       <SummaryPill choice="GO" count={session.summary.go} />
+                      <SummaryPill choice="RESERVE" count={session.summary.reserve} />
                       <SummaryPill choice="NOGO" count={session.summary.nogo} />
                     </div>
                   </button>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, Search, Trash2, Users } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Minus, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
 import type { AttendanceState, GvgLineup, GvgLineupSquad } from '../../services/apiTypes.ts';
 import type { Member } from '../../shared/types/member.ts';
 import {
@@ -10,6 +10,7 @@ import {
   reorderGvgLineupSquads,
   updateGvgLineupDivisionNote,
   updateGvgLineupRosterSource,
+  updateGvgLineupSquadName,
   updateGvgLineupSquadSlots,
 } from '../../services/gvgLineupApi.ts';
 import { CLASSES, getClassColor, getClassIcon } from '../../constants.ts';
@@ -88,6 +89,7 @@ function SquadCard({
   onClassChange,
   onOpenClassSlotChange,
   onMoveSquad,
+  onRename,
   onUpdate,
   onDelete,
 }: {
@@ -107,6 +109,7 @@ function SquadCard({
   onClassChange: (slotKey: string, classType: string | null) => void;
   onOpenClassSlotChange: (slotKey: string | null) => void;
   onMoveSquad: (sourceIndex: number, targetIndex: number) => void;
+  onRename: () => void;
   onUpdate: (memberIds: Array<string | null>) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
@@ -149,6 +152,7 @@ function SquadCard({
     <article ref={cardRef} className="min-w-0 rounded-xl border border-slate-700/80 bg-slate-900/85 shadow-xl shadow-black/15">
       <header className="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2.5">
         <h3 className="min-w-0 flex-1 truncate text-sm font-black uppercase tracking-wider text-white" title={squad.name}>{squad.name}</h3>
+        {canEdit && <button type="button" onClick={onRename} disabled={saving} className="rounded p-1.5 text-slate-500 hover:bg-sky-500/10 hover:text-sky-200 disabled:opacity-50" title="Đổi tên tổ đội" aria-label="Đổi tên tổ đội"><Pencil size={15} /></button>}
         {canEdit && <SquadOrderButtons
           disableMoveLeft={saving || squadIndex === 0}
           disableMoveRight={saving || squadIndex === squadCount - 1}
@@ -282,6 +286,9 @@ export function GvgLineupWorkspace({ lineup, members, attendance, canEdit, onLin
   const [noteDraft, setNoteDraft] = React.useState('');
   const [noteDraftDivisionId, setNoteDraftDivisionId] = React.useState<string | null>(null);
   const [noteDirty, setNoteDirty] = React.useState(false);
+  const [renameTarget, setRenameTarget] = React.useState<GvgLineupSquad | null>(null);
+  const [squadNameDraft, setSquadNameDraft] = React.useState('');
+  const [squadNameError, setSquadNameError] = React.useState('');
 
   React.useEffect(() => {
     const update = (event: Event) => onLineupChange((event as CustomEvent<GvgLineup>).detail);
@@ -361,6 +368,46 @@ export function GvgLineupWorkspace({ lineup, members, attendance, canEdit, onLin
     void apply(() => reorderGvgLineupSquads(selectedDivision.id, next.divisions.find(division => division.id === selectedDivision.id)?.squads.map(squad => squad.id) ?? []));
   };
 
+  const openRenameModal = (squad: GvgLineupSquad) => {
+    if (saving) return;
+    setRenameTarget(squad);
+    setSquadNameDraft(squad.name);
+    setSquadNameError('');
+  };
+
+  const closeRenameModal = () => {
+    if (saving) return;
+    setRenameTarget(null);
+    setSquadNameDraft('');
+    setSquadNameError('');
+  };
+
+  const saveSquadName = async () => {
+    if (!renameTarget || saving) return;
+    const name = squadNameDraft.trim();
+    if (!name) {
+      setSquadNameError('Tên tổ đội không được để trống.');
+      return;
+    }
+    if (name.length > 32) {
+      setSquadNameError('Tên tổ đội không được vượt quá 32 ký tự.');
+      return;
+    }
+    if (/[\x00-\x1F\x7F]/.test(name)) {
+      setSquadNameError('Tên tổ đội không được chứa ký tự xuống dòng hoặc ký tự điều khiển.');
+      return;
+    }
+    if (name === renameTarget.name) {
+      closeRenameModal();
+      return;
+    }
+    if (await apply(() => updateGvgLineupSquadName(renameTarget.squadNumber, name))) {
+      setRenameTarget(null);
+      setSquadNameDraft('');
+      setSquadNameError('');
+    }
+  };
+
   return (
     <div className="custom-scrollbar h-full overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-[1600px] space-y-4">
@@ -412,7 +459,7 @@ export function GvgLineupWorkspace({ lineup, members, attendance, canEdit, onLin
                   if (classType) return { ...current, [slotKey]: classType };
                   const { [slotKey]: _removedClass, ...next } = current;
                   return next;
-                })} onOpenClassSlotChange={setOpenClassSlot} onMoveSquad={moveSquad} onUpdate={async memberIds => { await apply(() => updateGvgLineupSquadSlots(squad.id, memberIds)); }} onDelete={async () => { if (!await confirm({ title: `Xóa ${squad.name}?`, message: 'Tổ đội cùng toàn bộ vị trí và thành viên trong Đoàn sẽ bị xóa vĩnh viễn.', variant: 'danger', confirmLabel: 'Xóa tổ đội' })) return; await apply(() => deleteGvgLineupSquad(squad.id)); }} />)}
+                })} onOpenClassSlotChange={setOpenClassSlot} onMoveSquad={moveSquad} onRename={() => openRenameModal(squad)} onUpdate={async memberIds => { await apply(() => updateGvgLineupSquadSlots(squad.id, memberIds)); }} onDelete={async () => { if (!await confirm({ title: `Xóa ${squad.name}?`, message: 'Tổ đội cùng toàn bộ vị trí và thành viên trong Đoàn sẽ bị xóa vĩnh viễn.', variant: 'danger', confirmLabel: 'Xóa tổ đội' })) return; await apply(() => deleteGvgLineupSquad(squad.id)); }} />)}
               </div>
             ) : <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/25 px-5 py-10 text-center text-sm text-slate-500">Đoàn này chưa có tổ đội. {canEdit && 'Dùng nút “Tạo tổ đội” để bắt đầu.'}</div>}
             <section className="mt-4 rounded-xl border border-slate-800/80 bg-slate-950/35 p-3">
@@ -443,6 +490,57 @@ export function GvgLineupWorkspace({ lineup, members, attendance, canEdit, onLin
           </section>
         )}
       </div>
+
+      {renameTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={closeRenameModal}>
+          <form
+            className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl"
+            onClick={event => event.stopPropagation()}
+            onSubmit={event => {
+              event.preventDefault();
+              void saveSquadName();
+            }}
+            aria-labelledby="rename-squad-title"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-5 py-4">
+              <div>
+                <h2 id="rename-squad-title" className="text-xl font-black text-white">Đổi tên tổ đội</h2>
+                <p className="mt-1 text-sm text-slate-500">Đặt tên dễ nhận biết cho tổ đội này.</p>
+              </div>
+              <button type="button" onClick={closeRenameModal} disabled={saving} className="app-button-secondary rounded-xl p-2 disabled:opacity-50" aria-label="Đóng đổi tên tổ đội"><X size={18} /></button>
+            </div>
+            <div className="space-y-2 p-5">
+              <label htmlFor="squad-name" className="text-xs font-black uppercase tracking-wider text-slate-500">Tên tổ đội</label>
+              <input
+                id="squad-name"
+                autoFocus
+                value={squadNameDraft}
+                onChange={event => {
+                  setSquadNameDraft(event.target.value);
+                  setSquadNameError('');
+                }}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeRenameModal();
+                  }
+                }}
+                maxLength={32}
+                disabled={saving}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none transition-colors focus:border-sky-400 disabled:opacity-60"
+              />
+              <div className="flex justify-between gap-3 text-xs">
+                <span className={squadNameError ? 'font-bold text-red-300' : 'text-slate-500'}>{squadNameError || 'Tối đa 32 ký tự.'}</span>
+                <span className="shrink-0 text-slate-500">{squadNameDraft.length}/32</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-800 px-5 py-4">
+              <button type="button" onClick={closeRenameModal} disabled={saving} className="app-button-secondary rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-50">Hủy</button>
+              <button type="submit" disabled={saving} className="app-button-primary rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-50">{saving ? 'Đang lưu...' : 'Lưu tên'}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

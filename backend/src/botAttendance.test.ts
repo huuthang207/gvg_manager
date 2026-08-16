@@ -155,6 +155,23 @@ test('acknowledges and enqueues a successful attendance button vote', async () =
   assert.equal(interaction.replyContent, 'Đã nhận lựa chọn: Tham gia. Đang cập nhật điểm danh.');
 });
 
+test('acknowledges a reserve attendance button vote', async () => {
+  const interaction = createButtonInteraction({ customId: 'attendance:RESERVE:session-1' });
+  let queuedChoice: string | null = null;
+  setupAttendanceVoteJobMocks({
+    upsertImpl: async (args: any) => {
+      queuedChoice = args.update.choice;
+      return createQueueJob({ choice: args.update.choice, type: args.update.type });
+    },
+  });
+
+  const handled = await handleAttendanceInteraction(interaction);
+
+  assert.equal(handled, true);
+  assert.equal(queuedChoice, 'RESERVE');
+  assert.equal(interaction.replyContent, 'Đã nhận lựa chọn: Dự bị. Đang cập nhật điểm danh.');
+});
+
 test('returns an error follow-up when enqueue rejects because session is invalid', async () => {
   const interaction = createButtonInteraction();
   setupAttendanceVoteJobMocks({ sessionRecord: null });

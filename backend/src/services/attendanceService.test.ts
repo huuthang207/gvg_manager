@@ -66,7 +66,7 @@ function createSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function createVoteSnapshot(choice: 'GO' | 'NOGO') {
+function createVoteSnapshot(choice: 'GO' | 'RESERVE' | 'NOGO') {
   return {
     id: 'vote-1',
     memberId: member.id,
@@ -291,7 +291,7 @@ describe('attendanceService', () => {
       findFirst: async () => createSession(),
       findUnique: async () => createSession({
         lastVoteAt: now,
-        votes: [createVoteSnapshot('NOGO')],
+        votes: [createVoteSnapshot('RESERVE')],
       }),
       update: async () => ({
         id: 'session-1',
@@ -311,13 +311,14 @@ describe('attendanceService', () => {
       discordGuildId: guild.discordGuildId,
       discordUserId: member.discordUserId,
       sessionId: 'session-1',
-      choice: 'NOGO',
+      choice: 'RESERVE',
     });
 
     assert.equal(result.status, 200);
-    assert.equal(voteUpsertArgs.update.choice, 'NOGO');
-    assert.equal(result.body.session.summary.nogo, 1);
+    assert.equal(voteUpsertArgs.update.choice, 'RESERVE');
+    assert.equal(result.body.session.summary.reserve, 1);
     assert.equal(result.body.session.summary.go, 0);
+    assert.equal(result.body.session.summary.nogo, 0);
   });
 
   it('rejects votes for closed or missing active sessions', async () => {
