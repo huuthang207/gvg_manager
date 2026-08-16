@@ -298,7 +298,11 @@ export async function handleAttendanceInteraction(interaction: Interaction) {
     return true;
   }
 
-  const label = parsed.choice === 'GO' ? 'Tham gia' : 'Không tham gia';
+  const label = {
+    GO: 'Tham gia',
+    RESERVE: 'Dự bị',
+    NOGO: 'Không tham gia',
+  }[parsed.choice];
   await sendAttendanceButtonFeedback(interaction, {
     content: `Đã nhận lựa chọn: ${label}. Đang cập nhật điểm danh.`,
     feedbackType: 'success',

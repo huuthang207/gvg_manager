@@ -43,11 +43,12 @@ export function summarizeAttendanceVotes(votes: Array<{ choice: AttendanceChoice
   return votes.reduce(
     (summary, vote) => {
       if (vote.choice === 'GO') summary.go += 1;
+      if (vote.choice === 'RESERVE') summary.reserve += 1;
       if (vote.choice === 'NOGO') summary.nogo += 1;
-      summary.total += 1;
+      if (vote.choice !== 'MAYBE') summary.total += 1;
       return summary;
     },
-    { go: 0, nogo: 0, total: 0 },
+    { go: 0, reserve: 0, nogo: 0, total: 0 },
   );
 }
 

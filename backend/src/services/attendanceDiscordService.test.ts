@@ -2,7 +2,9 @@ import { afterEach, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { prisma } from '../db.js';
 import {
+  buildAttendanceButtons,
   editAttendanceDiscordMessage,
+  parseAttendanceButtonCustomId,
   queueAttendanceDiscordMessageRefresh,
   setAttendanceDiscordClient,
 } from './attendanceDiscordService.js';
@@ -61,6 +63,29 @@ afterEach(async () => {
     },
   } as any);
   await wait(20);
+});
+
+test('builds and parses all current attendance response buttons', () => {
+  const row = buildAttendanceButtons('session-1', 'SCRIM');
+  const components = row.toJSON().components as Array<{ custom_id?: string; label?: string }>;
+
+  assert.deepEqual(components.map(component => component.custom_id), [
+    'attendance:SCRIM:GO:session-1',
+    'attendance:SCRIM:RESERVE:session-1',
+    'attendance:SCRIM:NOGO:session-1',
+  ]);
+  assert.equal(components[1]?.label, 'Dự bị');
+  assert.deepEqual(parseAttendanceButtonCustomId('attendance:SCRIM:RESERVE:session-1'), {
+    type: 'SCRIM',
+    choice: 'RESERVE',
+    sessionId: 'session-1',
+  });
+  assert.deepEqual(parseAttendanceButtonCustomId('attendance:RESERVE:session-1'), {
+    type: 'GVG',
+    choice: 'RESERVE',
+    sessionId: 'session-1',
+  });
+  assert.equal(parseAttendanceButtonCustomId('attendance:SCRIM:MAYBE:session-1'), null);
 });
 
 test('edits a refresh message with current member identity without changing vote snapshots', async () => {

@@ -24,6 +24,12 @@ const votes = [
     updatedAt: new Date('2026-05-17T12:00:00.000Z'),
   },
   {
+    choice: 'RESERVE' as const,
+    snapshotIngameName: 'Nguoi Ba',
+    snapshotClassType: 'Cửu Linh',
+    updatedAt: new Date('2026-05-17T12:02:00.000Z'),
+  },
+  {
     choice: 'NOGO' as const,
     snapshotIngameName: 'Nguoi Bon',
     snapshotClassType: 'Thiết Y',
@@ -35,8 +41,20 @@ describe('attendanceRenderService', () => {
   it('summarizes vote choices', () => {
     assert.deepEqual(summarizeAttendanceRenderVotes(votes), {
       go: 2,
+      reserve: 1,
       nogo: 1,
-      total: 3,
+      total: 4,
+    });
+  });
+
+  it('excludes legacy MAYBE votes from current response totals', () => {
+    assert.deepEqual(summarizeAttendanceRenderVotes([
+      { choice: 'MAYBE', snapshotIngameName: null, snapshotClassType: null, updatedAt: new Date() },
+    ]), {
+      go: 0,
+      reserve: 0,
+      nogo: 0,
+      total: 0,
     });
   });
 
@@ -45,12 +63,14 @@ describe('attendanceRenderService', () => {
 
     assert.match(content, /## Bang chiến tối nay/);
     assert.match(content, /🟢 \*\*Đang mở điểm danh\*\*/);
-    assert.match(content, /🗳️ Tổng vote: 3/);
+    assert.match(content, /🗳️ Tổng vote: 4/);
     assert.match(content, /✅ Tham gia: 2/);
+    assert.match(content, /🛡️ Dự bị: 1/);
     assert.match(content, /❌ Không tham gia: 1/);
     assert.doesNotMatch(content, /Theo phái/);
     assert.match(content, /Toái Mộng \(1\)\n1\. Nguoi Hai/);
     assert.match(content, /Tố Vấn \(1\)\n1\. Nguoi Mot/);
+    assert.match(content, /1\. Nguoi Ba - Cửu Linh/);
     assert.match(content, /1\. Nguoi Bon - Thiết Y/);
   });
 
@@ -61,6 +81,7 @@ describe('attendanceRenderService', () => {
     assert.match(content, /🟢 \*\*Đang mở điểm danh\*\*/);
     assert.match(content, /🗳️ Tổng vote: 0/);
     assert.match(content, /✅ Tham gia: 0/);
+    assert.match(content, /🛡️ Dự bị: 0/);
     assert.match(content, /❌ Không tham gia: 0/);
     assert.doesNotMatch(content, /Theo phái/);
     assert.match(content, /Chưa có ai đăng ký\./);
@@ -75,6 +96,7 @@ describe('attendanceRenderService', () => {
     assert.match(content, /🗳️ Tổng vote: 0/);
     assert.doesNotMatch(content, /Theo phái/);
     assert.match(content, /Chưa có ai đăng ký\./);
+    assert.match(content, /Chưa có ai chọn 'Dự bị'\./);
     assert.match(content, /Chưa có ai chọn 'Không tham gia'\./);
   });
 

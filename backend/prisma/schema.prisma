@@ -9,6 +9,7 @@ datasource db {
 
 enum AttendanceChoice {
   GO
+  RESERVE
   MAYBE
   NOGO
 }

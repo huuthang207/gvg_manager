@@ -21,7 +21,7 @@ import {
 } from '../services/attendanceDiscordService.js';
 
 function parseAttendanceChoice(value: unknown): AttendanceChoice | null {
-  return value === 'GO' || value === 'NOGO' ? value : null;
+  return value === 'GO' || value === 'RESERVE' || value === 'NOGO' ? value : null;
 }
 
 function parseAttendanceType(value: unknown): AttendanceType {

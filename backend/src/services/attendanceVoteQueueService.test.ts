@@ -79,7 +79,7 @@ test('enqueueAttendanceVoteJob upserts latest choice for the same session and di
     sessionId: 'session-1',
     discordGuildId: '123456789012345678',
     discordUserId: '345678901234567890',
-    choice: 'NOGO' as AttendanceChoice,
+    choice: 'RESERVE' as AttendanceChoice,
     discordMessageId: '456789012345678901',
   });
 
@@ -90,7 +90,7 @@ test('enqueueAttendanceVoteJob upserts latest choice for the same session and di
       discordUserId: '345678901234567890',
     },
   });
-  assert.equal(upsertArgs.update.choice, 'NOGO');
+  assert.equal(upsertArgs.update.choice, 'RESERVE');
 });
 
 test('claimAttendanceVoteJobs claims pending jobs for the worker', async () => {

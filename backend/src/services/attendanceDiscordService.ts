@@ -50,12 +50,23 @@ function logAttendanceRefresh(message: string, details?: Record<string, unknown>
   console.log(`[Attendance Refresh] ${message}`);
 }
 
+type CurrentAttendanceChoice = 'GO' | 'RESERVE' | 'NOGO';
+
+function isCurrentAttendanceChoice(value: string): value is CurrentAttendanceChoice {
+  return value === 'GO' || value === 'RESERVE' || value === 'NOGO';
+}
+
 export function buildAttendanceButtons(sessionId: string, type: AttendanceType = 'GVG', disabled = false) {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:${type}:GO:${sessionId}`)
       .setLabel('Tham gia')
       .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:${type}:RESERVE:${sessionId}`)
+      .setLabel('Dự bị')
+      .setStyle(ButtonStyle.Primary)
       .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId(`${ATTENDANCE_BUTTON_PREFIX}:${type}:NOGO:${sessionId}`)
@@ -65,18 +76,18 @@ export function buildAttendanceButtons(sessionId: string, type: AttendanceType =
   );
 }
 
-export function parseAttendanceButtonCustomId(customId: string): { type: AttendanceType; choice: 'GO' | 'NOGO'; sessionId: string } | null {
+export function parseAttendanceButtonCustomId(customId: string): { type: AttendanceType; choice: CurrentAttendanceChoice; sessionId: string } | null {
   const parts = customId.split(':');
   if (parts[0] !== ATTENDANCE_BUTTON_PREFIX) return null;
 
   if (parts.length === 3) {
     const [, choice, sessionId] = parts;
-    if ((choice !== 'GO' && choice !== 'NOGO') || !sessionId) return null;
+    if (!isCurrentAttendanceChoice(choice) || !sessionId) return null;
     return { type: 'GVG', choice, sessionId };
   }
 
   const [, type, choice, sessionId] = parts;
-  if ((type !== 'GVG' && type !== 'SCRIM') || (choice !== 'GO' && choice !== 'NOGO') || !sessionId) return null;
+  if ((type !== 'GVG' && type !== 'SCRIM') || !isCurrentAttendanceChoice(choice) || !sessionId) return null;
   return { type, choice, sessionId };
 }
 

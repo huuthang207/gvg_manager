@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prisma } from '../db.js';
-import { GVG_SQUAD_CAPACITY, resetGvgLineupNextSquadNumberIfEmpty, serializeGvgLineup, updateGvgLineupSquadSlots } from './gvgLineupService.js';
+import { GVG_SQUAD_CAPACITY, resetGvgLineupNextSquadNumberIfEmpty, serializeGvgLineup, updateGvgLineupSquadName, updateGvgLineupSquadSlots } from './gvgLineupService.js';
 
 test('serializes empty divisions and named squads with six slots', () => {
   const lineup = serializeGvgLineup([
@@ -59,7 +59,16 @@ test('rejects a new non-GO assignment when an attendance roster source is select
       member: { findMany: async () => [{ id: 'member-1' }] },
       gvgLineupSlot: { findMany: async () => [], update: async () => undefined, create: async () => undefined },
       guild: { findUnique: async () => ({ gvgLineupRosterSessionId: 'session-1' }) },
-      attendanceVote: { findMany: async () => [] },
+      attendanceVote: {
+        findMany: async (args: any) => {
+          assert.deepEqual(args.where, {
+            sessionId: 'session-1',
+            choice: 'GO',
+            memberId: { in: ['member-1'] },
+          });
+          return [];
+        },
+      },
     });
     (prisma.guild as any).findUnique = async () => ({ gvgLineupRosterSession: null });
     (prisma.gvgLineupDivision as any).findMany = async () => [];
@@ -72,6 +81,79 @@ test('rejects a new non-GO assignment when an attendance roster source is select
     (prisma as any).$transaction = originalTransaction;
     (prisma.guild as any).findUnique = originalGuildFindUnique;
     (prisma.gvgLineupDivision as any).findMany = originalDivisionFindMany;
+  }
+});
+
+test('renames a squad with a trimmed name', async () => {
+  const originalFindUnique = (prisma.gvgLineupSquad as any).findUnique;
+  const originalUpdate = (prisma.gvgLineupSquad as any).update;
+  const originalDivisionFindMany = (prisma.gvgLineupDivision as any).findMany;
+  const originalGuildFindUnique = (prisma.guild as any).findUnique;
+  let findUniqueArgs: unknown = null;
+  let updateArgs: unknown = null;
+  try {
+    (prisma.gvgLineupSquad as any).findUnique = async (args: unknown) => {
+      findUniqueArgs = args;
+      return { id: 'squad-1' };
+    };
+    (prisma.gvgLineupSquad as any).update = async (args: unknown) => {
+      updateArgs = args;
+      return { id: 'squad-1' };
+    };
+    (prisma.gvgLineupDivision as any).findMany = async () => [];
+    (prisma.guild as any).findUnique = async () => ({ gvgLineupRosterSession: null });
+
+    const result = await updateGvgLineupSquadName('guild-1', 7, '  Đội công thành  ');
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(findUniqueArgs, { where: { guildId_squadNumber: { guildId: 'guild-1', squadNumber: 7 } }, select: { id: true } });
+    assert.deepEqual(updateArgs, { where: { id: 'squad-1' }, data: { name: 'Đội công thành' } });
+  } finally {
+    (prisma.gvgLineupSquad as any).findUnique = originalFindUnique;
+    (prisma.gvgLineupSquad as any).update = originalUpdate;
+    (prisma.gvgLineupDivision as any).findMany = originalDivisionFindMany;
+    (prisma.guild as any).findUnique = originalGuildFindUnique;
+  }
+});
+
+test('rejects invalid squad names before database access', async () => {
+  const originalFindUnique = (prisma.gvgLineupSquad as any).findUnique;
+  let findUniqueCalled = false;
+  try {
+    (prisma.gvgLineupSquad as any).findUnique = async () => {
+      findUniqueCalled = true;
+      return { id: 'squad-1' };
+    };
+
+    for (const input of ['', '   ', 'a'.repeat(33), 'Đội\nMột']) {
+      const result = await updateGvgLineupSquadName('guild-1', 1, input);
+      assert.equal(result.status, 400);
+    }
+    assert.equal((await updateGvgLineupSquadName('guild-1', 0, 'Đội một')).status, 400);
+    assert.equal(findUniqueCalled, false);
+  } finally {
+    (prisma.gvgLineupSquad as any).findUnique = originalFindUnique;
+  }
+});
+
+test('returns not found when renaming a missing squad', async () => {
+  const originalFindUnique = (prisma.gvgLineupSquad as any).findUnique;
+  const originalUpdate = (prisma.gvgLineupSquad as any).update;
+  let updateCalled = false;
+  try {
+    (prisma.gvgLineupSquad as any).findUnique = async () => null;
+    (prisma.gvgLineupSquad as any).update = async () => {
+      updateCalled = true;
+      return null;
+    };
+
+    const result = await updateGvgLineupSquadName('guild-1', 1, 'Đội một');
+
+    assert.equal(result.status, 404);
+    assert.equal(updateCalled, false);
+  } finally {
+    (prisma.gvgLineupSquad as any).findUnique = originalFindUnique;
+    (prisma.gvgLineupSquad as any).update = originalUpdate;
   }
 });
 
